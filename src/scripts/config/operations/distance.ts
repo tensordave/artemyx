@@ -1,0 +1,208 @@
+/**
+ * Distance operation - proximity queries between two datasets.
+ *
+ * Two modes:
+ * - 'filter': Keep features from inputs[0] within maxDistance of any feature in inputs[1] (ST_DWithin)
+ * - 'annotate': Enrich features from inputs[0] with dist_<unit> property — distance to nearest feature in inputs[1]
+ *
+ * Input ordering: inputs[0] is always the primary dataset (filtered/enriched),
+ * inputs[1] is the proximity target.
+ */
+
+import { getConnection } from '../../db/core';
+import { DEFAULT_COLOR } from '../../db/datasets';
+import { getFeaturesAsGeoJSON } from '../../db/features';
+import { attachFeatureClickHandlers } from '../../popup';
+import type { BinaryOperation, DistanceParams } from '../types';
+import type { OperationContext } from './index';
+import { parseStyleConfig } from './index';
+import { addOperationResultToMap } from './buffer';
+import { toMeters, fromMeters, metersToDegreesAtLatitude, degreesToMetersAtLatitude, unitSuffix } from './unit-conversion';
+
+/**
+ * Execute a distance operation.
+ * inputs[0] = primary dataset (filtered or enriched)
+ * inputs[1] = proximity target
+ */
+export async function executeDistance(
+	op: BinaryOperation,
+	context: OperationContext
+): Promise<boolean> {
+	const { map, progressControl, layerToggleControl, loadedDatasets, layers } = context;
+	const hasExplicitLayers = layers !== undefined;
+	const params = op.params as DistanceParams | undefined;
+
+	// Validate inputs
+	if (!op.inputs || op.inputs.length !== 2) {
+		throw new Error(`Distance operation '${op.output}': requires exactly 2 inputs`);
+	}
+
+	// Validate params
+	const mode = params?.mode ?? 'filter';
+	if (mode !== 'filter' && mode !== 'annotate') {
+		throw new Error(`Distance operation '${op.output}': mode must be 'filter' or 'annotate'`);
+	}
+
+	if (mode === 'filter' && (params?.maxDistance === undefined || params.maxDistance <= 0)) {
+		throw new Error(`Distance operation '${op.output}': filter mode requires a positive maxDistance`);
+	}
+
+	const [inputA, inputB] = op.inputs;
+	const outputId = op.output;
+	const color = op.color ?? DEFAULT_COLOR;
+	const style = parseStyleConfig(op.style);
+	const maxDistance = params?.maxDistance;
+	const units = params?.units ?? 'meters';
+	const suffix = unitSuffix(units);
+
+	const modeLabel = mode === 'filter' ? `filtering within ${maxDistance} ${units}` : 'annotating nearest distance';
+	progressControl.updateProgress(outputId, 'processing', `Distance: ${inputA} → ${inputB} (${modeLabel})...`);
+
+	const connection = await getConnection();
+
+	// Get centroid latitude for meter-to-degree conversion
+	const centroidStmt = await connection.prepare(`
+		SELECT AVG(ST_Y(ST_Centroid(geometry))) as avg_lat
+		FROM features
+		WHERE dataset_id = ? OR dataset_id = ?
+	`);
+	const centroidResult = await centroidStmt.query(inputA, inputB);
+	await centroidStmt.close();
+	const avgLatitude = Number(centroidResult.toArray()[0]?.avg_lat) || 49;
+
+	// Delete existing output if present (allows re-running)
+	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+	await deleteFeatures.query(outputId);
+	await deleteFeatures.close();
+
+	const deleteDatasets = await connection.prepare('DELETE FROM datasets WHERE id = ?');
+	await deleteDatasets.query(outputId);
+	await deleteDatasets.close();
+
+	if (mode === 'filter') {
+		// Filter mode: keep features from A within maxDistance of any feature in B
+		const maxDistMeters = toMeters(maxDistance!, units);
+		const distanceDegrees = metersToDegreesAtLatitude(maxDistMeters, avgLatitude);
+		console.log(`[Distance] Filter: ${maxDistance} ${units} (${maxDistMeters}m) → ${distanceDegrees.toFixed(6)}° at lat ${avgLatitude.toFixed(2)}°`);
+
+		const insertFiltered = await connection.prepare(`
+			INSERT INTO features (dataset_id, source_url, geometry, properties)
+			SELECT
+				?,
+				'operation:distance',
+				a.geometry,
+				a.properties
+			FROM features a
+			WHERE a.dataset_id = ?
+			AND EXISTS (
+				SELECT 1 FROM features b
+				WHERE b.dataset_id = ?
+				AND ST_DWithin(a.geometry, b.geometry, ?)
+			)
+		`);
+		await insertFiltered.query(outputId, inputA, inputB, distanceDegrees);
+		await insertFiltered.close();
+	} else {
+		// Annotate mode: enrich A features with distance to nearest B feature
+		// ST_Distance returns degrees; we convert to the user's unit via a scale factor.
+		// degrees → meters → user unit, collapsed into a single multiplier.
+		const metersPerDegree = degreesToMetersAtLatitude(1, avgLatitude);
+		const unitsPerDegree = fromMeters(metersPerDegree, units);
+		const propName = `dist_${suffix}`;
+		console.log(`[Distance] Annotate: scale factor ${unitsPerDegree.toFixed(4)} ${units}/° at lat ${avgLatitude.toFixed(2)}° (property: ${propName})`);
+
+		// Compute nearest distance per A feature, merge dist_<unit> into properties
+		// maxDistance cap is optional — when provided, excludes features beyond the threshold
+		const havingClause = maxDistance !== undefined
+			? `HAVING min_dist_deg <= ${metersToDegreesAtLatitude(toMeters(maxDistance, units), avgLatitude)}`
+			: '';
+
+		const insertAnnotated = await connection.prepare(`
+			INSERT INTO features (dataset_id, source_url, geometry, properties)
+			SELECT
+				?,
+				'operation:distance',
+				sub.geometry,
+				json_merge_patch(
+					sub.properties,
+					json_object('${propName}', ROUND(sub.min_dist_deg * ?, 1))
+				)
+			FROM (
+				SELECT
+					a.geometry,
+					a.properties,
+					MIN(ST_Distance(a.geometry, b.geometry)) as min_dist_deg
+				FROM features a
+				CROSS JOIN features b
+				WHERE a.dataset_id = ?
+				AND b.dataset_id = ?
+				AND a.geometry IS NOT NULL
+				AND b.geometry IS NOT NULL
+				GROUP BY a.rowid, a.geometry, a.properties
+				${havingClause}
+			) sub
+		`);
+		await insertAnnotated.query(outputId, unitsPerDegree, inputA, inputB);
+		await insertAnnotated.close();
+	}
+
+	// Get feature count
+	const countStmt = await connection.prepare(`
+		SELECT COUNT(*) as count FROM features WHERE dataset_id = ?
+	`);
+	const countResult = await countStmt.query(outputId);
+	await countStmt.close();
+	const featureCount = Number(countResult.toArray()[0].count);
+
+	if (featureCount > 0) {
+		const debugStmt = await connection.prepare(`
+			SELECT
+				ST_GeometryType(geometry) as geom_type,
+				LENGTH(ST_AsGeoJSON(geometry)) as geojson_len
+			FROM features
+			WHERE dataset_id = ?
+			LIMIT 1
+		`);
+		const debugResult = await debugStmt.query(outputId);
+		await debugStmt.close();
+		const debugRow = debugResult.toArray()[0];
+		console.log(`[Distance] Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+	}
+
+	if (featureCount === 0) {
+		console.log(`[Distance] Warning: ${inputA} → ${inputB} produced no features`);
+		progressControl.updateProgress(outputId, 'success', `No features within distance`);
+	}
+
+	// Register dataset metadata
+	const insertDataset = await connection.prepare(`
+		INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
+		VALUES (?, 'operation:distance', ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
+	`);
+	await insertDataset.query(outputId, outputId, color, featureCount, JSON.stringify(style));
+	await insertDataset.close();
+
+	// Query features as GeoJSON for map rendering
+	const geoJsonData = await getFeaturesAsGeoJSON(outputId);
+
+	// Add source and layers to map (skip layers if explicit config exists)
+	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, hasExplicitLayers);
+
+	// Track dataset
+	loadedDatasets.add(outputId);
+
+	// Attach popup handlers (only if default layers were created)
+	if (layerIds.length > 0) {
+		attachFeatureClickHandlers(map, layerIds);
+	}
+
+	// Refresh layer control
+	layerToggleControl.refreshPanel();
+
+	const distNote = maxDistance !== undefined ? ` (≤${maxDistance} ${units})` : '';
+	progressControl.updateProgress(outputId, 'success', `${featureCount} feature(s) (${mode}${distNote})`);
+
+	console.log(`[Distance] Complete: ${outputId} with ${featureCount} features`);
+
+	return true;
+}

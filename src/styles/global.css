@@ -1,0 +1,1029 @@
+/* Global styles for artemyx */
+
+body {
+	margin: 0;
+	padding: 0;
+	font-family: system-ui, -apple-system, sans-serif;
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	background: #1a1a1a;
+}
+
+header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 44px;
+	padding: 0 1.25rem;
+	background: #0f0f0f;
+	border-bottom: 1px solid #2a2a2a;
+	flex-shrink: 0;
+}
+
+.header-logo {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	text-decoration: none;
+	color: #fff;
+}
+
+.header-logo-icon {
+	width: 24px;
+	height: 24px;
+}
+
+.header-logo-name {
+	font-size: 1rem;
+	font-weight: 500;
+	letter-spacing: -0.02em;
+}
+
+.header-nav {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+}
+
+.header-nav-link {
+	font-size: 0.8125rem;
+	color: #888;
+	text-decoration: none;
+	transition: color 0.15s ease;
+}
+
+.header-nav-link:hover {
+	color: #fff;
+}
+
+#map {
+	flex: 1;
+	background: #1a1a1a;
+}
+
+/* Dark mode popup styling */
+.maplibregl-popup-content {
+	background: #2c2c2c !important;
+	color: #fff !important;
+	border-radius: 4px !important;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+	padding: 12px !important;
+}
+
+.maplibregl-popup-tip {
+	border-top-color: #2c2c2c !important;
+}
+
+.maplibregl-popup-close-button {
+	color: #aaa !important;
+	font-size: 20px !important;
+	padding: 4px 8px !important;
+}
+
+.maplibregl-popup-close-button:hover {
+	background: rgba(255, 255, 255, 0.1) !important;
+	color: #fff !important;
+}
+
+/* Ensure anchor/pointer styles match */
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+	border-bottom-color: #2c2c2c !important;
+}
+
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+	border-top-color: #2c2c2c !important;
+}
+
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+	border-right-color: #2c2c2c !important;
+}
+
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+	border-left-color: #2c2c2c !important;
+}
+
+/* Progress Control - Terminal-like status display */
+.progress-control {
+	position: absolute !important;
+	bottom: 10px !important;
+	left: 10px !important;
+	background: #0f0f0f !important;
+	border: 1px solid #333 !important;
+	border-radius: 2px !important;
+	padding: 0 !important;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+	font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace !important;
+	font-size: 12px !important;
+	min-width: 300px !important;
+}
+
+.progress-status-line {
+	padding: 8px 12px;
+	color: #888;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	line-height: 1.4;
+}
+
+/* Status-specific styling */
+.progress-status-line.status-idle {
+	color: #555;
+}
+
+.progress-status-line.status-loading,
+.progress-status-line.status-processing {
+	color: #4a9eff;
+}
+
+.progress-status-line.status-success {
+	color: #50c878;
+}
+
+.progress-status-line.status-error {
+	color: #ff5555;
+}
+
+/* Hover effect for clickable status line */
+.progress-status-line {
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.progress-status-line:hover {
+	background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Expanded panel */
+.progress-expanded-panel {
+	display: flex;
+	flex-direction: column;
+	width: 450px;
+	height: 300px;
+	background: #0f0f0f;
+	border: 1px solid #333;
+	border-radius: 2px;
+}
+
+/* Panel header */
+.progress-panel-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 12px;
+	background: #1a1a1a;
+	border-bottom: 1px solid #333;
+	color: #888;
+	font-weight: 500;
+}
+
+/* Minimize button */
+.progress-minimize-btn {
+	background: transparent;
+	border: none;
+	color: #888;
+	font-size: 18px;
+	cursor: pointer;
+	padding: 0;
+	width: 20px;
+	height: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: color 0.2s ease;
+}
+
+.progress-minimize-btn:hover {
+	color: #fff;
+}
+
+/* History container */
+.progress-history-container {
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 8px 12px;
+	background: #0f0f0f;
+}
+
+/* History entry */
+.progress-history-entry {
+	padding: 2px 0;
+	font-size: 12px;
+	line-height: 1.4;
+	white-space: nowrap;
+	color: #888;
+}
+
+/* Status-specific colors for history entries */
+.progress-history-entry.status-idle {
+	color: #555;
+}
+
+.progress-history-entry.status-loading,
+.progress-history-entry.status-processing {
+	color: #4a9eff;
+}
+
+.progress-history-entry.status-success {
+	color: #50c878;
+}
+
+.progress-history-entry.status-error {
+	color: #ff5555;
+}
+
+/* Scrollbar styling for history container */
+.progress-history-container::-webkit-scrollbar {
+	width: 8px;
+}
+
+.progress-history-container::-webkit-scrollbar-track {
+	background: #0f0f0f;
+}
+
+.progress-history-container::-webkit-scrollbar-thumb {
+	background: #333;
+	border-radius: 4px;
+}
+
+.progress-history-container::-webkit-scrollbar-thumb:hover {
+	background: #444;
+}
+
+/* Shared Control Styles */
+
+/* Control toggle button (used by GeoJSON, Layer controls) */
+/* Scoped to .maplibregl-ctrl to override MapLibre's default button styles */
+.maplibregl-ctrl .control-btn {
+	background-color: #2c2c2c !important;
+	color: #fff !important;
+	border: 1px solid #444 !important;
+	border-radius: 4px;
+	cursor: pointer;
+	width: 29px;
+	height: 29px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 16px;
+}
+
+.maplibregl-ctrl .control-btn:hover {
+	background-color: rgba(51, 136, 255, 0.3) !important;
+}
+
+/* Control dropdown panel */
+.control-panel {
+	display: none;
+	position: absolute;
+	top: 0;
+	padding: 10px;
+	background-color: #2c2c2c;
+	border: 1px solid #444;
+	border-radius: 4px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.control-panel--open {
+	display: block;
+}
+
+.control-panel--left {
+	left: 40px;
+}
+
+.control-panel--right {
+	right: 40px;
+}
+
+/* Control text input */
+.control-input {
+	width: 250px;
+	padding: 8px;
+	margin-bottom: 8px;
+	display: block;
+	background-color: #1a1a1a;
+	color: #fff;
+	border: 1px solid #555;
+	border-radius: 3px;
+}
+
+.control-input::placeholder {
+	color: #888;
+}
+
+.control-input:focus {
+	outline: none;
+	border-color: #3388ff;
+}
+
+/* Control submit/action button */
+/* Scoped to .maplibregl-ctrl to override MapLibre's default button styles */
+.maplibregl-ctrl .control-submit {
+	width: 100%;
+	padding: 8px;
+	background-color: #3388ff;
+	color: #fff;
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	font-weight: bold;
+}
+
+.maplibregl-ctrl .control-submit:hover {
+	background-color: #2277ee;
+}
+
+.maplibregl-ctrl .control-submit:disabled {
+	background-color: #555;
+	cursor: not-allowed;
+}
+
+/* Layer Control Styles */
+
+/* Layer panel modifiers */
+.control-panel--layers {
+	min-width: 200px;
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+/* Empty state message */
+.layer-empty {
+	color: #999;
+	font-size: 12px;
+	padding: 5px;
+}
+
+/* Dataset row item */
+.layer-item {
+	display: flex;
+	align-items: center;
+	padding: 5px;
+	padding-left: 8px;
+	margin-bottom: 5px;
+	cursor: pointer;
+	border-radius: 3px;
+	/* Note: border-left color is set dynamically via inline style (dataset.color) */
+	border-left: 4px solid #3388ff;
+}
+
+.layer-item:hover {
+	background-color: rgba(51, 136, 255, 0.15);
+}
+
+/* Dataset checkbox */
+.layer-checkbox {
+	margin-right: 8px;
+	cursor: pointer;
+}
+
+/* Dataset label */
+.layer-label {
+	color: #fff;
+	font-size: 12px;
+	cursor: pointer;
+	flex: 1;
+}
+
+/* Inline rename input (replaces label during edit) */
+.layer-rename-input {
+	flex: 1;
+	font-size: 12px;
+	color: #fff;
+	background-color: #1a1a1a;
+	border: 1px solid #3388ff;
+	border-radius: 2px;
+	padding: 2px 4px;
+	margin: -3px 0;
+	outline: none;
+	font-family: inherit;
+}
+
+.layer-rename-input::selection {
+	background-color: rgba(51, 136, 255, 0.4);
+}
+
+/* Kebab menu button */
+.layer-menu-btn {
+	width: 24px;
+	height: 24px;
+	margin-right: 8px;
+	padding: 0;
+	cursor: pointer;
+	background-color: transparent;
+	border: 1px solid #555;
+	border-radius: 3px;
+	color: #fff;
+	font-size: 16px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 1;
+}
+
+.layer-menu-btn:hover {
+	background-color: rgba(51, 136, 255, 0.3);
+	border-color: #3388ff;
+}
+
+/* Context Menu Styles */
+
+.context-menu {
+	position: fixed;
+	background-color: #2c2c2c;
+	border: 1px solid #444;
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+	min-width: 160px;
+	z-index: 1000;
+	padding: 4px 0;
+}
+
+.context-menu-item {
+	padding: 8px 12px;
+	cursor: pointer;
+	font-size: 12px;
+	color: #fff;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.context-menu-item:hover {
+	background-color: rgba(51, 136, 255, 0.3);
+}
+
+.context-menu-item--danger {
+	color: #f44336;
+}
+
+.context-menu-item--disabled {
+	opacity: 0.4;
+	cursor: default;
+	pointer-events: none;
+}
+
+.context-menu-icon {
+	font-size: 14px;
+}
+
+.context-menu-divider {
+	height: 1px;
+	background-color: #444;
+	margin: 4px 0;
+}
+
+/* Delete Confirmation Dialog Styles */
+
+.delete-confirm {
+	padding: 10px;
+}
+
+.delete-confirm-title {
+	color: #fff;
+	font-size: 14px;
+	font-weight: bold;
+	margin-bottom: 10px;
+}
+
+.delete-confirm-name {
+	color: #ccc;
+	font-size: 12px;
+	margin-bottom: 4px;
+	line-height: 1.4;
+}
+
+.delete-confirm-name strong {
+	color: #fff;
+}
+
+.delete-confirm-count {
+	color: #999;
+	font-size: 11px;
+	margin-bottom: 12px;
+}
+
+.delete-confirm-buttons {
+	display: flex;
+	gap: 8px;
+}
+
+.delete-confirm-btn {
+	flex: 1;
+	padding: 8px;
+	color: #fff;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 12px;
+	/* Reset browser button defaults */
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+.delete-confirm-btn--cancel {
+	background-color: #3a3a3a;
+	border: 1px solid #555;
+}
+
+.delete-confirm-btn--cancel:hover {
+	background-color: #4a4a4a;
+}
+
+.delete-confirm-btn.delete-confirm-btn--delete {
+	background-color: #d32f2f;
+	border: 1px solid #b71c1c;
+}
+
+.delete-confirm-btn.delete-confirm-btn--delete:hover {
+	background-color: #e53935;
+}
+
+/* Basemap Control Styles */
+
+.basemap-control {
+	position: relative;
+}
+
+.maplibregl-ctrl .basemap-btn {
+	background-color: #2c2c2c !important;
+	color: #fff !important;
+	border: 1px solid #444 !important;
+	border-radius: 4px;
+	padding: 6px 12px;
+	cursor: pointer;
+	font-size: 12px;
+	font-family: inherit;
+	white-space: nowrap;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.maplibregl-ctrl .basemap-btn:hover {
+	background-color: #3a3a3a !important;
+}
+
+.basemap-menu {
+	display: none;
+	position: absolute;
+	bottom: 100%;
+	right: 0;
+	margin-bottom: 4px;
+	background-color: #2c2c2c;
+	border: 1px solid #444;
+	border-radius: 4px;
+	box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.4);
+	overflow: hidden;
+	min-width: 140px;
+}
+
+.basemap-menu--open {
+	display: block;
+}
+
+.basemap-option {
+	display: block;
+	width: 100%;
+	padding: 8px 12px;
+	background: none;
+	border: none;
+	color: #ccc;
+	font-size: 12px;
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.basemap-option:hover {
+	background-color: #3a3a3a;
+	color: #fff;
+}
+
+.basemap-option--active {
+	color: #3388ff;
+}
+
+.basemap-option--active:hover {
+	color: #3388ff;
+}
+
+/* Inline Style Panel Styles */
+
+.style-panel {
+	background-color: #1a1a1a;
+	border-top: 1px solid #444;
+	margin: 5px -10px -10px -10px;
+	padding: 10px;
+	border-radius: 0 0 4px 4px;
+}
+
+.style-panel-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 12px;
+}
+
+.style-panel-title {
+	color: #888;
+	font-size: 11px;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.style-panel-close {
+	background: transparent;
+	border: none;
+	color: #666;
+	font-size: 16px;
+	cursor: pointer;
+	padding: 0;
+	width: 20px;
+	height: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 2px;
+}
+
+.style-panel-close:hover {
+	color: #fff;
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+.style-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 8px;
+}
+
+.style-row:last-child {
+	margin-bottom: 0;
+}
+
+.style-label {
+	color: #ccc;
+	font-size: 11px;
+	width: 80px;
+	flex-shrink: 0;
+}
+
+.style-slider {
+	flex: 1;
+	height: 4px;
+	-webkit-appearance: none;
+	appearance: none;
+	background: #444;
+	border-radius: 2px;
+	outline: none;
+}
+
+.style-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 14px;
+	height: 14px;
+	background: #3388ff;
+	border-radius: 50%;
+	cursor: pointer;
+	border: 2px solid #1a1a1a;
+}
+
+.style-slider::-webkit-slider-thumb:hover {
+	background: #4a9eff;
+}
+
+.style-slider::-moz-range-thumb {
+	width: 14px;
+	height: 14px;
+	background: #3388ff;
+	border-radius: 50%;
+	cursor: pointer;
+	border: 2px solid #1a1a1a;
+}
+
+.style-slider::-moz-range-thumb:hover {
+	background: #4a9eff;
+}
+
+.style-value {
+	color: #fff;
+	font-size: 11px;
+	width: 36px;
+	text-align: right;
+	font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* Disabled slider row (expression-controlled) */
+.style-row-disabled {
+	opacity: 0.5;
+}
+
+.style-slider:disabled {
+	cursor: not-allowed;
+}
+
+.style-slider:disabled::-webkit-slider-thumb {
+	background: #666;
+	cursor: not-allowed;
+}
+
+.style-slider:disabled::-moz-range-thumb {
+	background: #666;
+	cursor: not-allowed;
+}
+
+.style-value-expression {
+	color: #f59e0b;
+	font-size: 10px;
+	width: auto;
+	font-family: inherit;
+}
+
+/* Storage Control Styles */
+
+.storage-panel {
+	min-width: 200px;
+	padding: 12px;
+}
+
+.storage-badge {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.storage-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.storage-label {
+	color: #fff;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.storage-detail {
+	color: #888;
+	font-size: 11px;
+	line-height: 1.5;
+	margin-bottom: 4px;
+}
+
+.storage-detail--error {
+	color: #f59e0b;
+}
+
+.storage-divider {
+	height: 1px;
+	background-color: #444;
+	margin: 10px 0;
+}
+
+.maplibregl-ctrl .storage-action-btn {
+	width: 100%;
+	padding: 8px;
+	background-color: #3a3a3a;
+	color: #ccc;
+	border: 1px solid #555;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 12px;
+	font-family: inherit;
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.maplibregl-ctrl .storage-action-btn:hover {
+	background-color: #4a4a4a;
+	color: #fff;
+}
+
+.maplibregl-ctrl .storage-action-btn--confirm {
+	background-color: #d32f2f;
+	border-color: #b71c1c;
+	color: #fff;
+}
+
+.maplibregl-ctrl .storage-action-btn--confirm:hover {
+	background-color: #e53935;
+}
+
+.maplibregl-ctrl .storage-action-btn--retry {
+	background-color: #b45309;
+	border-color: #92400e;
+	color: #fff;
+}
+
+.maplibregl-ctrl .storage-action-btn--retry:hover {
+	background-color: #d97706;
+}
+
+.maplibregl-ctrl .storage-action-btn:disabled {
+	background-color: #555;
+	cursor: not-allowed;
+	color: #888;
+}
+
+/* ==========================================================================
+   Landing Page
+   ========================================================================== */
+
+/* Allow the landing page to scroll; unset the 100vh/flex constraint */
+body.landing {
+	height: auto;
+	min-height: 100vh;
+	overflow-y: auto;
+	display: block;
+}
+
+/* Hero -------------------------------------------------------------------- */
+.hero {
+	padding: 1.75rem 2rem 1.5rem;
+	max-width: 1100px;
+	margin: 0 auto;
+}
+
+.hero-title {
+	font-size: 1.375rem;
+	font-weight: 600;
+	color: #fff;
+	margin: 0 0 0.5rem;
+	line-height: 1.3;
+}
+
+.hero-sub {
+	font-size: 0.8125rem;
+	color: #888;
+	line-height: 1.6;
+	margin: 0 0 1rem;
+	max-width: 580px;
+}
+
+/* Shared section layout --------------------------------------------------- */
+.demo-section,
+.about-section,
+.cta-section {
+	padding: 1rem 2rem 3rem;
+	max-width: 1100px;
+	margin: 0 auto;
+}
+
+.section-heading {
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: #fff;
+	margin: 0 0 0.5rem;
+}
+
+.section-sub {
+	font-size: 0.875rem;
+	color: #888;
+	margin: 0 0 1.5rem;
+	line-height: 1.6;
+}
+
+/* Demo map: full-width, tall ----------------------------------------------- */
+.demo-caption {
+	font-size: 0.8rem;
+	color: #666;
+	margin: 0 0 0.75rem;
+	line-height: 1.5;
+}
+
+body.landing #map {
+	height: 65vh;
+	min-height: 400px;
+	flex: none;
+	border-radius: 6px;
+}
+
+/* Expandable config block -------------------------------------------------- */
+.demo-code-details {
+	margin-top: 0.75rem;
+	border: 1px solid #2a2a2a;
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.demo-code-summary {
+	padding: 0.6rem 1rem;
+	font-size: 0.78rem;
+	color: #888;
+	font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+	cursor: pointer;
+	user-select: none;
+	list-style: none;
+}
+
+.demo-code-summary::-webkit-details-marker {
+	display: none;
+}
+
+.demo-code-summary::before {
+	content: '▶  ';
+	font-size: 0.6rem;
+	color: #555;
+}
+
+.demo-code-details[open] .demo-code-summary::before {
+	content: '▼  ';
+}
+
+.demo-code-summary:hover {
+	color: #bbb;
+}
+
+.demo-code {
+	margin: 0;
+	padding: 1.25rem 1.5rem;
+	background: #111;
+	font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+	font-size: 0.78rem;
+	line-height: 1.65;
+	color: #ccc;
+	white-space: pre;
+	overflow-x: auto;
+	border-top: 1px solid #2a2a2a;
+}
+
+.demo-code code {
+	font-family: inherit;
+	color: inherit;
+}
+
+/* Features grid ----------------------------------------------------------- */
+.features-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 1rem;
+	margin-top: 1.5rem;
+}
+
+.feature-card {
+	background: #1a1a1a;
+	border: 1px solid #2a2a2a;
+	border-radius: 6px;
+	padding: 1.25rem 1.5rem;
+}
+
+.feature-card-title {
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: #fff;
+	margin-bottom: 0.5rem;
+}
+
+.feature-card-body {
+	font-size: 0.8125rem;
+	color: #888;
+	line-height: 1.6;
+	margin: 0;
+}
+
+/* CTA section ------------------------------------------------------------- */
+.cta-section {
+	text-align: center;
+	padding-top: 2rem;
+	padding-bottom: 5rem;
+}
+
+.cta-heading {
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: #fff;
+	margin: 0 0 0.5rem;
+}
+
+.cta-sub {
+	font-size: 0.875rem;
+	color: #888;
+	margin: 0 0 1.75rem;
+}
+
+/* Shared CTA button (used in hero and cta-section) */
+.cta-btn {
+	display: inline-block;
+	background: #3388ff;
+	color: #fff;
+	font-size: 0.875rem;
+	font-weight: 500;
+	padding: 0.6rem 1.5rem;
+	border-radius: 4px;
+	text-decoration: none;
+	transition: background 0.15s ease;
+}
+
+.cta-btn:hover {
+	background: #2277ee;
+}

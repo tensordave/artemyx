@@ -1,0 +1,8 @@
+# Artemyx - Default App Configuration
+# Blank slate: basemap + controls, no datasets loaded.
+# Load data via the GeoJSON control or define datasets in a custom config.
+
+map:
+  center: [-123.1207, 49.2827]  # Vancouver, BC [longitude, latitude]
+  zoom: 12
+  basemap: carto-dark

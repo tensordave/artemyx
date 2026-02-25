@@ -1,0 +1,75 @@
+# Artemyx Demo Configuration
+# Used by the landing page to showcase the declarative config system.
+# Bikeways colored by distance to nearest rapid transit station.
+
+map:
+  center: [-123.1207, 49.2827]
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  - id: bikeways
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/bikeways/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Bikeways
+    color: "#22c55e"
+
+  - id: rapidtransitstations
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/rapid-transit-stations/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Rapid Transit Stations
+    color: "#4ade80"
+
+operations:
+  # Annotate each bikeway segment with distance to nearest transit station
+  - type: distance
+    inputs: [bikeways, rapidtransitstations]
+    output: bikeways_with_transit_dist
+    params:
+      mode: annotate
+      units: km
+
+layers:
+  # Bikeways colored by speed limit (interpolate expression)
+  - id: bikeways-line
+    source: bikeways
+    type: line
+    paint:
+      line-color:
+        - interpolate
+        - ["linear"]
+        - ["coalesce", ["get", "speed_limit"], 0]
+        - 0
+        - "#94a3b8"
+        - 30
+        - "#22c55e"
+        - 50
+        - "#ef4444"
+      line-width: 2.5
+
+  # Bikeways colored green → amber → red by distance to transit (dist_km property)
+  - id: bikeways-dist
+    source: bikeways_with_transit_dist
+    type: line
+    paint:
+      line-color:
+        - interpolate
+        - ["linear"]
+        - ["get", "dist_km"]
+        - 0
+        - "#22c55e"
+        - 0.5
+        - "#eab308"
+        - 2
+        - "#ef4444"
+      line-width: 3
+
+  # Rapid transit stations as circles on top
+  - id: transit-stations
+    source: rapidtransitstations
+    type: circle
+    paint:
+      circle-radius: 8
+      circle-color: "#4ade80"
+      circle-stroke-color: "#166534"
+      circle-stroke-width: 2
+  
+

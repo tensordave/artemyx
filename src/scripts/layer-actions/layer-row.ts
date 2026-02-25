@@ -1,0 +1,159 @@
+/**
+ * Layer row creation for the layer control panel.
+ * Handles DOM structure and event wiring for individual dataset rows.
+ */
+
+import { dotsThreeVerticalIcon } from '../icons';
+
+export interface Dataset {
+	id: string;
+	name: string;
+	color: string;
+	visible: boolean;
+	feature_count: number;
+}
+
+export interface LayerRowCallbacks {
+	onToggleVisibility: (datasetId: string, visible: boolean) => void;
+	onMenuClick: (dataset: Dataset, menuButton: HTMLButtonElement) => void;
+}
+
+/**
+ * Creates a layer row element for a dataset.
+ * Returns the complete DOM element with all event handlers attached.
+ */
+export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): HTMLDivElement {
+	const itemDiv = document.createElement('div');
+	itemDiv.className = 'layer-item';
+	itemDiv.dataset.datasetId = dataset.id;
+	// Dynamic border color based on dataset color
+	itemDiv.style.borderLeftColor = dataset.color || '#3388ff';
+
+	// Checkbox for visibility toggle
+	const checkbox = document.createElement('input');
+	checkbox.type = 'checkbox';
+	checkbox.className = 'layer-checkbox';
+	// DuckDB-WASM Arrow returns booleans as 0/1, so use truthiness check
+	checkbox.checked = !!dataset.visible;
+
+	// Menu button (⋮) for context menu
+	const menuButton = document.createElement('button');
+	menuButton.type = 'button';
+	menuButton.className = 'layer-menu-btn';
+	menuButton.innerHTML = dotsThreeVerticalIcon;
+	menuButton.title = 'More options';
+
+	// Label with dataset name and feature count
+	const label = document.createElement('label');
+	label.className = 'layer-label';
+	label.textContent = `${dataset.name} (${dataset.feature_count.toLocaleString()})`;
+
+	// Visibility toggle handler
+	const handleToggleVisibility = () => {
+		callbacks.onToggleVisibility(dataset.id, checkbox.checked);
+	};
+
+	checkbox.addEventListener('change', handleToggleVisibility);
+
+	// Row click toggles checkbox (except when clicking checkbox or menu button)
+	itemDiv.addEventListener('click', (e) => {
+		if (e.target !== checkbox && e.target !== menuButton) {
+			checkbox.checked = !checkbox.checked;
+			handleToggleVisibility();
+		}
+	});
+
+	// Menu button opens context menu
+	menuButton.addEventListener('click', (e) => {
+		e.stopPropagation();
+		callbacks.onMenuClick(dataset, menuButton);
+	});
+
+	// Assemble row
+	itemDiv.appendChild(checkbox);
+	itemDiv.appendChild(menuButton);
+	itemDiv.appendChild(label);
+
+	return itemDiv;
+}
+
+/**
+ * Starts inline rename editing for a layer row.
+ * Swaps the label with an input field and handles keyboard/blur events.
+ *
+ * @param rowElement - The layer-item div containing the label
+ * @param dataset - The dataset being renamed (for current name and feature count)
+ * @param onRename - Callback when rename is confirmed (receives new name)
+ */
+export function startRenameEdit(
+	rowElement: HTMLDivElement,
+	dataset: Dataset,
+	onRename: (newName: string) => void
+): void {
+	const label = rowElement.querySelector('.layer-label') as HTMLLabelElement | null;
+	if (!label) return;
+
+	// Prevent multiple edit modes
+	if (rowElement.querySelector('.layer-rename-input')) return;
+
+	const originalName = dataset.name;
+
+	// Create input element
+	const input = document.createElement('input');
+	input.type = 'text';
+	input.className = 'layer-rename-input';
+	input.value = originalName;
+
+	// Track if we've already handled the exit (to prevent double-firing)
+	let hasExited = false;
+
+	const exitEditMode = (save: boolean) => {
+		if (hasExited) return;
+		hasExited = true;
+
+		const newName = input.value.trim();
+
+		// Restore label
+		const newLabel = document.createElement('label');
+		newLabel.className = 'layer-label';
+
+		if (save && newName && newName !== originalName) {
+			// Use new name (will be updated after DB confirms)
+			newLabel.textContent = `${newName} (${dataset.feature_count.toLocaleString()})`;
+			input.replaceWith(newLabel);
+			onRename(newName);
+		} else {
+			// Restore original name
+			newLabel.textContent = `${originalName} (${dataset.feature_count.toLocaleString()})`;
+			input.replaceWith(newLabel);
+		}
+	};
+
+	// Keyboard handlers
+	input.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			exitEditMode(true);
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			exitEditMode(false);
+		}
+	});
+
+	// Blur handler (cancel on blur)
+	input.addEventListener('blur', () => {
+		exitEditMode(false);
+	});
+
+	// Prevent row click from toggling checkbox while editing
+	input.addEventListener('click', (e) => {
+		e.stopPropagation();
+	});
+
+	// Swap label with input
+	label.replaceWith(input);
+
+	// Focus and select all text
+	input.focus();
+	input.select();
+}

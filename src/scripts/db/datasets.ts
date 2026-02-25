@@ -1,0 +1,288 @@
+/**
+ * Dataset CRUD operations
+ */
+
+import { getConnection, getDB, setFallbackReason } from './core';
+import { generateDatasetId, extractDatasetName } from './utils';
+
+/**
+ * Style configuration for dataset rendering
+ */
+export interface StyleConfig {
+	fillOpacity: number;
+	lineWidth: number;
+	pointRadius: number;
+}
+
+/**
+ * Default style values applied to new datasets
+ */
+export const DEFAULT_STYLE: StyleConfig = {
+	fillOpacity: 0.2,
+	lineWidth: 2,
+	pointRadius: 6
+};
+
+/** Default color for new datasets */
+export const DEFAULT_COLOR = '#3388ff';
+
+/**
+ * Options for loading GeoJSON with config overrides
+ */
+export interface LoadGeoJSONOptions {
+	/** Override the auto-generated dataset ID (use config ID instead of URL hash) */
+	id?: string;
+	/** Override the auto-generated dataset name */
+	name?: string;
+	/** Override the default color */
+	color?: string;
+	/** Override default style values */
+	style?: Partial<StyleConfig>;
+}
+
+/**
+ * Load GeoJSON data into DuckDB using bulk in-memory conversion
+ * @param data - GeoJSON data (FeatureCollection or single Feature)
+ * @param sourceUrl - Source URL for the data
+ * @param options - Optional overrides for name, color, and style
+ */
+export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGeoJSONOptions): Promise<boolean> {
+	const virtualFileName = 'temp_features.json';
+
+	try {
+		const connection = await getConnection();
+		const database = await getDB();
+
+		// Use provided ID or generate from URL hash
+		const datasetId = options?.id || generateDatasetId(sourceUrl);
+		const datasetName = options?.name || extractDatasetName(sourceUrl);
+		const datasetColor = options?.color || DEFAULT_COLOR;
+		const datasetStyle: StyleConfig = {
+			...DEFAULT_STYLE,
+			...options?.style
+		};
+
+		// Extract features array
+		const features = data.type === 'FeatureCollection' ? data.features : [data];
+		console.log(`[DuckDB] Loading ${features.length} features for dataset ${datasetId}`);
+
+		// Delete existing data for this dataset (if reloading)
+		const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+		await deleteFeatures.query(datasetId);
+		await deleteFeatures.close();
+
+		const deleteDatasets = await connection.prepare('DELETE FROM datasets WHERE id = ?');
+		await deleteDatasets.query(datasetId);
+		await deleteDatasets.close();
+
+		// Register features as virtual JSON file
+		const featuresJson = JSON.stringify(features);
+		await database.registerFileText(virtualFileName, featuresJson);
+
+		// Bulk insert JSON into features table with spatial transformation
+		const insertFeatures = await connection.prepare(`
+			INSERT INTO features
+			SELECT
+				? as dataset_id,
+				? as source_url,
+				ST_GeomFromGeoJSON(json_extract_string(j, '$.geometry')) as geometry,
+				json_extract_string(j, '$.properties') as properties
+			FROM read_json_auto('${virtualFileName}', format='array') j
+			WHERE json_extract_string(j, '$.geometry') IS NOT NULL
+		`);
+		await insertFeatures.query(datasetId, sourceUrl);
+		await insertFeatures.close();
+
+		// Get final count for this dataset
+		const countStmt = await connection.prepare('SELECT COUNT(*) as count FROM features WHERE dataset_id = ?');
+		const result = await countStmt.query(datasetId);
+		await countStmt.close();
+		const count = Number(result.toArray()[0].count);
+
+		// Insert dataset metadata with configured style and color
+		const insertDataset = await connection.prepare(`
+			INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
+			VALUES (?, ?, ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
+		`);
+		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, count, JSON.stringify(datasetStyle));
+		await insertDataset.close();
+
+		console.log(`[DuckDB] Successfully loaded dataset ${datasetId} with ${count} features`);
+
+		// Clean up virtual file
+		await database.dropFile(virtualFileName);
+
+		return true;
+	} catch (error) {
+		// Detect storage quota exceeded (OPFS write failure)
+		if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+			console.error('[DuckDB] Storage quota exceeded:', error);
+			setFallbackReason('quota-exceeded');
+		} else {
+			console.error('Failed to load GeoJSON:', error);
+		}
+
+		// Attempt cleanup on error
+		try {
+			const database = await getDB();
+			await database.dropFile(virtualFileName);
+		} catch (cleanupError) {
+			// Silently ignore cleanup errors
+		}
+
+		return false;
+	}
+}
+
+/**
+ * Get all loaded datasets metadata
+ */
+export async function getDatasets(): Promise<any[]> {
+	try {
+		const connection = await getConnection();
+		const result = await connection.query(`
+			SELECT * FROM datasets
+			ORDER BY loaded_at DESC
+		`);
+		return result.toArray();
+	} catch (error) {
+		console.error('Failed to query datasets:', error);
+		return [];
+	}
+}
+
+/**
+ * Check if a dataset with the given ID exists in the database
+ */
+export async function datasetExists(id: string): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare('SELECT COUNT(*) as count FROM datasets WHERE id = ?');
+		const result = await stmt.query(id);
+		await stmt.close();
+		return Number(result.toArray()[0].count) > 0;
+	} catch (error) {
+		console.error('Failed to check dataset existence:', error);
+		return false;
+	}
+}
+
+/**
+ * Update the color for a specific dataset
+ */
+export async function updateDatasetColor(datasetId: string, color: string): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare('UPDATE datasets SET color = ? WHERE id = ?');
+		await stmt.query(color, datasetId);
+		await stmt.close();
+		console.log(`[DuckDB] Updated dataset ${datasetId} color to ${color}`);
+		return true;
+	} catch (error) {
+		console.error('Failed to update dataset color:', error);
+		return false;
+	}
+}
+
+/**
+ * Update the name/alias for a specific dataset
+ */
+export async function updateDatasetName(datasetId: string, name: string): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare('UPDATE datasets SET name = ? WHERE id = ?');
+		await stmt.query(name, datasetId);
+		await stmt.close();
+		console.log(`[DuckDB] Updated dataset ${datasetId} name to "${name}"`);
+		return true;
+	} catch (error) {
+		console.error('Failed to update dataset name:', error);
+		return false;
+	}
+}
+
+/**
+ * Update the visibility state for a specific dataset
+ */
+export async function updateDatasetVisible(datasetId: string, visible: boolean): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare('UPDATE datasets SET visible = ? WHERE id = ?');
+		await stmt.query(visible, datasetId);
+		await stmt.close();
+		return true;
+	} catch (error) {
+		console.error('Failed to update dataset visibility:', error);
+		return false;
+	}
+}
+
+/**
+ * Delete a dataset and all its associated features
+ */
+export async function deleteDataset(datasetId: string): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+
+		// Delete features associated with this dataset
+		const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+		await deleteFeatures.query(datasetId);
+		await deleteFeatures.close();
+
+		// Delete dataset metadata
+		const deleteDatasets = await connection.prepare('DELETE FROM datasets WHERE id = ?');
+		await deleteDatasets.query(datasetId);
+		await deleteDatasets.close();
+
+		console.log(`[DuckDB] Successfully deleted dataset ${datasetId} and all associated features`);
+		return true;
+	} catch (error) {
+		console.error('Failed to delete dataset:', error);
+		return false;
+	}
+}
+
+/**
+ * Get the style configuration for a dataset
+ * Returns defaults if no style is saved or parsing fails
+ */
+export async function getDatasetStyle(datasetId: string): Promise<StyleConfig> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare('SELECT style FROM datasets WHERE id = ?');
+		const result = await stmt.query(datasetId);
+		await stmt.close();
+
+		const rows = result.toArray();
+		if (rows.length === 0 || !rows[0].style) {
+			return { ...DEFAULT_STYLE };
+		}
+
+		const parsed = JSON.parse(rows[0].style);
+		return {
+			fillOpacity: parsed.fillOpacity ?? DEFAULT_STYLE.fillOpacity,
+			lineWidth: parsed.lineWidth ?? DEFAULT_STYLE.lineWidth,
+			pointRadius: parsed.pointRadius ?? DEFAULT_STYLE.pointRadius
+		};
+	} catch (error) {
+		console.error('Failed to get dataset style:', error);
+		return { ...DEFAULT_STYLE };
+	}
+}
+
+/**
+ * Update the style configuration for a dataset
+ */
+export async function updateDatasetStyle(datasetId: string, style: StyleConfig): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare('UPDATE datasets SET style = ? WHERE id = ?');
+		await stmt.query(JSON.stringify(style), datasetId);
+		await stmt.close();
+		console.log(`[DuckDB] Updated dataset ${datasetId} style:`, style);
+		return true;
+	} catch (error) {
+		console.error('Failed to update dataset style:', error);
+		return false;
+	}
+}

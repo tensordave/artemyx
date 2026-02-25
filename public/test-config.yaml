@@ -1,0 +1,402 @@
+# Artemyx Map Configuration
+# Defines map settings, datasets, and spatial operations.
+
+# --- Map Definition
+map:
+  center: [-123.1207, 49.2827]  # Vancouver, BC [longitude, latitude]
+  zoom: 12
+  basemap: carto-dark  # Options: carto-dark, carto-light, carto-voyager, esri-satellite
+
+# --- Dataset Definition --- 
+datasets:
+  - id: streets
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/public-streets/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Streets
+    color: "#62a0ea"
+    style:
+      lineWidth: 1
+      fillOpacity: 0.3
+  - id: bikeways
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/bikeways/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Bikeways
+    color: "#22c55e"
+    style:
+      lineWidth: 2.5
+      fillOpacity: 0.3
+  - id: rapidtransitstations
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/rapid-transit-stations/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Rapid Transit Stations
+    color: "#4ade80"
+    style:
+      pointRadius: 8
+  - id: railways
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/railways/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Railways
+  - id: zones
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/zoning-districts-and-labels/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Zones
+
+operations:
+  # Buffer bikeways by 200m to show "walking distance to bikeway" zones
+  - type: buffer
+    input: bikeways
+    output: bikeway_walkshed
+    params:
+      distance: 200
+      units: meters
+      dissolve: true
+    color: "#f59e0b"
+    style:
+      fillOpacity: 0.2
+      lineWidth: 1
+
+  # Transit stations within walking distance of bikeways (filter mode)
+  - type: intersection
+    inputs: [rapidtransitstations, bikeway_walkshed]
+    output: transit_near_bikeways
+    params:
+      mode: filter
+    color: "#06b6d4"
+    style:
+      pointRadius: 10
+
+  # Street segments clipped to bikeway walkshed (clip mode)
+  - type: intersection
+    inputs: [streets, bikeway_walkshed]
+    output: streets_in_walkshed
+    params:
+      mode: clip
+    color: "#a855f7"
+    style:
+      lineWidth: 2
+
+  # Buffer railways by ~400m / 1312ft (freight rail "walkshed" - test polygon for union dissolve)
+  # Uses feet units to exercise non-meter buffer unit support
+  - type: buffer
+    input: railways
+    output: railway_walkshed
+    params:
+      distance: 1312
+      units: feet
+      dissolve: true
+      quadSegs: 12
+    color: "#8b5cf6"
+    style:
+      fillOpacity: 0.15
+      lineWidth: 1
+
+  # Union merge: combine bikeways + railways into single line dataset
+  - type: union
+    inputs: [bikeways, railways]
+    output: transport_corridors
+    params:
+      mode: merge
+    color: "#14b8a6"
+    style:
+      lineWidth: 1.5
+
+  # Union dissolve: merge bikeway + railway walksheds into combined polygon
+  - type: union
+    inputs: [bikeway_walkshed, railway_walkshed]
+    output: combined_transit_walkshed
+    params:
+      mode: dissolve
+    color: "#ec4899"
+    style:
+      fillOpacity: 0.2
+      lineWidth: 1
+
+  # Difference subtract: bikeway walkshed with railway walkshed cut out (bike-only coverage)
+  - type: difference
+    inputs: [bikeway_walkshed, railway_walkshed]
+    output: bike_only_walkshed
+    params:
+      mode: subtract
+    color: "#84cc16"
+    style:
+      fillOpacity: 0.25
+      lineWidth: 1
+
+  # Difference exclude: transit stations NOT within railway walkshed
+  - type: difference
+    inputs: [rapidtransitstations, railway_walkshed]
+    output: transit_far_from_rail
+    params:
+      mode: exclude
+    color: "#f43f5e"
+    style:
+      pointRadius: 10
+
+  # Contains filter: which zoning districts fully contain a rapid transit station?
+  # Returns each zone polygon that has a station completely inside it (not just nearby).
+  - type: contains
+    inputs: [zones, rapidtransitstations]
+    output: zones_containing_transitstations
+    params:
+      mode: filter
+    color: "#fb923c"
+    style:
+      fillOpacity: 0.3
+      lineWidth: 2
+
+  # Distance filter: streets within 0.4km of a rapid transit station (proximity query)
+  # Uses km units to exercise non-meter distance unit support
+  - type: distance
+    inputs: [streets, rapidtransitstations]
+    output: streets_near_transit
+    params:
+      mode: filter
+      maxDistance: 0.4
+      units: km
+    color: "#facc15"
+    style:
+      lineWidth: 2
+
+  # Distance annotate: bikeways enriched with distance to nearest transit station (dist_km property)
+  # Uses km units — output property becomes dist_km instead of dist_m
+  - type: distance
+    inputs: [bikeways, rapidtransitstations]
+    output: bikeways_with_transit_dist
+    params:
+      mode: annotate
+      units: km
+    color: "#22d3ee"
+    style:
+      lineWidth: 2.5
+
+  # Centroid: center points of each zoning district polygon
+  - type: centroid
+    input: zones
+    output: zone_centroids
+    color: "#f0abfc"
+    style:
+      pointRadius: 5
+
+  # Contains within: street segments completely inside the 400m railway walkshed
+  # Compare with intersection clip (streets_in_walkshed) to see the difference:
+  # intersection returns partial/clipped segments, contains returns only fully-enclosed ones.
+  - type: contains
+    inputs: [railway_walkshed, streets]
+    output: streets_within_railway
+    params:
+      mode: within
+    color: "#0ea5e9"
+    style:
+      lineWidth: 3
+
+# --- Layers Definition ---
+# Layers render in order: first = bottom, last = top
+layers:
+  # Combined transit walkshed (union dissolve) as bottom-most fill
+  - id: combined-walkshed-fill
+    source: combined_transit_walkshed
+    type: fill
+    paint:
+      fill-color: "#ec4899"
+      fill-opacity: 0.12
+
+  - id: combined-walkshed-outline
+    source: combined_transit_walkshed
+    type: line
+    paint:
+      line-color: "#ec4899"
+      line-width: 1
+      line-opacity: 0.5
+
+  # Railway walkshed fill
+  - id: railway-walkshed-fill
+    source: railway_walkshed
+    type: fill
+    paint:
+      fill-color: "#8b5cf6"
+      fill-opacity: 0.15
+
+  # Bike-only walkshed (bikeway minus railway walkshed)
+  - id: bike-only-walkshed-fill
+    source: bike_only_walkshed
+    type: fill
+    paint:
+      fill-color: "#84cc16"
+      fill-opacity: 0.2
+
+  - id: bike-only-walkshed-outline
+    source: bike_only_walkshed
+    type: line
+    paint:
+      line-color: "#84cc16"
+      line-width: 1
+      line-opacity: 0.6
+
+  # Contains filter: zoning districts that fully contain a transit station (orange)
+  - id: zones_containing_transitstations-fill
+    source: zones_containing_transitstations
+    type: fill
+    paint:
+      fill-color: "#fb923c"
+      fill-opacity: 0.2
+
+  - id: zones_containing_transitstations-outline
+    source: zones_containing_transitstations
+    type: line
+    paint:
+      line-color: "#fb923c"
+      line-width: 2
+      line-opacity: 0.7
+
+  # Bikeway walkshed as background fill
+  - id: walkshed-fill
+    source: bikeway_walkshed
+    type: fill
+    paint:
+      fill-color: "#f59e0b"
+      fill-opacity: 0.15
+
+  # Vancouver Zones and Districts
+  - id: Vancouver_Zones
+    source: zones
+    type: fill
+    paint:
+      fill-color: "#059e0b"
+      fill-opacity: 0.15
+
+  # Streets colored by road classification (match expression)
+  - id: streets-line
+    source: streets
+    type: line
+    paint:
+      line-color:
+        - match
+        - ["get", "streetuse"]
+        - Arterial
+        - "#ef4444"
+        - Secondary Arterial
+        - "#f97316"
+        - Collector
+        - "#eab308"
+        - Residential
+        - "#6b7280"
+        - "#9ca3af"
+      line-width: 2
+      line-opacity: 0.8
+
+  # Transport corridors (union merge of bikeways + railways)
+  - id: transport-corridors-line
+    source: transport_corridors
+    type: line
+    paint:
+      line-color: "#14b8a6"
+      line-width: 1.5
+      line-opacity: 0.6
+
+  # Railways as dashed lines
+  - id: railways-line
+    source: railways
+    type: line
+    paint:
+      line-color: "#9333ea"
+      line-width: 2
+      line-dasharray: [2, 2]
+
+  # Bikeways colored by speed limit (interpolate expression)
+  - id: bikeways-line
+    source: bikeways
+    type: line
+    paint:
+      line-color:
+        - interpolate
+        - ["linear"]
+        - ["coalesce", ["get", "speed_limit"], 0]
+        - 0
+        - "#94a3b8"
+        - 30
+        - "#22c55e"
+        - 50
+        - "#ef4444"
+      line-width: 2.5
+
+  # Contains within: streets fully inside railway walkshed (sky blue)
+  # Visual comparison: these are a subset of what intersection clip would return
+  - id: streets-within-railway-line
+    source: streets_within_railway
+    type: line
+    paint:
+      line-color: "#0ea5e9"
+      line-width: 3
+      line-opacity: 0.9
+
+  # Distance filter: streets within 0.4km of transit (yellow)
+  - id: streets-near-transit-line
+    source: streets_near_transit
+    type: line
+    paint:
+      line-color: "#facc15"
+      line-width: 2
+      line-opacity: 0.8
+
+  # Distance annotate: bikeways colored by distance to nearest transit station
+  # Green = close, red = far (interpolate on dist_km property)
+  - id: bikeways-transit-dist-line
+    source: bikeways_with_transit_dist
+    type: line
+    paint:
+      line-color:
+        - interpolate
+        - ["linear"]
+        - ["get", "dist_km"]
+        - 0
+        - "#22c55e"
+        - 0.5
+        - "#eab308"
+        - 2
+        - "#ef4444"
+      line-width: 3
+      line-opacity: 0.9
+
+  # Zone centroids: center points of each zoning district
+  - id: zone-centroids-circle
+    source: zone_centroids
+    type: circle
+    paint:
+      circle-radius: 5
+      circle-color: "#f0abfc"
+      circle-stroke-color: "#ffffff"
+      circle-stroke-width: 1
+
+  # Transit stations as large circles on top
+  - id: transit-stations-circle
+    source: rapidtransitstations
+    type: circle
+    paint:
+      circle-radius: 8
+      circle-color: "#4ade80"
+      circle-stroke-color: "#166534"
+      circle-stroke-width: 2
+
+  # Intersection results: streets clipped to walkshed (purple)
+  - id: streets-in-walkshed-line
+    source: streets_in_walkshed
+    type: line
+    paint:
+      line-color: "#a855f7"
+      line-width: 3
+      line-opacity: 0.9
+
+  # Intersection results: transit stations near bikeways (cyan, larger)
+  - id: transit-near-bikeways-circle
+    source: transit_near_bikeways
+    type: circle
+    paint:
+      circle-radius: 12
+      circle-color: "#06b6d4"
+      circle-stroke-color: "#ffffff"
+      circle-stroke-width: 3
+
+  # Difference exclude: transit stations far from railway corridors (rose)
+  - id: transit-far-from-rail-circle
+    source: transit_far_from_rail
+    type: circle
+    paint:
+      circle-radius: 10
+      circle-color: "#f43f5e"
+      circle-stroke-color: "#ffffff"
+      circle-stroke-width: 2
