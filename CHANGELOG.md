@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 Format follows [Semantic Versioning](https://semver.org/).
 
+## v0.3.3 - 2026-02-26
+
+### Examples UX Polish
+
+- Added close button (X) inside the mobile sidebar overlay - previously, the sidebar could only be dismissed by tapping a navigation link; the close button appears in the top-right corner of the sidebar, visible only below 768px
+- Repositioned the hamburger toggle from top-left corner (where it overlapped MapLibre layer controls) to mid-left as a flush edge tab - vertically centered via `top: 50%; transform: translateY(-50%)`, no left border, right-side-only rounded corners (28x44px pull-tab shape)
+
+---
+
 ## v0.3.2 - 2026-02-26
 
 ### Examples Page Framework

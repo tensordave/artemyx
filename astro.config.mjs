@@ -8,13 +8,12 @@ const DUCKDB_DIST = 'node_modules/@duckdb/duckdb-wasm/dist';
 export default defineConfig({
 	vite: {
 		plugins: [
+			// Workers are self-hosted; WASM files (~33MB each) exceed Cloudflare Pages'
+			// 25MB asset limit so they load from jsDelivr CDN via getJsDelivrBundles()
 			viteStaticCopy({
 				targets: [
-					{ src: `${DUCKDB_DIST}/duckdb-mvp.wasm`, dest: 'duckdb' },
 					{ src: `${DUCKDB_DIST}/duckdb-browser-mvp.worker.js`, dest: 'duckdb' },
-					{ src: `${DUCKDB_DIST}/duckdb-eh.wasm`, dest: 'duckdb' },
 					{ src: `${DUCKDB_DIST}/duckdb-browser-eh.worker.js`, dest: 'duckdb' },
-					{ src: `${DUCKDB_DIST}/duckdb-coi.wasm`, dest: 'duckdb' },
 					{ src: `${DUCKDB_DIST}/duckdb-browser-coi.worker.js`, dest: 'duckdb' },
 					{ src: `${DUCKDB_DIST}/duckdb-browser-coi.pthread.worker.js`, dest: 'duckdb' },
 				]

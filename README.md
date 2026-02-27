@@ -140,8 +140,8 @@ Layers support full MapLibre paint/layout properties including expressions (`mat
 
 ## Status
 
-**Current version:** v0.3.1 - Sandbox mode, OPFS persistence, full spatial operations suite, expression-driven layer styling
+**Current version:** v0.3.3 - Examples UX polish, per-operation examples, Sandbox mode, OPFS persistence, full spatial operations suite, expression-driven layer styling
 
-**Next up:** Per-operation examples (v0.3.2)
+**Next up:** Advanced workflows and styling examples (v0.3.4)
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and [ROADMAP.md](ROADMAP.md) for planned work.

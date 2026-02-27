@@ -125,23 +125,23 @@ async function wipeSchema(): Promise<void> {
  */
 export async function initDB(useOPFS: boolean = false): Promise<void> {
 	try {
-		// Use self-hosted WASM bundles (copied to /duckdb/ by vite-plugin-static-copy)
-		const LOCAL_BUNDLES: duckdb.DuckDBBundles = {
+		// Workers are self-hosted; WASM loads from jsDelivr (files exceed Cloudflare's 25MB limit)
+		const cdnBundles = duckdb.getJsDelivrBundles();
+		const bundle = await duckdb.selectBundle({
 			mvp: {
-				mainModule: '/duckdb/duckdb-mvp.wasm',
+				mainModule: cdnBundles.mvp.mainModule,
 				mainWorker: '/duckdb/duckdb-browser-mvp.worker.js',
 			},
 			eh: {
-				mainModule: '/duckdb/duckdb-eh.wasm',
+				mainModule: cdnBundles.eh.mainModule,
 				mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
 			},
-			coi: {
-				mainModule: '/duckdb/duckdb-coi.wasm',
+			coi: cdnBundles.coi ? {
+				mainModule: cdnBundles.coi.mainModule,
 				mainWorker: '/duckdb/duckdb-browser-coi.worker.js',
 				pthreadWorker: '/duckdb/duckdb-browser-coi.pthread.worker.js',
-			},
-		};
-		const bundle = await duckdb.selectBundle(LOCAL_BUNDLES);
+			} : undefined,
+		});
 
 		// Create worker directly from same-origin URL (no Blob wrapper needed)
 		const worker = new Worker(bundle.mainWorker!);

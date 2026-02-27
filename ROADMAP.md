@@ -28,11 +28,13 @@ For completed work, see [CHANGELOG.md](CHANGELOG.md).
 ### v0.3.2
 - **Examples Page** - `/examples` with dynamic Astro static routes (`[slug].astro` + `getStaticPaths()`), central registry at `src/scripts/examples/registry.ts`, left sidebar with grouped navigation, full-height map pane, bottom sheet config viewer with Shiki syntax highlighting at build time, mobile collapsible sidebar (hamburger, structured for v0.4.x header refactor); OPFS disabled on all example maps; all 8 Core Operations examples fully populated: buffer/dissolve (Vancouver), intersection/clip (San Francisco), union/merge (Portland), difference (Ottawa), contains/within (Winnipeg), distance/filter (Chicago), distance/annotate (Calgary), centroid (Denver)
 
+### v0.3.3
+- **Examples UX polish** - Close button inside the mobile sidebar overlay (previously could only dismiss by tapping a nav link); hamburger toggle repositioned from top-left (overlapping MapLibre layer controls) to mid-left as a flush edge tab, vertically centered
+
 ## Roadmap
 
 ### v0.3.x - Examples
 
-- **Examples UX polish** (v0.3.3) - Add collapse button when examples menu is used in a thinner/mobile window (otherwise it stays stuck open); move position of hamburger menu slightly so it doesn't overlap layer controls
 - **Advanced workflow + styling examples** (v0.3.4) - Multi-step workflows (Edmonton schools + transit + demographics); expression styling (Winnipeg properties by assessed value - interpolate); categorical styling (Denver road network by type - match); multi-dataset layers (Chicago crime + demographics + transit)
 
 ### v0.4.x - Data, UX, and Foundation

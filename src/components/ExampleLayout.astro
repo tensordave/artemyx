@@ -38,6 +38,7 @@ const { activeExample, highlightedYaml } = Astro.props;
 			<button class="examples-hamburger" id="sidebar-toggle" aria-label="Toggle examples menu">&#9776;</button>
 
 			<aside class="examples-sidebar" id="examples-sidebar">
+				<button class="examples-sidebar-close" id="sidebar-close" aria-label="Close examples menu">&times;</button>
 				{groups.map(group => (
 					<div class="examples-sidebar-group">
 						<div class="examples-sidebar-group-title">{group}</div>
@@ -96,6 +97,8 @@ const { activeExample, highlightedYaml } = Astro.props;
 			const hamburger = document.getElementById('sidebar-toggle');
 			const sidebar = document.getElementById('examples-sidebar');
 
+			const sidebarClose = document.getElementById('sidebar-close');
+
 			if (hamburger && sidebar) {
 				hamburger.addEventListener('click', () => {
 					sidebar.classList.toggle('examples-sidebar--open');
@@ -106,6 +109,12 @@ const { activeExample, highlightedYaml } = Astro.props;
 					link.addEventListener('click', () => {
 						sidebar.classList.remove('examples-sidebar--open');
 					});
+				});
+			}
+
+			if (sidebarClose && sidebar) {
+				sidebarClose.addEventListener('click', () => {
+					sidebar.classList.remove('examples-sidebar--open');
 				});
 			}
 		</script>
