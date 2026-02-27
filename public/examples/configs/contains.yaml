@@ -1,0 +1,90 @@
+# Artemyx Example - Contains / Within
+# Winnipeg parks checked against the city cycling network.
+#
+# Two operations show the behavioral difference:
+#   filter - keeps park polygons that fully contain at least one cycling segment
+#   within - keeps cycling segments that fall entirely inside a park boundary
+
+map:
+  center: [-97.1384, 49.8951]  # Winnipeg, MB
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  - id: parks
+    url: "https://data.winnipeg.ca/resource/tx3d-pfxq.geojson?$limit=2000&$offset=0"
+    name: Winnipeg Parks and Open Spaces
+    color: "#22c55e"
+
+  - id: cycling_network
+    url: "https://data.winnipeg.ca/resource/kjd9-dvf5.geojson?$limit=10000&$offset=0"
+    name: Winnipeg Cycling Network
+    color: "#f59e0b"
+
+operations:
+  # filter: parks that fully contain at least one cycling segment
+  - type: contains
+    inputs: [parks, cycling_network]
+    output: parks_with_cycling
+    params:
+      mode: filter
+    color: "#38bdf8"
+
+  # within: cycling segments that fall entirely inside a park boundary
+  - type: contains
+    inputs: [parks, cycling_network]
+    output: cycling_in_parks
+    params:
+      mode: within
+    color: "#a78bfa"
+
+layers:
+  # All parks - faint green context
+  - id: parks-fill
+    source: parks
+    type: fill
+    paint:
+      fill-color: "#22c55e"
+      fill-opacity: 0.06
+
+  - id: parks-outline
+    source: parks
+    type: line
+    paint:
+      line-color: "#22c55e"
+      line-width: 1
+      line-opacity: 0.35
+
+  # Full cycling network - faint amber context
+  - id: cycling-line
+    source: cycling_network
+    type: line
+    paint:
+      line-color: "#f59e0b"
+      line-width: 1.5
+      line-opacity: 0.25
+
+  # Filter result - parks that contain a complete cycling segment (sky blue)
+  - id: parks-with-cycling-fill
+    source: parks_with_cycling
+    type: fill
+    paint:
+      fill-color: "#38bdf8"
+      fill-opacity: 0.15
+
+  - id: parks-with-cycling-outline
+    source: parks_with_cycling
+    type: line
+    paint:
+      line-color: "#38bdf8"
+      line-width: 2
+      line-opacity: 0.8
+
+  # Within result - cycling segments fully inside a park (purple, on top)
+  - id: cycling-in-parks-line
+    source: cycling_in_parks
+    type: line
+    paint:
+      line-color: "#a78bfa"
+      line-width: 3
+      line-opacity: 0.9

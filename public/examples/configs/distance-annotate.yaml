@@ -1,0 +1,63 @@
+# Artemyx Example - Distance (Annotate)
+# Calgary bikeways colored by distance to nearest LRT station.
+
+map:
+  center: [-114.0719, 51.0447]  # Calgary, AB
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  - id: bikeways
+    url: "https://data.calgary.ca/resource/jjqk-9b73.geojson?$limit=5000&$offset=0"
+    name: Calgary Bikeways
+    color: "#22c55e"
+
+  - id: lrtstations
+    url: "https://data.calgary.ca/resource/2axz-xm4q.geojson"
+    name: Calgary LRT Stations
+    color: "#60a5fa"
+
+operations:
+  # Annotate each bikeway segment with distance to nearest LRT station
+  - type: distance
+    inputs: [bikeways, lrtstations]
+    output: bikeways_with_lrt_dist
+    params:
+      mode: annotate
+      units: km
+
+layers:
+  # Raw bikeways as a muted baseline for comparison
+  - id: bikeways-line
+    source: bikeways
+    type: line
+    paint:
+      line-color: "#94a3b8"
+      line-width: 1.5
+
+  # Bikeways colored green → blue by distance to LRT (dist_km property)
+  - id: bikeways-dist
+    source: bikeways_with_lrt_dist
+    type: line
+    paint:
+      line-color:
+        - interpolate
+        - ["linear"]
+        - ["get", "dist_km"]
+        - 0
+        - "#22c55e"
+        - 0.5
+        - "#38bdf8"
+        - 2
+        - "#3b82f6"
+      line-width: 3
+
+  # LRT stations as circles on top
+  - id: lrt-stations
+    source: lrtstations
+    type: circle
+    paint:
+      circle-radius: 8
+      circle-color: "#60a5fa"
+      circle-stroke-color: "#1e3a5f"
+      circle-stroke-width: 2

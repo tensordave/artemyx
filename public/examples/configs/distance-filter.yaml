@@ -1,0 +1,76 @@
+# Artemyx Example - Distance (Filter)
+# Chicago parks within walking distance of L rail stations.
+
+map:
+  center: [-87.6298, 41.8781]  # Chicago, IL
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  - id: parks
+    url: "https://data.cityofchicago.org/resource/ejsh-fztr.geojson"
+    name: Chicago Parks
+    color: "#22c55e"
+
+  - id: lstations
+    url: "https://data.cityofchicago.org/resource/3tzw-cg4m.geojson"
+    name: Chicago L Stations
+    color: "#f97316"
+
+operations:
+  # Filter parks to only those within 800m of an L station
+  - type: distance
+    inputs: [parks, lstations]
+    output: parks_near_l
+    params:
+      mode: filter
+      maxDistance: 800
+      units: meters
+
+layers:
+  # All parks as a muted baseline for comparison
+  - id: parks-all
+    source: parks
+    type: fill
+    paint:
+      fill-color: "#94a3b8"
+      fill-opacity: 0.3
+
+  # Parks within 800m of an L station, highlighted
+  - id: parks-near-l
+    source: parks_near_l
+    type: fill
+    paint:
+      fill-color: "#22c55e"
+      fill-opacity: 0.6
+
+  # L stations colored by line
+  - id: l-stations
+    source: lstations
+    type: circle
+    paint:
+      circle-radius: 7
+      circle-color:
+        - match
+        - ["get", "legend"]
+        - "Red Line"
+        - "#c60c30"
+        - "Blue Line"
+        - "#00a1de"
+        - "Brown Line"
+        - "#62361b"
+        - "Green Line"
+        - "#009b3a"
+        - "Orange Line"
+        - "#f9461c"
+        - "Pink Line"
+        - "#e27ea6"
+        - "Purple Line"
+        - "#522398"
+        - "Yellow Line"
+        - "#f9e300"
+        - "Multiple Lines"
+        - "#6b8f9e"
+        - "#94a3b8"
+      circle-stroke-color: "#1a1a2e"
+      circle-stroke-width: 2

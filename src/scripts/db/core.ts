@@ -125,17 +125,26 @@ async function wipeSchema(): Promise<void> {
  */
 export async function initDB(useOPFS: boolean = false): Promise<void> {
 	try {
-		// Get WASM bundles from jsdelivr CDN
-		const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-		const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+		// Use self-hosted WASM bundles (copied to /duckdb/ by vite-plugin-static-copy)
+		const LOCAL_BUNDLES: duckdb.DuckDBBundles = {
+			mvp: {
+				mainModule: '/duckdb/duckdb-mvp.wasm',
+				mainWorker: '/duckdb/duckdb-browser-mvp.worker.js',
+			},
+			eh: {
+				mainModule: '/duckdb/duckdb-eh.wasm',
+				mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
+			},
+			coi: {
+				mainModule: '/duckdb/duckdb-coi.wasm',
+				mainWorker: '/duckdb/duckdb-browser-coi.worker.js',
+				pthreadWorker: '/duckdb/duckdb-browser-coi.pthread.worker.js',
+			},
+		};
+		const bundle = await duckdb.selectBundle(LOCAL_BUNDLES);
 
-		// Create worker
-		const worker_url = URL.createObjectURL(
-			new Blob([`importScripts("${bundle.mainWorker}");`], {
-				type: 'text/javascript'
-			})
-		);
-		const worker = new Worker(worker_url);
+		// Create worker directly from same-origin URL (no Blob wrapper needed)
+		const worker = new Worker(bundle.mainWorker!);
 		const logger = new duckdb.VoidLogger();
 
 		// Initialize database

@@ -1,0 +1,50 @@
+# Artemyx Example - Buffer / Dissolve
+# Vancouver bikeways buffered by 200m to show walking-distance zones.
+# Dissolve merges overlapping buffers into a single walkshed polygon.
+
+map:
+  center: [-123.1207, 49.2827]  # Vancouver, BC
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  - id: bikeways
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/bikeways/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Bikeways
+    color: "#22c55e"
+
+operations:
+  - type: buffer
+    input: bikeways
+    output: bikeway_walkshed
+    params:
+      distance: 200
+      units: meters
+      dissolve: true
+    color: "#f59e0b"
+
+layers:
+  # Walkshed fill - dissolved buffer polygon
+  - id: walkshed-fill
+    source: bikeway_walkshed
+    type: fill
+    paint:
+      fill-color: "#f59e0b"
+      fill-opacity: 0.2
+
+  # Walkshed outline
+  - id: walkshed-outline
+    source: bikeway_walkshed
+    type: line
+    paint:
+      line-color: "#f59e0b"
+      line-width: 1
+      line-opacity: 0.5
+
+  # Bikeways on top
+  - id: bikeways-line
+    source: bikeways
+    type: line
+    paint:
+      line-color: "#22c55e"
+      line-width: 2.5

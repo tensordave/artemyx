@@ -1,0 +1,90 @@
+# Artemyx Example - Union (Merge + Dissolve)
+# Portland neighborhoods combined with development opportunity areas.
+#
+# Two operations show the behavioral difference:
+#   merge   - combines both datasets into one layer, all polygons preserved individually
+#   dissolve - aggregates everything into a single unified boundary polygon
+
+map:
+  center: [-122.6765, 45.5231]  # Portland, OR
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  - id: neighborhoods
+    url: "https://www.portlandmaps.com/od/rest/services/COP_OpenData_Boundary/MapServer/125/query?outFields=*&where=1%3D1&f=geojson"
+    name: Portland Neighborhoods
+    color: "#22c55e"
+
+  - id: opportunity_areas
+    url: "https://www.portlandmaps.com/od/rest/services/COP_OpenData_Boundary/MapServer/8/query?outFields=*&where=1%3D1&f=geojson"
+    name: Portland Development Opportunity Areas
+    color: "#f59e0b"
+
+operations:
+  # merge: all polygons from both datasets combined, individual shapes preserved
+  - type: union
+    inputs: [neighborhoods, opportunity_areas]
+    output: combined_areas
+    params:
+      mode: merge
+    color: "#38bdf8"
+
+  # dissolve: one unified boundary polygon covering everything
+  - type: union
+    inputs: [neighborhoods, opportunity_areas]
+    output: unified_boundary
+    params:
+      mode: dissolve
+    color: "#a78bfa"
+
+layers:
+  # Source data - neighborhoods, faint
+  - id: neighborhoods-fill
+    source: neighborhoods
+    type: fill
+    paint:
+      fill-color: "#22c55e"
+      fill-opacity: 0.06
+
+  - id: neighborhoods-outline
+    source: neighborhoods
+    type: line
+    paint:
+      line-color: "#22c55e"
+      line-width: 1
+      line-opacity: 0.4
+
+  # Source data - opportunity areas, faint
+  - id: opportunity-fill
+    source: opportunity_areas
+    type: fill
+    paint:
+      fill-color: "#f59e0b"
+      fill-opacity: 0.1
+
+  - id: opportunity-outline
+    source: opportunity_areas
+    type: line
+    paint:
+      line-color: "#f59e0b"
+      line-width: 1
+      line-opacity: 0.5
+
+  # Merge result - individual polygons from both, sky blue outline
+  - id: combined-outline
+    source: combined_areas
+    type: line
+    paint:
+      line-color: "#38bdf8"
+      line-width: 1.5
+      line-opacity: 0.7
+
+  # Dissolve result on top - single unified boundary, purple
+  - id: unified-outline
+    source: unified_boundary
+    type: line
+    paint:
+      line-color: "#a78bfa"
+      line-width: 2.5
+      line-opacity: 0.9

@@ -25,18 +25,22 @@ For completed work, see [CHANGELOG.md](CHANGELOG.md).
 ### v0.3.1
 - **Sandbox** - `/app` is now a blank slate (basemap + controls, no datasets loaded); previous full Vancouver demo moved to `/test` as a hidden dev route using `test-config.yaml`; all pages now use explicit `data-config` attributes; default config path updated to `app-config.yaml`
 
+### v0.3.2
+- **Examples Page** - `/examples` with dynamic Astro static routes (`[slug].astro` + `getStaticPaths()`), central registry at `src/scripts/examples/registry.ts`, left sidebar with grouped navigation, full-height map pane, bottom sheet config viewer with Shiki syntax highlighting at build time, mobile collapsible sidebar (hamburger, structured for v0.4.x header refactor); OPFS disabled on all example maps; all 8 Core Operations examples fully populated: buffer/dissolve (Vancouver), intersection/clip (San Francisco), union/merge (Portland), difference (Ottawa), contains/within (Winnipeg), distance/filter (Chicago), distance/annotate (Calgary), centroid (Denver)
+
 ## Roadmap
 
 ### v0.3.x - Examples
 
-- **Per-operation examples** (v0.3.2) - One example config and page per core operation: buffer/dissolve (Vancouver bike walksheds), intersection/clip (Seattle zoning + parcels), union/merge (Portland neighborhood boundaries), difference (Toronto parks), contains/within (Montreal transit stops), distance/filter (Calgary facilities near LRT), distance/annotate (Ottawa addresses by distance), centroid (San Francisco parcel centers)
-- **Advanced workflow + styling examples** (v0.3.3) - Multi-step workflows (Edmonton schools + transit + demographics); expression styling (Winnipeg properties by assessed value - interpolate); categorical styling (Denver road network by type - match); multi-dataset layers (Chicago crime + demographics + transit)
+- **Examples UX polish** (v0.3.3) - Add collapse button when examples menu is used in a thinner/mobile window (otherwise it stays stuck open); move position of hamburger menu slightly so it doesn't overlap layer controls
+- **Advanced workflow + styling examples** (v0.3.4) - Multi-step workflows (Edmonton schools + transit + demographics); expression styling (Winnipeg properties by assessed value - interpolate); categorical styling (Denver road network by type - match); multi-dataset layers (Chicago crime + demographics + transit)
 
 ### v0.4.x - Data, UX, and Foundation
 
+- **Responsive header with hamburger menu** - Refactor the global header for narrow viewports; below ~768px the nav collapses into a hamburger menu: on examples pages it exposes the examples sidebar navigation, on all other pages it exposes About, App, and GitHub links; replaces the temporary per-layout toggle button introduced in v0.3.2
 - **Dataset layer reordering** - Drag-and-drop layer order in the layer control panel
 - **Paginated GeoJSON fetching** - Stream pages directly into DuckDB as they arrive; detect pagination via `exceededTransferLimit` (ArcGIS), `$offset/$limit` (Socrata), `next` link (OGC API Features)
-- **Additional format support** - Load CSV files with lat/lng columns, plain JSON arrays with coordinate properties, and GeoParquet directly from URLs; DuckDB handles all three natively
+- **Additional format support** - Load CSV files with lat/lng columns, plain JSON arrays with coordinate properties, and GeoParquet directly from URLs; support for download/file endpoints for CSV (with lat/lng), GeoParquet, GeoJSON. 
 - **`attribute` operation** - Custom SQL filtering/transformation on a single dataset (e.g., keep only features where `streetuse = 'Arterial'`); complements MapLibre filter expressions with data-level filtering
 - **Geocoding / address search** - Navigate to a place by name; Nominatim or Photon integration; search bar in or near the map controls
 - **Hover tooltips** - Show feature properties on cursor hover as a lightweight tooltip, distinct from the existing click popup; configurable per layer

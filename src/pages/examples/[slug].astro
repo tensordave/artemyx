@@ -1,0 +1,24 @@
+---
+import ExampleLayout from '../../components/ExampleLayout.astro';
+import { examples } from '../../scripts/examples/registry';
+import { codeToHtml } from 'shiki';
+import fs from 'node:fs';
+import path from 'node:path';
+
+export function getStaticPaths() {
+	return examples.map((example) => ({
+		params: { slug: example.slug },
+		props: { example },
+	}));
+}
+
+const { example } = Astro.props;
+const configPath = path.join(process.cwd(), 'public', example.configPath);
+const configYaml = fs.readFileSync(configPath, 'utf-8');
+const highlightedYaml = await codeToHtml(configYaml, {
+	lang: 'yaml',
+	theme: 'github-dark',
+});
+---
+
+<ExampleLayout activeExample={example} highlightedYaml={highlightedYaml} />

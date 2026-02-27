@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 Format follows [Semantic Versioning](https://semver.org/).
 
+## v0.3.2 - 2026-02-26
+
+### Examples Page Framework
+
+- `/examples` serves an interactive examples browser: 280px left sidebar with grouped navigation (Core Operations / Advanced), full-height map on the right, bottom sheet config viewer
+- Static Astro pages generated at build time: dynamic route `src/pages/examples/[slug].astro` with `getStaticPaths()`; `src/pages/examples/index.astro` renders the first example directly at `/examples` (no redirect); central registry at `src/scripts/examples/registry.ts` defines all examples (slug, name, group, description, config path) - adding an example requires one registry entry + one YAML file in `public/examples/configs/`
+- Config viewer: "View config" button centered at the bottom of the map pane triggers a bottom sheet that slides up to cover ~60% of the pane; map stays visible and interactive above it; YAML syntax-highlighted via Shiki at build time (zero client-side overhead)
+- Mobile responsive: sidebar collapses below 768px; hamburger toggle button appears in the map area; HTML structured for clean refactor into the global header hamburger menu in v0.4.x
+- All example maps use `data-persistence="false"` - no OPFS writes during example browsing
+- Buffer/dissolve example (Vancouver bike walksheds) fully working
+- Intersection/clip example populated (San Francisco): SF bike routes x parks and open spaces; two operations in one config demonstrating filter mode (whole segments touching a park) vs clip mode (routes trimmed to park boundary); datasets from SF Open Data (Socrata)
+- Union/merge example populated (Portland): Portland neighbourhoods x development opportunity areas; merge mode preserves individual polygons, dissolve mode produces a single unified boundary; datasets from PortlandMaps ArcGIS REST
+- Difference example populated (Ottawa): Ottawa neighbourhoods x parks and greenspaces; subtract mode carves park geometry out of each neighbourhood polygon, exclude mode returns only neighbourhoods with no park presence; datasets from Ottawa ArcGIS REST
+- Contains/within example populated (Winnipeg): Winnipeg parks and open spaces x cycling network; filter mode returns parks that fully contain at least one cycling segment, within mode returns cycling segments entirely inside a park boundary; datasets from Winnipeg Open Data (Socrata)
+- Distance/filter example populated (Chicago): Chicago parks x L rail stations; filter mode keeps only parks within 800m of a station; L station circles colored by line via `match` expression on the `Legend` field using official CTA hex codes; datasets from Chicago Open Data (Socrata)
+- Distance/annotate example populated (Calgary): Calgary bikeways enriched with distance to nearest LRT station; green-to-blue interpolate gradient on `dist_km`; raw bikeways shown as a muted baseline for comparison; datasets from City of Calgary Open Data (Socrata)
+- Centroid example populated (Denver): Denver park polygons reduced to centroid points; muted polygon fill + outline shown as context layer; datasets from Denver Open Data (ArcGIS REST)
+- Examples nav link updated from `href="#"` to `href="/examples"` on all pages
+
+---
+
 ## v0.3.1 - 2026-02-24
 
 ### Sandbox

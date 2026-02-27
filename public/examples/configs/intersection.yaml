@@ -1,0 +1,83 @@
+# Artemyx Example - Intersection (Filter + Clip)
+# SF bike routes intersected with park/open space polygons.
+#
+# Two operations on the same datasets show the behavioral difference:
+#   filter - keeps whole bike segments that touch any park (full geometry preserved)
+#   clip   - trims bike routes to the exact park boundary (only in-park geometry)
+
+map:
+  center: [-122.4194, 37.7749]  # San Francisco, CA
+  zoom: 13
+  basemap: carto-dark
+
+datasets:
+  - id: bike_routes
+    url: "https://data.sfgov.org/resource/ta46-stby.geojson?$limit=3000&$offset=0"
+    name: SF Bike Routes
+    color: "#22c55e"
+
+  - id: parks
+    url: "https://data.sfgov.org/resource/gtr9-ntp6.geojson?$where=city='San Francisco'"
+    name: SF Parks & Open Space
+    color: "#a78bfa"
+
+operations:
+  # filter: whole segments that touch a park (even if they extend outside)
+  - type: intersection
+    inputs: [bike_routes, parks]
+    output: bike_routes_near_parks
+    params:
+      mode: filter
+    color: "#38bdf8"
+
+  # clip: only the portions of bike routes inside park boundaries
+  - type: intersection
+    inputs: [bike_routes, parks]
+    output: bike_routes_in_parks
+    params:
+      mode: clip
+    color: "#f59e0b"
+
+layers:
+  # Parks - faint fill, visible outline
+  - id: parks-fill
+    source: parks
+    type: fill
+    paint:
+      fill-color: "#a78bfa"
+      fill-opacity: 0.08
+
+  - id: parks-outline
+    source: parks
+    type: line
+    paint:
+      line-color: "#a78bfa"
+      line-width: 1.5
+      line-opacity: 0.5
+
+  # Full bike network - dim context layer
+  - id: bike-routes-line
+    source: bike_routes
+    type: line
+    paint:
+      line-color: "#22c55e"
+      line-width: 1.5
+      line-opacity: 0.25
+
+  # Filter result - full segments that touch a park (sky blue)
+  - id: filter-result-line
+    source: bike_routes_near_parks
+    type: line
+    paint:
+      line-color: "#38bdf8"
+      line-width: 2
+      line-opacity: 0.7
+
+  # Clip result on top - exact in-park geometry (amber)
+  - id: clip-result-line
+    source: bike_routes_in_parks
+    type: line
+    paint:
+      line-color: "#f59e0b"
+      line-width: 2.5
+      line-opacity: 0.95

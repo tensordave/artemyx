@@ -1,0 +1,97 @@
+# Artemyx Example - Difference (Subtract + Exclude)
+# Ottawa neighbourhoods minus parks and greenspaces.
+#
+# Two operations show the behavioral difference:
+#   subtract - carves park geometry out of each neighbourhood polygon (non-park footprint)
+#   exclude  - keeps only neighbourhoods with zero park/greenspace presence
+
+map:
+  center: [-75.6972, 45.4215]  # Ottawa, ON
+  zoom: 11
+  basemap: carto-dark
+
+datasets:
+  - id: neighbourhoods
+    url: "https://services.arcgis.com/G6F8XLCl5KtAlZ2G/arcgis/rest/services/GEN3_OTT_1_3_3/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+    name: Ottawa Neighbourhoods
+    color: "#22c55e"
+
+  - id: parks
+    url: "https://maps.ottawa.ca/arcgis/rest/services/Parks_Inventory/MapServer/24/query?outFields=*&where=1%3D1&f=geojson"
+    name: Ottawa Parks and Greenspaces
+    color: "#f59e0b"
+
+operations:
+  # subtract: park geometry punched out of each neighbourhood polygon
+  - type: difference
+    inputs: [neighbourhoods, parks]
+    output: non_park_footprint
+    params:
+      mode: subtract
+    color: "#38bdf8"
+
+  # exclude: only neighbourhoods that don't touch any park at all
+  - type: difference
+    inputs: [neighbourhoods, parks]
+    output: park_free_neighbourhoods
+    params:
+      mode: exclude
+    color: "#a78bfa"
+
+layers:
+  # Parks - amber fill, visible but not dominant
+  - id: parks-fill
+    source: parks
+    type: fill
+    paint:
+      fill-color: "#f59e0b"
+      fill-opacity: 0.25
+
+  - id: parks-outline
+    source: parks
+    type: line
+    paint:
+      line-color: "#f59e0b"
+      line-width: 1
+      line-opacity: 0.6
+
+  # Source neighbourhoods - faint context
+  - id: neighbourhoods-outline
+    source: neighbourhoods
+    type: line
+    paint:
+      line-color: "#22c55e"
+      line-width: 1
+      line-opacity: 0.3
+
+  # Subtract result - neighbourhood polygons with parks carved out (sky blue)
+  - id: non-park-fill
+    source: non_park_footprint
+    type: fill
+    paint:
+      fill-color: "#38bdf8"
+      fill-opacity: 0.15
+
+  - id: non-park-outline
+    source: non_park_footprint
+    type: line
+    paint:
+      line-color: "#38bdf8"
+      line-width: 1.5
+      line-opacity: 0.8
+
+  # Exclude result - park-free neighbourhoods highlighted (purple)
+  - id: park-free-fill
+    source: park_free_neighbourhoods
+    type: fill
+    paint:
+      fill-color: "#a78bfa"
+      fill-opacity: 0.2
+
+  - id: park-free-outline
+    source: park_free_neighbourhoods
+    type: line
+    paint:
+      line-color: "#a78bfa"
+      line-width: 2
+      line-opacity: 0.9
