@@ -64,6 +64,36 @@ export const examples: Example[] = [
 		description: 'Denver park polygons reduced to centroid points.',
 		configPath: '/examples/configs/centroid.yaml',
 	},
+	// --- Expression Styling ---
+	{
+		slug: 'interpolate-styling',
+		name: 'Interpolate Styling',
+		group: 'Expression Styling',
+		description: 'Vancouver parks colored by size - interpolate expression mapping hectares to a green color ramp.',
+		configPath: '/examples/configs/interpolate-styling.yaml',
+	},
+	{
+		slug: 'match-styling',
+		name: 'Match Styling',
+		group: 'Expression Styling',
+		description: 'Victoria road network colored by classification - match expression mapping road classes to a color palette.',
+		configPath: '/examples/configs/match-styling.yaml',
+	},
+	// --- Advanced Workflows ---
+	{
+		slug: 'multi-dataset-layers',
+		name: 'Multi-Dataset Layers',
+		group: 'Advanced Workflows',
+		description: 'Surrey, Burnaby, and New Westminster parks and active transportation - seven datasets across three municipalities with expression styling.',
+		configPath: '/examples/configs/multi-dataset-layers.yaml',
+	},
+	{
+		slug: 'multi-step',
+		name: 'Multi-Step Workflow',
+		group: 'Advanced Workflows',
+		description: 'Edmonton schools + transit - union, buffer, and intersection chained to find dual-access zones.',
+		configPath: '/examples/configs/multi-step.yaml',
+	},
 ];
 
 /** Unique group names in display order. */

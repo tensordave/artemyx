@@ -1,0 +1,60 @@
+# Artemyx Example - Match Expression Styling
+# Victoria road network colored by classification using a MapLibre match expression.
+# Each road class (ART, COL, LOC, etc.) gets a distinct color for quick visual hierarchy.
+# No operations - pure expression-driven styling on a single dataset.
+
+map:
+  center: [-123.3656, 48.4284]  # Victoria, BC
+  zoom: 14
+  basemap: carto-dark
+
+datasets:
+  - id: roads
+    url: "https://maps.victoria.ca/server/rest/services/OpenData/OpenData_Transportation/MapServer/25/query?outFields=*&where=1%3D1&f=geojson"
+    name: Victoria Roads
+    color: "#94a3b8"
+
+layers:
+  - id: roads-line
+    source: roads
+    type: line
+    paint:
+      line-color:
+        - match
+        - ["get", "Class"]
+        - ART
+        - "#ef4444"    # red - arterial
+        - SART
+        - "#f97316"    # orange - secondary arterial
+        - COL
+        - "#eab308"    # yellow - collector
+        - SCOL
+        - "#a3e635"    # lime - secondary collector
+        - LOC
+        - "#60a5fa"    # blue - local
+        - RES
+        - "#818cf8"    # indigo - residential
+        - STR
+        - "#c084fc"    # purple - strata
+        - LANE
+        - "#6b7280"    # grey - lane/alley
+        - TRA
+        - "#2dd4bf"    # teal - trail
+        - WLK
+        - "#34d399"    # emerald - walkway
+        - REC
+        - "#22d3ee"    # cyan - recreational
+        - "#475569"    # slate fallback
+      line-width:
+        - match
+        - ["get", "Class"]
+        - ART
+        - 3
+        - SART
+        - 2.5
+        - COL
+        - 2
+        - SCOL
+        - 1.8
+        - 1            # default width
+      line-opacity: 0.85

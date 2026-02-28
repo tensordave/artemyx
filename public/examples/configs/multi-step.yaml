@@ -1,0 +1,186 @@
+# Artemyx Example - Multi-Step Workflow
+# Edmonton schools + transit: where can you walk to both?
+#
+# Four chained operations:
+#   1. Union bus stops + LRT stations into a single transit dataset
+#   2. Buffer schools by 800m (dissolve) - walkable-to-school zones
+#   3. Buffer unified transit by 400m (dissolve) - walkable-to-transit zones
+#   4. Intersection (clip) - areas within walking distance of both
+
+map:
+  center: [-113.4938, 53.5461]  # Edmonton, AB
+  zoom: 11
+  basemap: carto-dark
+
+datasets:
+  - id: neighbourhoods
+    url: "https://data.edmonton.ca/resource/65fr-66s6.geojson"
+    name: Edmonton Neighbourhoods
+    color: "#64748b"
+
+  - id: schools
+    url: "https://data.edmonton.ca/resource/ehbr-emhe.geojson"
+    name: Edmonton Schools
+    color: "#f59e0b"
+
+  - id: bus_stops
+    url: "https://data.edmonton.ca/resource/4vt2-8zrq.geojson?$limit=7000&$offset=0"
+    name: Edmonton Bus Stops
+    color: "#60a5fa"
+
+  - id: lrt_stations
+    url: "https://data.edmonton.ca/resource/fhxi-cnhe.geojson"
+    name: Edmonton LRT Stations
+    color: "#818cf8"
+
+operations:
+  # Step 1: merge bus stops + LRT stations into one transit dataset
+  - type: union
+    inputs: [bus_stops, lrt_stations]
+    output: all_transit
+    params:
+      mode: merge
+    color: "#60a5fa"
+
+  # Step 2: 800m walkshed around every school (~10 min walk)
+  - type: buffer
+    input: schools
+    output: school_walksheds
+    params:
+      distance: 800
+      units: meters
+      dissolve: true
+    color: "#f59e0b"
+
+  # Step 3: 400m walkshed around every transit stop (~5 min walk)
+  - type: buffer
+    input: all_transit
+    output: transit_walksheds
+    params:
+      distance: 400
+      units: meters
+      dissolve: true
+    color: "#60a5fa"
+
+  # Step 4: clip school walksheds by transit walksheds - the overlap
+  - type: intersection
+    inputs: [school_walksheds, transit_walksheds]
+    output: dual_access
+    params:
+      mode: clip
+    color: "#22c55e"
+
+layers:
+  # --- Context (bottom) ---
+
+  # Neighbourhoods - faint context polygons
+  - id: neighbourhoods-fill
+    source: neighbourhoods
+    type: fill
+    paint:
+      fill-color: "#64748b"
+      fill-opacity: 0.05
+
+  - id: neighbourhoods-outline
+    source: neighbourhoods
+    type: line
+    paint:
+      line-color: "#64748b"
+      line-width: 1
+      line-opacity: 0.3
+
+  # --- Raw inputs ---
+
+  # Bus stops - tiny faint dots
+  - id: bus-stops-circle
+    source: bus_stops
+    type: circle
+    paint:
+      circle-radius: 2
+      circle-color: "#60a5fa"
+      circle-opacity: 0.3
+
+  # LRT stations - slightly larger dots
+  - id: lrt-stations-circle
+    source: lrt_stations
+    type: circle
+    paint:
+      circle-radius: 5
+      circle-color: "#818cf8"
+      circle-stroke-color: "#312e81"
+      circle-stroke-width: 1
+      circle-opacity: 0.4
+
+  # --- Step 1 result: unified transit ---
+
+  # All transit (union result) - faint dots
+  - id: all-transit-circle
+    source: all_transit
+    type: circle
+    paint:
+      circle-radius: 2.5
+      circle-color: "#60a5fa"
+      circle-opacity: 0.25
+
+  # --- Step 2 result: school walksheds ---
+
+  - id: school-walksheds-fill
+    source: school_walksheds
+    type: fill
+    paint:
+      fill-color: "#f59e0b"
+      fill-opacity: 0.1
+
+  - id: school-walksheds-outline
+    source: school_walksheds
+    type: line
+    paint:
+      line-color: "#f59e0b"
+      line-width: 1
+      line-opacity: 0.3
+
+  # --- Step 3 result: transit walksheds ---
+
+  - id: transit-walksheds-fill
+    source: transit_walksheds
+    type: fill
+    paint:
+      fill-color: "#60a5fa"
+      fill-opacity: 0.1
+
+  - id: transit-walksheds-outline
+    source: transit_walksheds
+    type: line
+    paint:
+      line-color: "#60a5fa"
+      line-width: 1
+      line-opacity: 0.3
+
+  # --- Step 4 result: dual access ---
+
+  - id: dual-access-fill
+    source: dual_access
+    type: fill
+    paint:
+      fill-color: "#22c55e"
+      fill-opacity: 0.35
+
+  - id: dual-access-outline
+    source: dual_access
+    type: line
+    paint:
+      line-color: "#22c55e"
+      line-width: 2
+      line-opacity: 0.8
+
+  # --- Points on top ---
+
+  # Schools as points
+  - id: schools-circle
+    source: schools
+    type: circle
+    paint:
+      circle-radius: 4
+      circle-color: "#f59e0b"
+      circle-stroke-color: "#78350f"
+      circle-stroke-width: 1

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 Format follows [Semantic Versioning](https://semver.org/).
 
+## v0.3.4 - 2026-02-27
+
+### Advanced Workflow + Styling Examples
+
+- Interpolate expression styling example (Vancouver): parks polygon dataset colored by `area_ha` using a 5-stop green ramp (0 / 2 / 10 / 40 / 100 hectares); demonstrates `interpolate` + `linear` paint expressions on polygon fill layers
+- Match expression styling example (Victoria): road centreline network colored by `Class` field (ART, SART, COL, SCOL, LOC, RES, STR, LANE, TRA, WLK, REC) with hierarchy-aware line widths - arterials rendered thickest, local streets thinnest; demonstrates `match` expressions on both `line-color` and `line-width`
+- Multi-dataset layers example (Surrey, Burnaby, New Westminster): 7 datasets across 3 municipalities - parks (polygon fills), trails (cool teal/cyan/purple palettes per city), and bike routes (warm amber/orange palette with infrastructure-type-aware line widths); demonstrates multi-source composition with expression styling and no operations
+- Multi-step workflow example (Edmonton): schools + transit - union, buffer, and intersection chained to find dual-access zones
+
+---
+
 ## v0.3.3 - 2026-02-26
 
 ### Examples UX Polish

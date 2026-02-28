@@ -1,0 +1,191 @@
+# Artemyx Example - Multi-Dataset Layers
+# Surrey, Burnaby, and New Westminster active transportation networks layered together.
+# Seven datasets across three municipalities - parks, trails, and bike routes -
+# styled with complementary palettes to show cross-boundary infrastructure.
+# No operations - pure multi-dataset composition with expression styling.
+
+map:
+  center: [-122.8918, 49.2100]  # Between Surrey and Burnaby
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  # --- Surrey ---
+  - id: surrey-parks
+    url: "https://services5.arcgis.com/YRpe0VKTJytZSSIB/arcgis/rest/services/Park%20Locations/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+    name: Surrey Parks
+    color: "#4ade80"
+
+  - id: surrey-trails
+    url: "https://services5.arcgis.com/YRpe0VKTJytZSSIB/arcgis/rest/services/Trails%20and%20Paths/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+    name: Surrey Trails & Paths
+    color: "#2dd4bf"
+
+  - id: surrey-bikes
+    url: "https://services5.arcgis.com/YRpe0VKTJytZSSIB/arcgis/rest/services/Bike%20Routes/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+    name: Surrey Bike Routes
+    color: "#f59e0b"
+
+  # --- Burnaby ---
+  - id: burnaby-parks
+    url: "https://gis.burnaby.ca/arcgis/rest/services/OpenData/OpenData1/MapServer/6/query?outFields=*&where=1%3D1&f=geojson"
+    name: Burnaby Parks
+    color: "#34d399"
+
+  - id: burnaby-trails
+    url: "https://services5.arcgis.com/NgSjNljtJn9hphOU/arcgis/rest/services/Parks_Trails/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+    name: Burnaby Trails
+    color: "#22d3ee"
+
+  - id: burnaby-bikes
+    url: "https://gis.burnaby.ca/arcgis/rest/services/OpenData/OpenData5/MapServer/15/query?outFields=*&where=1%3D1&f=geojson"
+    name: Burnaby Bike Routes
+    color: "#fb923c"
+
+  # --- New Westminster ---
+  - id: newwest-trails
+    url: "https://services3.arcgis.com/A7O8YnTNtzRPIn7T/arcgis/rest/services/Trails_and_Bikeways_PROD_view/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson"
+    name: New Westminster Trails & Bikeways
+    color: "#c084fc"
+
+layers:
+  # --- Base layer: park polygons (bottom) ---
+  - id: surrey-parks-fill
+    source: surrey-parks
+    type: fill
+    paint:
+      fill-color: "#4ade80"
+      fill-opacity: 0.25
+
+  - id: burnaby-parks-fill
+    source: burnaby-parks
+    type: fill
+    paint:
+      fill-color: "#34d399"
+      fill-opacity: 0.25
+
+  - id: surrey-parks-outline
+    source: surrey-parks
+    type: line
+    paint:
+      line-color: "#4ade80"
+      line-width: 1
+      line-opacity: 0.4
+
+  - id: burnaby-parks-outline
+    source: burnaby-parks
+    type: line
+    paint:
+      line-color: "#34d399"
+      line-width: 1
+      line-opacity: 0.4
+
+  # --- Trail networks (mid layer) ---
+  - id: surrey-trails-line
+    source: surrey-trails
+    type: line
+    paint:
+      line-color:
+        - match
+        - ["get", "ROUTE_TYPE2"]
+        - Multi-use Pathway
+        - "#2dd4bf"    # teal
+        - Nature Trail
+        - "#059669"    # emerald
+        - Recreation Trail
+        - "#14b8a6"    # teal-green
+        - Boardwalk
+        - "#a78bfa"    # purple
+        - Walkway
+        - "#67e8f9"    # cyan
+        - "#5eead4"    # fallback teal
+      line-width: 1.5
+      line-opacity: 0.7
+
+  - id: burnaby-trails-line
+    source: burnaby-trails
+    type: line
+    paint:
+      line-color:
+        - match
+        - ["get", "TRAILCLASS"]
+        - Trail
+        - "#22d3ee"    # cyan
+        - Urban Trail
+        - "#06b6d4"    # darker cyan
+        - Pathway
+        - "#67e8f9"    # light cyan
+        - Walkway
+        - "#a5f3fc"    # pale cyan
+        - "#22d3ee"    # fallback
+      line-width: 1.5
+      line-opacity: 0.7
+
+  - id: newwest-trails-line
+    source: newwest-trails
+    type: line
+    paint:
+      line-color:
+        - match
+        - ["get", "ROUTETYPE"]
+        - Trail
+        - "#c084fc"    # purple
+        - Multi-use Path/Off-street Bike Path
+        - "#a855f7"    # violet
+        - On-Street Bike Lanes (Painted or Separated)
+        - "#d8b4fe"    # light purple
+        - On-Street Shared
+        - "#e9d5ff"    # pale purple
+        - Ferry
+        - "#7c3aed"    # deep violet
+        - "#c084fc"    # fallback
+      line-width: 1.5
+      line-opacity: 0.7
+
+  # --- Bike routes (top lines, warm palette) ---
+  - id: surrey-bikes-line
+    source: surrey-bikes
+    type: line
+    paint:
+      line-color:
+        - match
+        - ["get", "BIKE_INFRASTRUCTURE_TYPE"]
+        - Protected Bike Lanes
+        - "#f59e0b"    # amber - safest
+        - Painted Bike Lanes
+        - "#fb923c"    # orange
+        - Local Bikeway
+        - "#fbbf24"    # yellow
+        - Multi-Use Pathway
+        - "#f97316"    # deep orange
+        - Cycling-Permitted Sidewalk
+        - "#fcd34d"    # pale yellow
+        - Shared Traffic
+        - "#d97706"    # dark amber
+        - "#f59e0b"    # fallback
+      line-width:
+        - match
+        - ["get", "BIKE_INFRASTRUCTURE_TYPE"]
+        - Protected Bike Lanes
+        - 3
+        - Painted Bike Lanes
+        - 2.5
+        - 2            # default
+      line-opacity: 0.85
+
+  - id: burnaby-bikes-line
+    source: burnaby-bikes
+    type: line
+    paint:
+      line-color:
+        - match
+        - ["get", "TYPE"]
+        - BIKEWAY
+        - "#fb923c"    # orange
+        - CYCLE ROAD
+        - "#f97316"    # deep orange
+        - SHOULDER BIKE LANE
+        - "#fbbf24"    # yellow
+        - "#fb923c"    # fallback
+      line-width: 2.5
+      line-opacity: 0.85

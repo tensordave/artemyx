@@ -1,0 +1,46 @@
+# Artemyx Example - Interpolate Expression Styling
+# Vancouver parks colored by size (hectares) using a MapLibre interpolate expression.
+# Small pocket parks appear pale green; large parks like Stanley Park appear deep green.
+# No operations - pure expression-driven styling on a single dataset.
+
+map:
+  center: [-123.1207, 49.2827]  # Vancouver, BC
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  - id: parks
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/parks-polygon-representation/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Parks
+    color: "#4ade80"
+
+layers:
+  # Park fills - interpolate color by hectare size
+  - id: parks-fill
+    source: parks
+    type: fill
+    paint:
+      fill-color:
+        - interpolate
+        - ["linear"]
+        - ["get", "area_ha"]
+        - 0
+        - "#d9f99d"   # pale lime - tiny pocket parks
+        - 2
+        - "#86efac"   # light green - small neighbourhood parks
+        - 10
+        - "#4ade80"   # medium green - mid-size parks
+        - 40
+        - "#16a34a"   # deep green - large parks
+        - 100
+        - "#14532d"   # near-black green - Stanley Park scale
+      fill-opacity: 0.75
+
+  # Park outlines - fixed color
+  - id: parks-outline
+    source: parks
+    type: line
+    paint:
+      line-color: "#166534"
+      line-width: 1
+      line-opacity: 0.5

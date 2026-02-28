@@ -31,18 +31,20 @@ For completed work, see [CHANGELOG.md](CHANGELOG.md).
 ### v0.3.3
 - **Examples UX polish** - Close button inside the mobile sidebar overlay (previously could only dismiss by tapping a nav link); hamburger toggle repositioned from top-left (overlapping MapLibre layer controls) to mid-left as a flush edge tab, vertically centered
 
+### v0.3.4
+- **Advanced workflow + styling examples** - Interpolate expression styling (Vancouver parks by hectare size - 5-stop green ramp); match expression styling (Victoria road network by classification - 11 road classes with hierarchy-aware line widths); multi-dataset layers (Surrey, Burnaby, and New Westminster parks and active transportation - 7 datasets across 3 municipalities with per-city color palettes); multi-step workflow (Edmonton schools + transit - union, buffer, and intersection chained)
+
 ## Roadmap
-
-### v0.3.x - Examples
-
-- **Advanced workflow + styling examples** (v0.3.4) - Multi-step workflows (Edmonton schools + transit + demographics); expression styling (Winnipeg properties by assessed value - interpolate); categorical styling (Denver road network by type - match); multi-dataset layers (Chicago crime + demographics + transit)
 
 ### v0.4.x - Data, UX, and Foundation
 
 - **Responsive header with hamburger menu** - Refactor the global header for narrow viewports; below ~768px the nav collapses into a hamburger menu: on examples pages it exposes the examples sidebar navigation, on all other pages it exposes About, App, and GitHub links; replaces the temporary per-layout toggle button introduced in v0.3.2
 - **Dataset layer reordering** - Drag-and-drop layer order in the layer control panel
 - **Paginated GeoJSON fetching** - Stream pages directly into DuckDB as they arrive; detect pagination via `exceededTransferLimit` (ArcGIS), `$offset/$limit` (Socrata), `next` link (OGC API Features)
-- **Additional format support** - Load CSV files with lat/lng columns, plain JSON arrays with coordinate properties, and GeoParquet directly from URLs; support for download/file endpoints for CSV (with lat/lng), GeoParquet, GeoJSON. 
+- **Additional format support** - Load CSV files with lat/lng columns, plain JSON arrays with coordinate properties, and GeoParquet directly from URLs; support for download/file endpoints for CSV (with lat/lng), GeoParquet, GeoJSON
+- **Local file upload** - Drag-and-drop or file picker for loading local files (GeoJSON, CSV, GeoParquet) directly onto the map without requiring a hosted URL
+- **Download URL handling** - Properly handle file download endpoints (Content-Disposition attachments, direct file links) that don't return inline JSON; detect and follow download redirects; complements paginated fetching and format support
+- **Scale bar** - Add MapLibre `ScaleControl` for distance reference; metric/imperial toggle
 - **`attribute` operation** - Custom SQL filtering/transformation on a single dataset (e.g., keep only features where `streetuse = 'Arterial'`); complements MapLibre filter expressions with data-level filtering
 - **Geocoding / address search** - Navigate to a place by name; Nominatim or Photon integration; search bar in or near the map controls
 - **Hover tooltips** - Show feature properties on cursor hover as a lightweight tooltip, distinct from the existing click popup; configurable per layer
@@ -67,12 +69,15 @@ Goal: replace the current split between the color button and numeric style input
 - **Layer-type awareness** - Show only relevant controls based on geometry type (fill opacity for polygons, line width for lines, point radius for points); fix style panel overlap with the layer row below
 - **Expression-aware overrides** - Expression-driven properties shown as disabled with an "Expression" badge; toggle lets user replace the expression with a flat GUI value for that property
 - **Layer Expression Editor** - Raw MapLibre expression input per layer paint property; JSON validation before applying; updates MapLibre directly without modifying the config file
+- **Labels** - Per-layer label configuration in the style panel; select an attribute for `text-field`, adjust font size, halo, and placement; renders as MapLibre `symbol` layer type alongside the data layer
 - **Legend** - Auto-generated legend panel derived from active layer styles; shows color swatches for flat colors, ramp previews for interpolate expressions, and category swatches for match expressions; toggleable overlay or docked panel
 
 ### v0.6.x - Performance, Export, and Sharing
 
 - **Cumulative feature count guard** - Track running feature total during OPFS restore; skip rendering datasets beyond threshold with a progress message (data stays in OPFS for operations); stopgap until deck.gl
 - **Worker-based dataset loading** - Move fetch + DuckDB insert pipeline into a Web Worker so the map and controls remain responsive during large loads
+- **Safari/iOS OPFS persistence** - Run DuckDB-WASM OPFS file access through a dedicated worker to satisfy Safari's requirement that `createSyncAccessHandle()` only be called from worker context; unblocks full persistence on iOS/iPadOS Safari and all WebKit-based browsers
+- **Feature selection** - Click or box-select features on the map to create a subset dataset; selected features visually distinguished; selection available as input to operations
 - **Feature generalization (LOD)** - `ST_Simplify(geometry, tolerance)` with tolerance scaled to zoom level
 - **Viewport streaming** - Load only features visible in current extent via `ST_Intersects(geometry, ST_MakeEnvelope(west, south, east, north))`
 - **Bounds query optimization** - Replace coordinate iteration with `SELECT ST_Envelope(ST_Union_Agg(geometry)) FROM features WHERE dataset_id = ?`
@@ -88,6 +93,8 @@ Goal: replace the current split between the color button and numeric style input
 - **CRS support** - Detect and reproject to web mercator
 - **Tabular view** - Bottom panel with sortable, filterable data grid; row click highlights feature on map
 - **`join` operation** - Tabular join: attach a CSV or JSON dataset to a spatial dataset by a shared key field; enables workflows like coloring parcels by census data or enriching transit stops with ridership counts; config references a tabular `source`, a spatial `target`, and an `on` key; joined properties merged into the output feature's attributes
+- **`spatial-join` operation** - Attach attributes from layer B to layer A based on geometric relationship (intersects, contains, nearest); distinct from tabular join - no shared key required, relationship is spatial; e.g., tag parcels with their containing neighbourhood or find the nearest transit stop to each school
+- **Undo/redo** - Session history stack for operations and dataset changes; step backward and forward through state; covers dataset loads, operation executions, and layer modifications
 - **Statistics panel** - Per-dataset summary statistics: feature count, and for numeric attribute columns, min/max/mean/median; accessible from the layer control
 - **Measurement tools** - Distance, area, bearing calculations
 - **Keyboard shortcuts** - L (layer control), P (progress), Esc (close), Delete (remove feature)
