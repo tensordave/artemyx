@@ -13,13 +13,17 @@ import type {
 	BinaryOperationType,
 	LayerType,
 } from './types';
+import type { ConfigFormat } from '../loaders/types';
 import { VALID_DISTANCE_UNITS } from './operations/unit-conversion';
+
+/** Valid explicit format values for datasets */
+const VALID_FORMATS: ConfigFormat[] = ['geojson', 'csv', 'geoparquet'];
 
 /** Valid basemap IDs (duplicated here for runtime validation) */
 const VALID_BASEMAPS: BasemapId[] = ['carto-dark', 'carto-light', 'carto-voyager', 'esri-satellite'];
 
 /** Unary operations (single input) */
-const UNARY_OPERATIONS: UnaryOperationType[] = ['buffer', 'centroid'];
+const UNARY_OPERATIONS: UnaryOperationType[] = ['buffer', 'centroid', 'attribute'];
 
 /** Binary operations (multiple inputs) */
 const BINARY_OPERATIONS: BinaryOperationType[] = ['intersection', 'union', 'difference', 'contains', 'distance'];
@@ -207,6 +211,46 @@ function validateDataset(dataset: unknown, index: number): string[] {
 		}
 	}
 
+	// Optional: hidden (boolean)
+	if ('hidden' in d && d.hidden !== undefined) {
+		if (typeof d.hidden !== 'boolean') {
+			errors.push(`${prefix}.hidden: must be a boolean`);
+		}
+	}
+
+	// Optional: format (must be a valid config format)
+	if ('format' in d && d.format !== undefined) {
+		if (typeof d.format !== 'string') {
+			errors.push(`${prefix}.format: must be a string`);
+		} else if (!VALID_FORMATS.includes(d.format as ConfigFormat)) {
+			errors.push(`${prefix}.format: must be one of: ${VALID_FORMATS.join(', ')}. Got '${d.format}'`);
+		}
+	}
+
+	// Optional: latColumn (string, only meaningful for csv/geoparquet)
+	if ('latColumn' in d && d.latColumn !== undefined) {
+		if (typeof d.latColumn !== 'string' || d.latColumn.trim() === '') {
+			errors.push(`${prefix}.latColumn: must be a non-empty string`);
+		}
+	}
+
+	// Optional: lngColumn (string, only meaningful for csv/geoparquet)
+	if ('lngColumn' in d && d.lngColumn !== undefined) {
+		if (typeof d.lngColumn !== 'string' || d.lngColumn.trim() === '') {
+			errors.push(`${prefix}.lngColumn: must be a non-empty string`);
+		}
+	}
+
+	// Optional: geoColumn (string, combined "lat, lng" column; mutually exclusive with latColumn/lngColumn)
+	if ('geoColumn' in d && d.geoColumn !== undefined) {
+		if (typeof d.geoColumn !== 'string' || d.geoColumn.trim() === '') {
+			errors.push(`${prefix}.geoColumn: must be a non-empty string`);
+		}
+		if (('latColumn' in d && d.latColumn !== undefined) || ('lngColumn' in d && d.lngColumn !== undefined)) {
+			errors.push(`${prefix}: geoColumn is mutually exclusive with latColumn/lngColumn`);
+		}
+	}
+
 	return errors;
 }
 
@@ -312,7 +356,17 @@ function validateOperation(op: unknown, index: number): string[] {
 		}
 	}
 
-	// Optional: params (must be object if present)
+	// Optional: name (string)
+	if ('name' in o && o.name !== undefined) {
+		if (typeof o.name !== 'string') {
+			errors.push(`${prefix}.name: must be a string`);
+		}
+	}
+
+	// Params: required for some operations, optional for others
+	if (opType === 'attribute' && !('params' in o)) {
+		errors.push(`${prefix}: attribute operation requires 'params' (structured filter or where clause)`);
+	}
 	if ('params' in o && o.params !== undefined) {
 		if (typeof o.params !== 'object' || o.params === null || Array.isArray(o.params)) {
 			errors.push(`${prefix}.params: must be an object`);
@@ -323,6 +377,8 @@ function validateOperation(op: unknown, index: number): string[] {
 				errors.push(...validateBufferParams(o.params as Record<string, unknown>, prefix));
 			} else if (opType === 'distance') {
 				errors.push(...validateDistanceParams(o.params as Record<string, unknown>, prefix));
+			} else if (opType === 'attribute') {
+				errors.push(...validateAttributeParams(o.params as Record<string, unknown>, prefix));
 			}
 		}
 	}
@@ -430,6 +486,57 @@ function validateDistanceParams(params: Record<string, unknown>, prefix: string)
 			errors.push(`${prefix}.params.maxDistance: must be a number`);
 		} else if (params.maxDistance <= 0) {
 			errors.push(`${prefix}.params.maxDistance: must be a positive number`);
+		}
+	}
+
+	return errors;
+}
+
+/** Valid structured attribute filter operators */
+const VALID_ATTRIBUTE_OPERATORS = ['=', '!=', '>', '>=', '<', '<='];
+
+/**
+ * Validate attribute operation params.
+ * Enforces mutual exclusivity: structured (property/operator/value) OR raw `where`, not both.
+ */
+function validateAttributeParams(params: Record<string, unknown>, prefix: string): string[] {
+	const errors: string[] = [];
+
+	const hasStructured = 'property' in params || 'operator' in params || 'value' in params;
+	const hasWhere = 'where' in params;
+
+	if (hasStructured && hasWhere) {
+		errors.push(`${prefix}.params: cannot use both structured filter (property/operator/value) and 'where' clause`);
+		return errors;
+	}
+
+	if (!hasStructured && !hasWhere) {
+		errors.push(`${prefix}.params: attribute operation requires either structured filter (property/value) or 'where' clause`);
+		return errors;
+	}
+
+	if (hasWhere) {
+		if (typeof params.where !== 'string' || params.where.trim() === '') {
+			errors.push(`${prefix}.params.where: must be a non-empty string`);
+		}
+	} else {
+		// Structured mode validation
+		if (!('property' in params)) {
+			errors.push(`${prefix}.params: structured filter requires 'property'`);
+		} else if (typeof params.property !== 'string' || params.property.trim() === '') {
+			errors.push(`${prefix}.params.property: must be a non-empty string`);
+		}
+
+		if (!('value' in params) || params.value === undefined) {
+			errors.push(`${prefix}.params: structured filter requires 'value'`);
+		} else if (typeof params.value !== 'string' && typeof params.value !== 'number') {
+			errors.push(`${prefix}.params.value: must be a string or number`);
+		}
+
+		if ('operator' in params && params.operator !== undefined) {
+			if (!VALID_ATTRIBUTE_OPERATORS.includes(params.operator as string)) {
+				errors.push(`${prefix}.params.operator: must be one of: ${VALID_ATTRIBUTE_OPERATORS.join(', ')}. Got '${params.operator}'`);
+			}
 		}
 	}
 
@@ -549,6 +656,26 @@ function validateLayer(layer: unknown, index: number): string[] {
 	if ('layout' in l && l.layout !== undefined) {
 		if (typeof l.layout !== 'object' || l.layout === null || Array.isArray(l.layout)) {
 			errors.push(`${prefix}.layout: must be an object`);
+		}
+	}
+
+	// Optional: tooltip (string or array of strings - property names to show on hover)
+	if ('tooltip' in l && l.tooltip !== undefined) {
+		if (typeof l.tooltip === 'string') {
+			if (l.tooltip.trim() === '') {
+				errors.push(`${prefix}.tooltip: must be a non-empty string`);
+			}
+		} else if (Array.isArray(l.tooltip)) {
+			if (l.tooltip.length === 0) {
+				errors.push(`${prefix}.tooltip: array must not be empty`);
+			}
+			l.tooltip.forEach((field, i) => {
+				if (typeof field !== 'string' || field.trim() === '') {
+					errors.push(`${prefix}.tooltip[${i}]: must be a non-empty string`);
+				}
+			});
+		} else {
+			errors.push(`${prefix}.tooltip: must be a string or array of strings`);
 		}
 	}
 

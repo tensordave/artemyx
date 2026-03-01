@@ -17,6 +17,7 @@ operations:
   - type: centroid
     input: parks
     output: park_centroids
+    name: Park Centroids
 
 layers:
   # Park polygons as muted fill for context
@@ -37,6 +38,7 @@ layers:
   # Park centroids as circles on top
   - id: park-centroids
     source: park_centroids
+    tooltip: LOCATION
     type: circle
     paint:
       circle-radius: 5

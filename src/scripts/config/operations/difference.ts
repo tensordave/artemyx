@@ -9,10 +9,9 @@
 import { getConnection } from '../../db/core';
 import { DEFAULT_COLOR } from '../../db/datasets';
 import { getFeaturesAsGeoJSON } from '../../db/features';
-import { attachFeatureClickHandlers } from '../../popup';
 import type { BinaryOperation, DifferenceParams } from '../types';
 import type { OperationContext } from './index';
-import { parseStyleConfig } from './index';
+import { parseStyleConfig, shouldSkipAutoLayers } from './index';
 import { addOperationResultToMap } from './buffer';
 
 /**
@@ -26,8 +25,7 @@ export async function executeDifference(
 	op: BinaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets, layers } = context;
-	const hasExplicitLayers = layers !== undefined;
+	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as DifferenceParams | undefined;
 
 	// Validate inputs
@@ -43,11 +41,12 @@ export async function executeDifference(
 
 	const [inputA, inputB] = op.inputs;
 	const outputId = op.output;
+	const displayName = op.name || outputId;
 	const color = op.color ?? DEFAULT_COLOR;
 	const style = parseStyleConfig(op.style);
 
 	const modeLabel = mode === 'exclude' ? 'excluding' : 'subtracting';
-	progressControl.updateProgress(outputId, 'processing', `Differencing ${inputA} minus ${inputB} (${modeLabel})...`);
+	progressControl.updateProgress(displayName, 'processing', `Differencing ${inputA} minus ${inputB} (${modeLabel})...`);
 
 	const connection = await getConnection();
 
@@ -137,7 +136,7 @@ export async function executeDifference(
 	if (featureCount === 0) {
 		// Not necessarily an error — could be a valid "nothing left" result
 		console.log(`[Difference] Warning: ${inputA} - ${inputB} produced no features`);
-		progressControl.updateProgress(outputId, 'success', `No features remaining after difference`);
+		progressControl.updateProgress(displayName, 'success', `No features remaining after difference`);
 		// Still register empty dataset for consistency
 	}
 
@@ -146,27 +145,27 @@ export async function executeDifference(
 		INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
 		VALUES (?, 'operation:difference', ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
 	`);
-	await insertDataset.query(outputId, outputId, color, featureCount, JSON.stringify(style));
+	await insertDataset.query(outputId, op.name || outputId, color, featureCount, JSON.stringify(style));
 	await insertDataset.close();
 
 	// Query features as GeoJSON for map rendering
 	const geoJsonData = await getFeaturesAsGeoJSON(outputId);
 
 	// Add source and layers to map (skip layers if explicit config exists)
-	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, hasExplicitLayers);
+	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, shouldSkipAutoLayers(outputId, context.layers));
 
 	// Track dataset
 	loadedDatasets.add(outputId);
 
-	// Attach popup handlers (only if default layers were created)
+	// Notify executor to attach popup/hover handlers
 	if (layerIds.length > 0) {
-		attachFeatureClickHandlers(map, layerIds);
+		context.onLayersCreated?.(layerIds, displayName);
 	}
 
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	progressControl.updateProgress(outputId, 'success', `${featureCount} feature(s) (${mode})`);
+	progressControl.updateProgress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
 
 	console.log(`[Difference] Complete: ${outputId} with ${featureCount} features`);
 

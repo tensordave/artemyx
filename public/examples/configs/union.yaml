@@ -26,6 +26,7 @@ operations:
   - type: union
     inputs: [neighborhoods, opportunity_areas]
     output: combined_areas
+    name: Combined Areas
     params:
       mode: merge
     color: "#38bdf8"
@@ -34,6 +35,7 @@ operations:
   - type: union
     inputs: [neighborhoods, opportunity_areas]
     output: unified_boundary
+    name: Unified Boundary
     params:
       mode: dissolve
     color: "#a78bfa"

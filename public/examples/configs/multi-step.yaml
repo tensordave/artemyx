@@ -38,6 +38,7 @@ operations:
   - type: union
     inputs: [bus_stops, lrt_stations]
     output: all_transit
+    name: All Transit Stops
     params:
       mode: merge
     color: "#60a5fa"
@@ -46,6 +47,7 @@ operations:
   - type: buffer
     input: schools
     output: school_walksheds
+    name: School Walksheds (800m)
     params:
       distance: 800
       units: meters
@@ -56,6 +58,7 @@ operations:
   - type: buffer
     input: all_transit
     output: transit_walksheds
+    name: Transit Walksheds (400m)
     params:
       distance: 400
       units: meters
@@ -66,6 +69,7 @@ operations:
   - type: intersection
     inputs: [school_walksheds, transit_walksheds]
     output: dual_access
+    name: Dual Access Zones
     params:
       mode: clip
     color: "#22c55e"

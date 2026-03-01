@@ -3,8 +3,10 @@ import { loadGeoJSON, getFeaturesAsGeoJSON, getDatasets, datasetExists } from '.
 import { DEFAULT_STYLE, type StyleConfig, type LoadGeoJSONOptions as DBLoadOptions } from '../db/datasets';
 import { getStorageMode } from '../db/core';
 import { getSourceId, addSource, removeDefaultLayers, addDefaultLayers } from '../layers';
-import { attachFeatureClickHandlers } from '../popup';
+import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../popup';
 import { showErrorDialog, showConfirmDialog } from '../ui/error-dialog';
+import { detectFormat, dispatch as loaderDispatch } from '../loaders';
+import type { ConfigFormat, LoaderOptions } from '../loaders';
 import type { LayerToggleControl } from '../layer-control';
 import type { ProgressControl } from '../progress-control';
 import type { DatasetConfig, LayerConfig } from '../config/types';
@@ -66,7 +68,7 @@ async function checkQuota(): Promise<boolean> {
 	return true;
 }
 
-interface LoadGeoJSONOptions {
+interface LoadDataOptions {
 	map: maplibregl.Map;
 	progressControl: ProgressControl;
 	layerToggleControl: LayerToggleControl;
@@ -80,15 +82,28 @@ interface LoadGeoJSONOptions {
 	/** Skip showing error dialog (used when loading from config) */
 	skipErrorDialog?: boolean;
 	/**
-	 * Explicit layer configs from YAML.
-	 * When defined, skip auto-generating default layers.
+	 * Skip auto-generating default layers for this dataset.
+	 * True when this dataset has explicit layer entries in config.
 	 */
-	layers?: LayerConfig[];
+	skipLayers?: boolean;
+	/**
+	 * When true, dataset is loaded into DuckDB only (source-only for operations).
+	 * No MapLibre source/layer created, no layer panel entry.
+	 */
+	hidden?: boolean;
+	/** Explicit format override (from config) */
+	format?: ConfigFormat;
+	/** Latitude column name override (CSV and JSON array formats) */
+	latColumn?: string;
+	/** Longitude column name override (CSV and JSON array formats) */
+	lngColumn?: string;
+	/** Combined coordinate column containing "lat, lng" values (CSV and JSON array formats) */
+	geoColumn?: string;
 }
 
 /**
- * Validate a URL for GeoJSON loading
- * Returns the parsed URL if valid, or null with error dialog shown
+ * Validate a URL for data loading.
+ * Returns the parsed URL if valid, or null with error dialog shown.
  */
 async function validateUrl(url: string): Promise<URL | null> {
 	let parsedUrl: URL;
@@ -108,7 +123,7 @@ async function validateUrl(url: string): Promise<URL | null> {
 }
 
 /**
- * Add GeoJSON data to map as source, optionally with default layers.
+ * Add data to map as source, optionally with default layers.
  * Removes existing source/layers first (for reloading).
  *
  * @param skipLayers - When true, only add source (explicit layers defined in config).
@@ -187,15 +202,15 @@ function fitMapToFeatures(map: maplibregl.Map, geoJsonData: GeoJSON.FeatureColle
 }
 
 /**
- * Load GeoJSON from a URL into DuckDB and display on map
- * Returns true on success, false on failure
+ * Load data from a URL into DuckDB and display on map.
+ * Supports GeoJSON, CSV, GeoParquet, and JSON array formats via loader dispatch.
+ * Returns true on success, false on failure.
  */
-export async function loadGeoJSONFromUrl(
+export async function loadDataFromUrl(
 	url: string,
-	options: LoadGeoJSONOptions
+	options: LoadDataOptions
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets, configOverrides, displayName, skipFitBounds, skipErrorDialog, layers } = options;
-	const hasExplicitLayers = layers !== undefined;
+	const { map, progressControl, layerToggleControl, loadedDatasets, configOverrides, displayName, skipFitBounds, skipErrorDialog, skipLayers, hidden, format, latColumn, lngColumn, geoColumn } = options;
 
 	// Validate URL
 	const parsedUrl = await validateUrl(url);
@@ -203,7 +218,7 @@ export async function loadGeoJSONFromUrl(
 		return false;
 	}
 
-	// Quota preflight — warn if OPFS storage is near capacity
+	// Quota preflight - warn if OPFS storage is near capacity
 	if (!await checkQuota()) {
 		return false;
 	}
@@ -212,8 +227,8 @@ export async function loadGeoJSONFromUrl(
 	const datasetName = displayName || parsedUrl.hostname;
 
 	try {
-		// Fetch GeoJSON
-		console.log(`[GeoJSON] Fetching from ${url}`);
+		// Fetch data
+		console.log(`[Data] Fetching from ${url}`);
 		progressControl.updateProgress(datasetName, 'loading');
 		const response = await fetch(url);
 		if (!response.ok) {
@@ -228,10 +243,19 @@ export async function loadGeoJSONFromUrl(
 			throw new Error(`File too large (>${MAX_SIZE_MB}MB). Content-Length: ${contentLength} bytes`);
 		}
 
-		const data = await response.json();
+		// Detect format and dispatch to appropriate loader
+		const contentType = response.headers.get('Content-Type');
+		const detectedFormat = detectFormat(url, contentType, format);
+
+		const loaderOptions: LoaderOptions = {};
+		if (latColumn) loaderOptions.latColumn = latColumn;
+		if (lngColumn) loaderOptions.lngColumn = lngColumn;
+		if (geoColumn) loaderOptions.geoColumn = geoColumn;
+
+		progressControl.updateProgress(datasetName, 'processing');
+		const { data } = await loaderDispatch(response, detectedFormat, loaderOptions);
 
 		// Load into DuckDB with optional config overrides
-		progressControl.updateProgress(datasetName, 'processing');
 		const loaded = await loadGeoJSON(data, url, configOverrides);
 		if (!loaded) {
 			throw new Error('Failed to load into DuckDB');
@@ -249,7 +273,7 @@ export async function loadGeoJSONFromUrl(
 		const datasetColor = dataset.color || '#3388ff';
 		const datasetStyle = parseDatasetStyle(dataset.style);
 
-		console.log(`[GeoJSON] Loading dataset ${datasetId} with color ${datasetColor}`);
+		console.log(`[Data] Loading dataset ${datasetId} with color ${datasetColor}`);
 
 		// Query data for this specific dataset
 		const geoJsonFromDB = await getFeaturesAsGeoJSON(datasetId);
@@ -257,17 +281,32 @@ export async function loadGeoJSONFromUrl(
 		if (!geoJsonFromDB.features || geoJsonFromDB.features.length === 0) {
 			throw new Error('No valid features returned from DuckDB');
 		}
-		console.log(`[GeoJSON] Displaying ${geoJsonFromDB.features.length} features for dataset ${datasetId}`);
 
-		// Add source and layers to map (skip layers if explicit config exists)
-		const layerIds = addDatasetToMap(map, datasetId, datasetColor, datasetStyle, geoJsonFromDB, hasExplicitLayers);
+		const featureCount = geoJsonFromDB.features.length;
+
+		// Hidden datasets: DuckDB-only, no map rendering or panel entry
+		if (hidden) {
+			loadedDatasets.add(datasetId);
+			console.log(`[Data] Hidden dataset ${datasetId}: ${featureCount} features loaded (source-only)`);
+			progressControl.updateProgress(datasetName, 'success', `Loaded ${featureCount} features (hidden)`);
+			if (!skipFitBounds) {
+				progressControl.scheduleIdle(3000);
+			}
+			return true;
+		}
+
+		console.log(`[Data] Displaying ${featureCount} features for dataset ${datasetId}`);
+
+		// Add source and layers to map (skip auto-layers if this dataset has explicit layer entries)
+		const layerIds = addDatasetToMap(map, datasetId, datasetColor, datasetStyle, geoJsonFromDB, skipLayers);
 
 		// Track this dataset
 		loadedDatasets.add(datasetId);
 
-		// Attach popup click handlers (only if default layers were created)
+		// Attach popup and hover handlers (only if default layers were created)
 		if (layerIds.length > 0) {
-			attachFeatureClickHandlers(map, layerIds);
+			const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: datasetName });
+			attachFeatureClickHandlers(map, layerIds, hoverPopup);
 		}
 
 		// Fit map to bounds (unless skipped for batch loading)
@@ -279,10 +318,9 @@ export async function loadGeoJSONFromUrl(
 		layerToggleControl.refreshPanel();
 
 		// Show success message
-		const featureCount = geoJsonFromDB.features.length;
 		progressControl.updateProgress(datasetName, 'success', `Loaded ${featureCount} features`);
 
-		// Only schedule idle for standalone loads — batch loads are managed by the caller
+		// Only schedule idle for standalone loads - batch loads are managed by the caller
 		if (!skipFitBounds) {
 			progressControl.scheduleIdle(3000);
 		}
@@ -292,10 +330,10 @@ export async function loadGeoJSONFromUrl(
 		const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 		progressControl.updateProgress(datasetName, 'error', errorMsg);
 		if (!skipErrorDialog) {
-			await showErrorDialog('Failed to Load GeoJSON', errorMsg);
+			await showErrorDialog('Failed to Load Data', errorMsg);
 		}
 
-		// Only schedule idle for standalone loads — batch loads are managed by the caller
+		// Only schedule idle for standalone loads - batch loads are managed by the caller
 		if (!skipErrorDialog) {
 			progressControl.scheduleIdle(5000);
 		}
@@ -311,8 +349,8 @@ interface ConfigLoadOptions {
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
 	/**
-	 * Explicit layer configs from YAML (Phase 5+).
-	 * When defined, skip auto-generating default layers (5e will create them).
+	 * Explicit layer configs from YAML.
+	 * When defined, skip auto-generating default layers (the layer config handles them).
 	 * When undefined, auto-generate fill/line/circle layers per dataset.
 	 */
 	layers?: LayerConfig[];
@@ -352,10 +390,15 @@ export async function loadDatasetsFromConfig(
 
 	progressControl.updateProgress('config', 'loading', `Loading ${datasets.length} dataset(s) from config...`);
 
-	const hasExplicitLayers = layers !== undefined;
+	// Build set of source IDs that have explicit layer entries in config.
+	// Datasets covered by an explicit layer skip auto-layer creation (the layer config handles them).
+	// Datasets NOT covered get fallback default layers so they're visible and interactable.
+	const coveredSources = new Set(layers?.map(l => l.source) ?? []);
 
 	for (const dataset of datasets) {
 		const displayName = dataset.name || dataset.id;
+		const isHidden = !!dataset.hidden;
+		const skipLayers = !!layers && coveredSources.has(dataset.id);
 
 		// Check for duplicate (by config ID)
 		if (loadedDatasets.has(dataset.id)) {
@@ -369,12 +412,20 @@ export async function loadDatasetsFromConfig(
 			try {
 				const geoJsonData = await getFeaturesAsGeoJSON(dataset.id);
 				if (geoJsonData.features && geoJsonData.features.length > 0) {
+					// Hidden datasets: mark loaded but skip map rendering
+					if (isHidden) {
+						loadedDatasets.add(dataset.id);
+						progressControl.updateProgress(displayName, 'success', `Restored from session (${geoJsonData.features.length} features, hidden)`);
+						result.loaded++;
+						continue;
+					}
+
 					const allDatasets = await getDatasets();
 					const meta = allDatasets.find((d: any) => d.id === dataset.id);
 					const color = meta?.color || dataset.color || '#3388ff';
 					const style = parseDatasetStyle(meta?.style);
 
-					addDatasetToMap(map, dataset.id, color, style, geoJsonData, hasExplicitLayers);
+					addDatasetToMap(map, dataset.id, color, style, geoJsonData, skipLayers);
 					loadedDatasets.add(dataset.id);
 
 					layerToggleControl.refreshPanel();
@@ -394,11 +445,12 @@ export async function loadDatasetsFromConfig(
 			id: dataset.id,
 			name: displayName,
 			color: dataset.color,
-			style: dataset.style
+			style: dataset.style,
+			hidden: isHidden
 		};
 
-		// Load dataset with overrides
-		const success = await loadGeoJSONFromUrl(dataset.url, {
+		// Load dataset with overrides, passing format and column options from config
+		const success = await loadDataFromUrl(dataset.url, {
 			map,
 			progressControl,
 			layerToggleControl,
@@ -407,7 +459,12 @@ export async function loadDatasetsFromConfig(
 			displayName,
 			skipFitBounds: true,
 			skipErrorDialog: true,
-			layers
+			skipLayers,
+			hidden: isHidden,
+			format: dataset.format,
+			latColumn: dataset.latColumn,
+			lngColumn: dataset.lngColumn,
+			geoColumn: dataset.geoColumn,
 		});
 
 		if (success) {
@@ -439,7 +496,7 @@ export async function loadDatasetsFromConfig(
 	const status = result.failed > 0 ? 'error' : 'success';
 	progressControl.updateProgress('config', status, summaryParts.join(', '));
 
-	// Schedule idle — will be auto-cancelled if operations start via updateProgress()
+	// Schedule idle - will be auto-cancelled if operations start via updateProgress()
 	progressControl.scheduleIdle(result.failed > 0 ? 5000 : 3000);
 
 	return result;

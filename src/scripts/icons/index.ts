@@ -2,7 +2,7 @@
 // Fill in each export by copying the SVG source from https://phosphoricons.com
 
 // Active: controls in use
-export { mapPinIcon } from './map-pin';               // geojson-control button
+export { mapPinIcon } from './map-pin';               // data-control button
 export { stackIcon } from './stack';                   // layer-control button
 export { dotsThreeVerticalIcon } from './dots-three-vertical'; // layer row context menu
 export { gearIcon } from './gear';                     // context menu: style

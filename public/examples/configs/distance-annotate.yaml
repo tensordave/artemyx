@@ -22,6 +22,7 @@ operations:
   - type: distance
     inputs: [bikeways, lrtstations]
     output: bikeways_with_lrt_dist
+    name: Bikeways With LRT Distance
     params:
       mode: annotate
       units: km
@@ -38,6 +39,7 @@ layers:
   # Bikeways colored green → blue by distance to LRT (dist_km property)
   - id: bikeways-dist
     source: bikeways_with_lrt_dist
+    tooltip: dist_km
     type: line
     paint:
       line-color:
@@ -55,6 +57,7 @@ layers:
   # LRT stations as circles on top
   - id: lrt-stations
     source: lrtstations
+    tooltip: stationnam
     type: circle
     paint:
       circle-radius: 8

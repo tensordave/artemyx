@@ -94,6 +94,13 @@ export const examples: Example[] = [
 		description: 'Edmonton schools + transit - union, buffer, and intersection chained to find dual-access zones.',
 		configPath: '/examples/configs/multi-step.yaml',
 	},
+	{
+		slug: 'attribute',
+		name: 'Attribute Filter',
+		group: 'Advanced Workflows',
+		description: 'Vancouver cycling network filtered by infrastructure quality - safer routes via advanced SQL filter, protected lanes via structured filter, walkshed coverage buffered from the result.',
+		configPath: '/examples/configs/attribute.yaml',
+	},
 ];
 
 /** Unique group names in display order. */

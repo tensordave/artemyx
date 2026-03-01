@@ -26,6 +26,7 @@ operations:
   - type: intersection
     inputs: [bike_routes, parks]
     output: bike_routes_near_parks
+    name: Bike Routes Near Parks
     params:
       mode: filter
     color: "#38bdf8"
@@ -34,6 +35,7 @@ operations:
   - type: intersection
     inputs: [bike_routes, parks]
     output: bike_routes_in_parks
+    name: Bike Routes In Parks
     params:
       mode: clip
     color: "#f59e0b"

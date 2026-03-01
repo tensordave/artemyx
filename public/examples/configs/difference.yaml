@@ -26,6 +26,7 @@ operations:
   - type: difference
     inputs: [neighbourhoods, parks]
     output: non_park_footprint
+    name: Non-Park Footprint
     params:
       mode: subtract
     color: "#38bdf8"
@@ -34,6 +35,7 @@ operations:
   - type: difference
     inputs: [neighbourhoods, parks]
     output: park_free_neighbourhoods
+    name: Park-Free Neighbourhoods
     params:
       mode: exclude
     color: "#a78bfa"
@@ -42,6 +44,7 @@ layers:
   # Parks - amber fill, visible but not dominant
   - id: parks-fill
     source: parks
+    tooltip: NAME
     type: fill
     paint:
       fill-color: "#f59e0b"

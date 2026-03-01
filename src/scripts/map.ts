@@ -1,16 +1,16 @@
 import maplibregl from 'maplibre-gl';
 import { LayerToggleControl } from './layer-control';
 import { ProgressControl } from './progress-control';
-import { GeoJSONControl } from './geojson-control';
+import { DataControl } from './data-control';
 import { StorageControl } from './storage-control';
 import { BasemapControl } from './basemap-control';
 import { getBasemap, getDefaultBasemap } from './basemaps';
 import { loadConfig, getDefaultMapSettings } from './config/parser';
-import { loadDatasetsFromConfig } from './geojson-actions/load';
+import { loadDatasetsFromConfig } from './data-actions/load';
 import { createExecutionPlan } from './config/operations-graph';
 import { executeOperations } from './config/executor';
 import { executeLayersFromConfig } from './layers';
-import { attachFeatureClickHandlers } from './popup';
+import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from './popup';
 import { toggleLayerVisibility } from './layer-actions/visibility';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData } from './db/core';
 import { getDatasets, getFeaturesAsGeoJSON } from './db';
@@ -88,13 +88,13 @@ const storageControl = new StorageControl({
 });
 layerToggleControl.setOnPanelOpen(() => storageControl.closePanel());
 _progressControlRef = progressControl;
-const geoJSONControl = new GeoJSONControl({
+const dataControl = new DataControl({
 	map,
 	progressControl,
 	layerToggleControl,
 	loadedDatasets
 });
-map.addControl(geoJSONControl, 'top-right');
+map.addControl(dataControl, 'top-right');
 map.addControl(layerToggleControl, 'top-left');
 map.addControl(storageControl, 'top-left');
 map.addControl(progressControl, 'bottom-left');
@@ -141,7 +141,10 @@ async function restoreManualDatasets(): Promise<void> {
 			}
 
 			if (layerIds.length > 0) {
-				attachFeatureClickHandlers(map, layerIds);
+				const hoverPopup = attachFeatureHoverHandlers(map, layerIds, {
+					label: dataset.name || dataset.id
+				});
+				attachFeatureClickHandlers(map, layerIds, hoverPopup);
 			}
 
 			progressControl.updateProgress(
@@ -235,9 +238,31 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 				progressControl.updateProgress('layers', 'success', `${layerResult.created} layer(s) created`);
 			}
 
-			// Attach popup handlers to created layers
+			// Attach popup and hover handlers to created layers
 			if (layerResult.layerIds.length > 0) {
-				attachFeatureClickHandlers(map, layerResult.layerIds);
+				// Build lookups: layer ID -> config, source ID -> human-readable name
+				const layerConfigMap = new Map(mapConfig!.layers!.map(lc => [lc.id, lc]));
+				const sourceNameMap = new Map<string, string>();
+				for (const d of mapConfig!.datasets ?? []) {
+					sourceNameMap.set(d.id, d.name || d.id);
+				}
+				for (const op of mapConfig!.operations ?? []) {
+					sourceNameMap.set(op.output, op.name || op.output);
+				}
+
+				for (const layerId of layerResult.layerIds) {
+					const lc = layerConfigMap.get(layerId);
+					const tooltipFields = lc?.tooltip
+						? (Array.isArray(lc.tooltip) ? lc.tooltip : [lc.tooltip])
+						: undefined;
+					const label = sourceNameMap.get(lc?.source ?? '') || lc?.source || layerId;
+
+					const hoverPopup = attachFeatureHoverHandlers(map, [layerId], {
+						label,
+						fields: tooltipFields
+					});
+					attachFeatureClickHandlers(map, [layerId], hoverPopup);
+				}
 			}
 		}
 

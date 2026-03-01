@@ -18,6 +18,7 @@ layers:
   # Park fills - interpolate color by hectare size
   - id: parks-fill
     source: parks
+    tooltip: ["park_name", "area_ha"]
     type: fill
     paint:
       fill-color:

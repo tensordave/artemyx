@@ -10,7 +10,7 @@
 
 import * as duckdb from '@duckdb/duckdb-wasm';
 
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 const OPFS_DB_PATH = 'opfs://gis_app.db';
 const OPFS_FILE_NAME = 'gis_app.db';
 
@@ -58,6 +58,7 @@ async function initSchema(): Promise<void> {
 			name TEXT,
 			color TEXT,
 			visible BOOLEAN,
+			hidden BOOLEAN DEFAULT false,
 			feature_count INTEGER,
 			loaded_at TIMESTAMP,
 			style TEXT
@@ -132,10 +133,10 @@ export async function initDB(useOPFS: boolean = false): Promise<void> {
 				mainModule: cdnBundles.mvp.mainModule,
 				mainWorker: '/duckdb/duckdb-browser-mvp.worker.js',
 			},
-			eh: {
+			eh: cdnBundles.eh ? {
 				mainModule: cdnBundles.eh.mainModule,
 				mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
-			},
+			} : undefined,
 			coi: cdnBundles.coi ? {
 				mainModule: cdnBundles.coi.mainModule,
 				mainWorker: '/duckdb/duckdb-browser-coi.worker.js',

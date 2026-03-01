@@ -9,10 +9,9 @@ import { DEFAULT_COLOR } from '../../db/datasets';
 import type { StyleConfig } from '../../db/datasets';
 import { getFeaturesAsGeoJSON } from '../../db/features';
 import { getSourceId, addSource, removeDefaultLayers, addDefaultLayers } from '../../layers';
-import { attachFeatureClickHandlers } from '../../popup';
 import type { UnaryOperation, BufferParams } from '../types';
 import type { OperationContext } from './index';
-import { parseStyleConfig } from './index';
+import { parseStyleConfig, shouldSkipAutoLayers } from './index';
 import { toMeters, metersToDegreesAtLatitude } from './unit-conversion';
 
 /**
@@ -55,8 +54,7 @@ export async function executeBuffer(
 	op: UnaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets, layers } = context;
-	const hasExplicitLayers = layers !== undefined;
+	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as BufferParams | undefined;
 
 	// Validate params
@@ -69,11 +67,12 @@ export async function executeBuffer(
 	const dissolve = params.dissolve ?? false;
 	const quadSegs = params.quadSegs ?? 32;
 	const outputId = op.output;
+	const displayName = op.name || outputId;
 	const inputId = op.input;
 	const color = op.color ?? DEFAULT_COLOR;
 	const style = parseStyleConfig(op.style);
 
-	progressControl.updateProgress(outputId, 'processing', `Buffering ${inputId} by ${params.distance}${units === 'meters' ? 'm' : ' ' + units}...`);
+	progressControl.updateProgress(displayName, 'processing', `Buffering ${inputId} by ${params.distance}${units === 'meters' ? 'm' : ' ' + units}...`);
 
 	const connection = await getConnection();
 
@@ -168,7 +167,7 @@ export async function executeBuffer(
 		INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
 		VALUES (?, 'operation:buffer', ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
 	`);
-	await insertDataset.query(outputId, outputId, color, featureCount, JSON.stringify(style));
+	await insertDataset.query(outputId, op.name || outputId, color, featureCount, JSON.stringify(style));
 	await insertDataset.close();
 
 	// Query features as GeoJSON for map rendering
@@ -179,21 +178,21 @@ export async function executeBuffer(
 	}
 
 	// Add source and layers to map (skip layers if explicit config exists)
-	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, hasExplicitLayers);
+	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, shouldSkipAutoLayers(outputId, context.layers));
 
 	// Track dataset
 	loadedDatasets.add(outputId);
 
-	// Attach popup handlers (only if default layers were created)
+	// Notify executor to attach popup/hover handlers
 	if (layerIds.length > 0) {
-		attachFeatureClickHandlers(map, layerIds);
+		context.onLayersCreated?.(layerIds, displayName);
 	}
 
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
 	const dissolveNote = dissolve ? ' (dissolved)' : '';
-	progressControl.updateProgress(outputId, 'success', `Created ${featureCount} feature(s)${dissolveNote}`);
+	progressControl.updateProgress(displayName, 'success', `Created ${featureCount} feature(s)${dissolveNote}`);
 
 	console.log(`[Buffer] Complete: ${outputId} with ${featureCount} features`);
 

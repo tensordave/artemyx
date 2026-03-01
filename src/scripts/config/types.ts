@@ -40,15 +40,26 @@ export interface DatasetConfig {
 	color?: string;
 	/** Style overrides */
 	style?: StyleConfigPartial;
+	/** When true, dataset is loaded into DuckDB but not rendered or shown in layer panel (source-only for operations) */
+	hidden?: boolean;
+	/** Explicit format override when URL or Content-Type is ambiguous */
+	format?: ConfigFormat;
+	/** Latitude column name override for CSV and JSON array formats */
+	latColumn?: string;
+	/** Longitude column name override for CSV and JSON array formats */
+	lngColumn?: string;
+	/** Combined coordinate column containing "lat, lng" values (mutually exclusive with latColumn/lngColumn) */
+	geoColumn?: string;
 }
 
+import type { ConfigFormat } from '../loaders/types';
 import type { DistanceUnit } from './operations/unit-conversion';
 
 /**
  * Supported spatial operation types.
  * Unary operations take a single input, binary operations take multiple inputs.
  */
-export type UnaryOperationType = 'buffer' | 'centroid';
+export type UnaryOperationType = 'buffer' | 'centroid' | 'attribute';
 export type BinaryOperationType = 'intersection' | 'union' | 'difference' | 'contains' | 'distance';
 export type OperationType = UnaryOperationType | BinaryOperationType;
 
@@ -132,10 +143,36 @@ export interface DistanceParams {
 	units: DistanceUnit;
 }
 
+/** Valid comparison operators for structured attribute filters */
+export type AttributeOperator = '=' | '!=' | '>' | '>=' | '<' | '<=';
+
+/** Attribute operation parameters */
+export interface AttributeParams {
+	/**
+	 * Structured filter — property name to filter on.
+	 * Mutually exclusive with `where`.
+	 */
+	property?: string;
+	/** Comparison operator (defaults to '=' if omitted with property/value) */
+	operator?: AttributeOperator;
+	/** Value to compare against (string or number; type determines SQL casting) */
+	value?: string | number;
+	/**
+	 * Raw DuckDB SQL WHERE clause for advanced filtering.
+	 * Interpolated directly into the query — config YAML is trusted input.
+	 * Mutually exclusive with property/operator/value.
+	 *
+	 * Example: "json_extract_string(properties, '$.streetuse') IN ('Arterial', 'Collector')"
+	 */
+	where?: string;
+}
+
 /** Base fields common to all operations */
 interface OperationBase {
 	/** Output dataset ID (must be unique, cannot shadow existing dataset IDs) */
 	output: string;
+	/** Display name for the operation output (defaults to output ID if not provided) */
+	name?: string;
 	/** Operation-specific parameters (validated in Phase 4 during execution) */
 	params?: Record<string, unknown>;
 	/** Hex color for output dataset rendering (defaults to #3388ff) */
@@ -234,6 +271,12 @@ export interface LayerConfig {
 	minzoom?: number;
 	/** Maximum zoom level where layer is visible (0-24) */
 	maxzoom?: number;
+	/**
+	 * Property field(s) to display in hover tooltip.
+	 * Single string or array of property names from the source GeoJSON.
+	 * When omitted, tooltip shows only the layer/dataset display name.
+	 */
+	tooltip?: string | string[];
 }
 
 /**

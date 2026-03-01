@@ -23,6 +23,7 @@ operations:
   - type: distance
     inputs: [bikeways, rapidtransitstations]
     output: bikeways_with_transit_dist
+    name: Bikeways With Transit Distance
     params:
       mode: annotate
       units: km

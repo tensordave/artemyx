@@ -11,13 +11,13 @@ import type { ProgressControl } from '../progress-control';
 import type { ExecutionPlan } from './operations-graph';
 import type { OperationConfig, LayerConfig } from './types';
 import { isUnaryOperation, isBinaryOperation } from './types';
-import { executeBuffer, executeIntersection, executeUnion, executeDifference, executeContains, executeDistance, executeCentroid } from './operations';
+import { executeBuffer, executeIntersection, executeUnion, executeDifference, executeContains, executeDistance, executeCentroid, executeAttribute } from './operations';
 import type { OperationContext } from './operations';
 import { datasetExists, getDatasets } from '../db/datasets';
 import { getFeaturesAsGeoJSON } from '../db/features';
 import { addOperationResultToMap } from './operations/buffer';
 import { parseStyleConfig } from './operations';
-import { attachFeatureClickHandlers } from '../popup';
+import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../popup';
 
 /** Context needed for operation execution (re-export for backwards compatibility) */
 export interface ExecutionContext {
@@ -86,6 +86,12 @@ async function executeOperation(
 			}
 			return executeCentroid(op, context);
 
+		case 'attribute':
+			if (!isUnaryOperation(op)) {
+				throw new Error(`Attribute operation must have single 'input' field`);
+			}
+			return executeAttribute(op, context);
+
 		default: {
 			const _exhaustive: never = op;
 			throw new Error(`Unsupported operation type: ${(_exhaustive as OperationConfig).type}`);
@@ -121,7 +127,15 @@ export async function executeOperations(
 	progressControl.updateProgress('operations', 'processing', `Executing ${plan.order.length} operation(s)...`);
 
 	const { map, layerToggleControl, loadedDatasets, layers } = context;
-	const hasExplicitLayers = layers !== undefined;
+
+	// Build set of source IDs covered by explicit layer entries
+	const coveredSources = new Set(layers?.map(l => l.source) ?? []);
+
+	// Centralized popup/hover handler attachment for all operations
+	const onLayersCreated = (layerIds: string[], label: string) => {
+		const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label });
+		attachFeatureClickHandlers(map, layerIds, hoverPopup);
+	};
 
 	for (const op of plan.order) {
 		try {
@@ -134,27 +148,28 @@ export async function executeOperations(
 					const color = meta?.color || op.color || '#3388ff';
 					const style = parseStyleConfig(op.style);
 
-					const layerIds = addOperationResultToMap(map, op.output, color, style, geoJsonData, hasExplicitLayers);
+					const skipLayers = !!layers && coveredSources.has(op.output);
+					const layerIds = addOperationResultToMap(map, op.output, color, style, geoJsonData, skipLayers);
 					loadedDatasets.add(op.output);
 
 					if (layerIds.length > 0) {
-						attachFeatureClickHandlers(map, layerIds);
+						onLayersCreated(layerIds, op.name || op.output);
 					}
 
 					layerToggleControl.refreshPanel();
-					progressControl.updateProgress(op.output, 'success', `Restored from session (${geoJsonData.features.length} features)`);
+					progressControl.updateProgress(op.name || op.output, 'success', `Restored from session (${geoJsonData.features.length} features)`);
 					result.executed++;
 					continue;
 				}
 			}
 
-			await executeOperation(op, context);
+			await executeOperation(op, { ...context, onLayersCreated });
 			result.executed++;
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 			result.errors.push(`${op.output}: ${errorMsg}`);
 			result.failed++;
-			progressControl.updateProgress(op.output, 'error', errorMsg);
+			progressControl.updateProgress(op.name || op.output, 'error', errorMsg);
 			// Continue with other operations (don't fail fast)
 		}
 	}

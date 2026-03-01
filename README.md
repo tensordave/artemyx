@@ -2,6 +2,8 @@
 
 A declarative GIS application using MapLibre GL JS with client-side data processing via DuckDB-WASM.
 
+**Live:** [artemyx.org](https://artemyx.org)
+
 ## Overview
 
 This project demonstrates:
@@ -34,23 +36,39 @@ src/scripts/
 │   ├── parser.ts      # Config loading and validation
 │   ├── types.ts       # MapConfig, DatasetConfig, OperationConfig
 │   ├── operations-graph.ts  # Dependency resolution, topological sort
-│   └── executor.ts    # Spatial operation execution
+│   ├── executor.ts    # Spatial operation execution
+│   └── operations/    # One file per operation (buffer, intersection, union, ...)
 ├── db/                # DuckDB-WASM initialization and queries
-│   ├── core.ts        # DB init, spatial extension loading
+│   ├── core.ts        # DB init, OPFS persistence, spatial extension
 │   ├── datasets.ts    # Dataset CRUD operations
-│   └── features.ts    # Feature queries, GeoJSON export
-├── geojson-actions/   # Data loading pipeline
-│   └── load.ts        # URL fetch, validation, MapLibre layer creation
+│   ├── features.ts    # Feature queries, GeoJSON export
+│   └── utils.ts       # Hash generation, helpers
+├── loaders/           # Format loader registry
+│   ├── detect.ts      # Format detection (URL extension, path segment, Content-Type)
+│   ├── geojson.ts     # GeoJSON normalizer
+│   ├── csv.ts         # CSV parser, delimiter and coordinate auto-detection
+│   ├── geoparquet.ts  # GeoParquet via DuckDB registerFileBuffer
+│   ├── json-array.ts  # JSON array loader with geo column fallback
+│   └── columns.ts     # Shared lat/lng column detection heuristics
+├── data-actions/      # Data loading pipeline
+│   └── load.ts        # URL fetch, validation, loader dispatch, layer creation
+├── layers/            # MapLibre layer creation
+│   ├── layers.ts      # addLayerFromConfig, executeLayersFromConfig
+│   └── sources.ts     # Source management
 ├── layer-actions/     # Layer control UI handlers
-│   ├── context-menu.ts      # Menu positioning, click-outside
-│   ├── color.ts, delete.ts, visibility.ts  # Action handlers
+│   ├── color.ts, style.ts, visibility.ts, delete.ts  # Action handlers
+│   ├── context-menu.ts, context-menu-items.ts         # Context menu
 │   └── layer-row.ts   # Row DOM, inline rename
 ├── ui/                # Reusable UI components
 │   └── error-dialog.ts
 ├── map.ts             # MapLibre init + config loading (entry point)
-├── *-control.ts       # Custom MapLibre controls (layer, geojson, basemap, progress)
+├── data-control.ts    # Custom control: load data from URL (GeoJSON, CSV, GeoParquet)
+├── layer-control.ts   # Custom control: layer visibility, color, rename, delete
+├── storage-control.ts # Custom control: OPFS status and session management
+├── basemap-control.ts # Custom control: basemap switcher
+├── progress-control.ts # Custom control: status log with expandable history
 ├── basemaps.ts        # Basemap tile configurations
-└── popup.ts           # Feature popup utilities
+└── popup.ts           # Feature popup and hover tooltip utilities
 ```
 
 Data flows through: **YAML config** -> **DuckDB-WASM** (storage + spatial ops) -> **MapLibre** (rendering)
@@ -140,8 +158,8 @@ Layers support full MapLibre paint/layout properties including expressions (`mat
 
 ## Status
 
-**Current version:** v0.3.4 - Advanced workflow + styling examples, per-operation examples, Sandbox mode, OPFS persistence, full spatial operations suite, expression-driven layer styling
+**Current version:** v0.4.0
 
-**Next up:** Data, UX, and foundation (v0.4.x)
+**In progress:** v0.4.x+
 
-See [CHANGELOG.md](CHANGELOG.md) for release history and [ROADMAP.md](ROADMAP.md) for planned work.
+[changelog](CHANGELOG.md) - [roadmap](ROADMAP.md)

@@ -118,11 +118,13 @@ export function createPopupContent(properties: any): HTMLElement {
 }
 
 /**
- * Attach click handlers to feature layers for popups
+ * Attach click handlers to feature layers for popups.
+ * Returns the popup instance so hover handlers can hide it on click.
  */
 export function attachFeatureClickHandlers(
 	map: maplibregl.Map,
-	layerIds: string[]
+	layerIds: string[],
+	hoverPopup?: maplibregl.Popup
 ): void {
 	// Create a single popup instance to reuse
 	const popup = new maplibregl.Popup({
@@ -138,6 +140,9 @@ export function attachFeatureClickHandlers(
 			if (!e.features || e.features.length === 0) {
 				return;
 			}
+
+			// Hide hover tooltip when click popup opens
+			hoverPopup?.remove();
 
 			// Get first feature's properties
 			const feature = e.features[0];
@@ -162,4 +167,114 @@ export function attachFeatureClickHandlers(
 			map.getCanvas().style.cursor = '';
 		});
 	});
+}
+
+/** Options for hover tooltip behavior */
+export interface HoverTooltipOptions {
+	/** Display label shown at top of tooltip (dataset/layer name) */
+	label: string;
+	/** Property field names to show from feature properties */
+	fields?: string[];
+}
+
+/**
+ * Format a single tooltip field value (compact version of formatValue).
+ */
+function formatTooltipValue(value: unknown): string {
+	if (value === null || value === undefined) return 'null';
+	if (typeof value === 'number') return value.toLocaleString();
+	if (typeof value === 'string') {
+		return value.length > 60 ? escapeHTML(`${value.substring(0, 60)}...`) : escapeHTML(value);
+	}
+	return String(value);
+}
+
+/**
+ * Build tooltip HTML content.
+ * Shows the label (dataset/layer name) and optionally property field values.
+ */
+function buildTooltipHTML(label: string, properties?: Record<string, unknown>, fields?: string[]): string {
+	let html = `<strong class="hover-tooltip-label">${escapeHTML(label)}</strong>`;
+
+	if (fields && fields.length > 0 && properties) {
+		const rows = fields
+			.filter(field => field in properties)
+			.map(field => {
+				const key = escapeHTML(field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+				const val = formatTooltipValue(properties[field]);
+				return `<span class="hover-tooltip-field">${key}: ${val}</span>`;
+			})
+			.join('');
+
+		if (rows) {
+			html += rows;
+		}
+	}
+
+	return html;
+}
+
+// Shared hover tooltip state — single popup + registry ensures only the
+// topmost layer shows a tooltip when multiple layers overlap.
+let sharedHoverPopup: maplibregl.Popup | null = null;
+const hoverRegistry = new Map<string, HoverTooltipOptions>();
+let hoverHandlerAttached = false;
+
+/**
+ * Attach hover tooltip handlers to feature layers.
+ * Uses a single shared popup and a map-level mousemove handler that picks
+ * the topmost feature via queryRenderedFeatures — only one tooltip at a time.
+ * Returns the shared popup instance for coordination with click handlers.
+ */
+export function attachFeatureHoverHandlers(
+	map: maplibregl.Map,
+	layerIds: string[],
+	options: HoverTooltipOptions
+): maplibregl.Popup {
+	// Create shared popup on first call
+	if (!sharedHoverPopup) {
+		sharedHoverPopup = new maplibregl.Popup({
+			closeButton: false,
+			closeOnClick: false,
+			className: 'hover-tooltip',
+			offset: 15
+		});
+	}
+
+	// Register each layer with its tooltip options
+	for (const id of layerIds) {
+		hoverRegistry.set(id, options);
+	}
+
+	// Attach a single map-level mousemove handler (once)
+	if (!hoverHandlerAttached) {
+		map.on('mousemove', (e) => {
+			const registeredIds = [...hoverRegistry.keys()];
+			if (registeredIds.length === 0) return;
+
+			// Query only our registered layers — topmost feature is first
+			const features = map.queryRenderedFeatures(e.point, { layers: registeredIds });
+
+			if (features.length === 0) {
+				sharedHoverPopup!.remove();
+				return;
+			}
+
+			const topFeature = features[0];
+			const layerId = topFeature.layer.id;
+			const opts = hoverRegistry.get(layerId);
+			if (!opts) return;
+
+			const html = buildTooltipHTML(opts.label, topFeature.properties as Record<string, unknown>, opts.fields);
+
+			sharedHoverPopup!
+				.setLngLat(e.lngLat)
+				.setHTML(html)
+				.addTo(map);
+		});
+
+		hoverHandlerAttached = true;
+	}
+
+	return sharedHoverPopup;
 }

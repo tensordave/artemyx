@@ -27,6 +27,12 @@ export interface OperationContext {
 	 * When defined, skip auto-generating default layers for operation outputs.
 	 */
 	layers?: LayerConfig[];
+	/**
+	 * Callback for popup/hover handler attachment.
+	 * Called by operations after default layers are created.
+	 * Executor provides the implementation that wires both click and hover handlers.
+	 */
+	onLayersCreated?: (layerIds: string[], label: string) => void;
 }
 
 /**
@@ -41,6 +47,16 @@ export function parseStyleConfig(style?: StyleConfigPartial): StyleConfig {
 	};
 }
 
+/**
+ * Check whether auto-generated default layers should be skipped for a given output.
+ * Returns true only when a `layers` config exists AND at least one layer entry
+ * explicitly references this output as its source. Outputs not covered by any
+ * layer entry get fallback default layers so they remain visible and interactable.
+ */
+export function shouldSkipAutoLayers(outputId: string, layers?: LayerConfig[]): boolean {
+	return !!layers && layers.some(l => l.source === outputId);
+}
+
 // Re-export operations
 export { executeBuffer } from './buffer';
 export { executeIntersection } from './intersection';
@@ -49,3 +65,4 @@ export { executeDifference } from './difference';
 export { executeContains } from './contains';
 export { executeDistance } from './distance';
 export { executeCentroid } from './centroid';
+export { executeAttribute } from './attribute';

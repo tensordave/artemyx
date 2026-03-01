@@ -38,6 +38,8 @@ export interface LoadGeoJSONOptions {
 	color?: string;
 	/** Override default style values */
 	style?: Partial<StyleConfig>;
+	/** When true, dataset is source-only (not rendered or shown in layer panel) */
+	hidden?: boolean;
 }
 
 /**
@@ -100,11 +102,12 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 		const count = Number(result.toArray()[0].count);
 
 		// Insert dataset metadata with configured style and color
+		const datasetHidden = options?.hidden ?? false;
 		const insertDataset = await connection.prepare(`
-			INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
-			VALUES (?, ?, ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
+			INSERT INTO datasets (id, source_url, name, color, visible, hidden, feature_count, loaded_at, style)
+			VALUES (?, ?, ?, ?, true, ?, ?, CURRENT_TIMESTAMP, ?)
 		`);
-		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, count, JSON.stringify(datasetStyle));
+		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, datasetHidden, count, JSON.stringify(datasetStyle));
 		await insertDataset.close();
 
 		console.log(`[DuckDB] Successfully loaded dataset ${datasetId} with ${count} features`);

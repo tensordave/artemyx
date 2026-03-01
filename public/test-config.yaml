@@ -12,6 +12,7 @@ datasets:
   - id: streets
     url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/public-streets/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
     name: Vancouver Streets
+    format: geojson
     color: "#62a0ea"
     style:
       lineWidth: 1
@@ -32,15 +33,38 @@ datasets:
   - id: railways
     url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/railways/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
     name: Vancouver Railways
+    hidden: true
   - id: zones
     url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/zoning-districts-and-labels/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
     name: Vancouver Zones
+
+  - id: parks_csv
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/parks/exports/csv?lang=en&timezone=America%2FLos_Angeles&use_labels=true&delimiter=%3B"
+    name: Vancouver Parks (CSV)
+    color: "#4ade80"
+    format: csv
+    geoColumn: GoogleMapDest
+
+  # No format field: JSON array is not a directly addressable format. The /exports/json
+  # URL segment triggers geojson detection, which falls back to the json-array loader
+  # automatically when GeoJSON normalization fails.
+  - id: parks_json
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/parks-polygon-representation/exports/json?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Parks (JSON)
+    color: "#86efac"
+
+  - id: greenways
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/greenways/exports/parquet?lang=en&timezone=America%2FLos_Angeles"
+    name: Greenways (GeoParquet)
+    format: geoparquet
+    color: "#38bdf8"
 
 operations:
   # Buffer bikeways by 200m to show "walking distance to bikeway" zones
   - type: buffer
     input: bikeways
     output: bikeway_walkshed
+    name: Bikeway Walkshed (200m)
     params:
       distance: 200
       units: meters
@@ -54,6 +78,7 @@ operations:
   - type: intersection
     inputs: [rapidtransitstations, bikeway_walkshed]
     output: transit_near_bikeways
+    name: Transit Near Bikeways
     params:
       mode: filter
     color: "#06b6d4"
@@ -64,6 +89,7 @@ operations:
   - type: intersection
     inputs: [streets, bikeway_walkshed]
     output: streets_in_walkshed
+    name: Streets in Walkshed
     params:
       mode: clip
     color: "#a855f7"
@@ -75,6 +101,7 @@ operations:
   - type: buffer
     input: railways
     output: railway_walkshed
+    name: Railway Walkshed (400m)
     params:
       distance: 1312
       units: feet
@@ -89,6 +116,7 @@ operations:
   - type: union
     inputs: [bikeways, railways]
     output: transport_corridors
+    name: Transport Corridors
     params:
       mode: merge
     color: "#14b8a6"
@@ -99,6 +127,7 @@ operations:
   - type: union
     inputs: [bikeway_walkshed, railway_walkshed]
     output: combined_transit_walkshed
+    name: Combined Transit Walkshed
     params:
       mode: dissolve
     color: "#ec4899"
@@ -110,6 +139,7 @@ operations:
   - type: difference
     inputs: [bikeway_walkshed, railway_walkshed]
     output: bike_only_walkshed
+    name: Bike-Only Walkshed
     params:
       mode: subtract
     color: "#84cc16"
@@ -121,6 +151,7 @@ operations:
   - type: difference
     inputs: [rapidtransitstations, railway_walkshed]
     output: transit_far_from_rail
+    name: Transit Far From Rail
     params:
       mode: exclude
     color: "#f43f5e"
@@ -132,6 +163,7 @@ operations:
   - type: contains
     inputs: [zones, rapidtransitstations]
     output: zones_containing_transitstations
+    name: Zones With Transit
     params:
       mode: filter
     color: "#fb923c"
@@ -144,6 +176,7 @@ operations:
   - type: distance
     inputs: [streets, rapidtransitstations]
     output: streets_near_transit
+    name: Streets Near Transit
     params:
       mode: filter
       maxDistance: 0.4
@@ -157,6 +190,7 @@ operations:
   - type: distance
     inputs: [bikeways, rapidtransitstations]
     output: bikeways_with_transit_dist
+    name: Bikeways With Transit Distance
     params:
       mode: annotate
       units: km
@@ -168,9 +202,33 @@ operations:
   - type: centroid
     input: zones
     output: zone_centroids
+    name: Zone Centroids
     color: "#f0abfc"
     style:
       pointRadius: 5
+
+  # Attribute filter (structured): keep only arterial streets
+  - type: attribute
+    input: streets
+    output: arterial_streets
+    name: Arterial Streets
+    params:
+      property: streetuse
+      value: Arterial
+    color: "#dc2626"
+    style:
+      lineWidth: 3
+
+  # Attribute filter (advanced where): streets that are Collector or Secondary Arterial
+  - type: attribute
+    input: streets
+    output: mid_class_streets
+    name: Mid-Classification Streets
+    params:
+      where: "json_extract_string(properties, '$.streetuse') IN ('Collector', 'Secondary Arterial')"
+    color: "#d946ef"
+    style:
+      lineWidth: 2
 
   # Contains within: street segments completely inside the 400m railway walkshed
   # Compare with intersection clip (streets_in_walkshed) to see the difference:
@@ -178,6 +236,7 @@ operations:
   - type: contains
     inputs: [railway_walkshed, streets]
     output: streets_within_railway
+    name: Streets Within Railway Zone
     params:
       mode: within
     color: "#0ea5e9"
@@ -288,32 +347,6 @@ layers:
       line-width: 1.5
       line-opacity: 0.6
 
-  # Railways as dashed lines
-  - id: railways-line
-    source: railways
-    type: line
-    paint:
-      line-color: "#9333ea"
-      line-width: 2
-      line-dasharray: [2, 2]
-
-  # Bikeways colored by speed limit (interpolate expression)
-  - id: bikeways-line
-    source: bikeways
-    type: line
-    paint:
-      line-color:
-        - interpolate
-        - ["linear"]
-        - ["coalesce", ["get", "speed_limit"], 0]
-        - 0
-        - "#94a3b8"
-        - 30
-        - "#22c55e"
-        - 50
-        - "#ef4444"
-      line-width: 2.5
-
   # Contains within: streets fully inside railway walkshed (sky blue)
   # Visual comparison: these are a subset of what intersection clip would return
   - id: streets-within-railway-line
@@ -361,6 +394,42 @@ layers:
       circle-color: "#f0abfc"
       circle-stroke-color: "#ffffff"
       circle-stroke-width: 1
+
+  # Parks CSV: point per park loaded from semicolon-delimited CSV via geoColumn
+  - id: parks-csv-circle
+    source: parks_csv
+    tooltip: Name
+    type: circle
+    paint:
+      circle-radius: 5
+      circle-color: "#4ade80"
+      circle-stroke-color: "#166534"
+      circle-stroke-width: 1
+
+  # Parks polygons (JSON array - auto-detected via /exports/json segment)
+  - id: parks-json-fill
+    source: parks_json
+    type: fill
+    paint:
+      fill-color: "#86efac"
+      fill-opacity: 0.25
+
+  - id: parks-json-outline
+    source: parks_json
+    type: line
+    paint:
+      line-color: "#16a34a"
+      line-width: 1
+      line-opacity: 0.7
+
+  # Greenways (GeoParquet - auto-detected from .parquet URL)
+  - id: greenways
+    source: greenways
+    type: line
+    paint:
+      line-color: "#16de34"
+      line-width: 3
+      line-opacity: 0.7
 
   # Transit stations as large circles on top
   - id: transit-stations-circle

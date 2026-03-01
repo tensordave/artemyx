@@ -65,8 +65,9 @@ export class LayerToggleControl implements maplibregl.IControl {
 	async refreshPanel() {
 		if (!this.panel || !this.map) return;
 
-		// Query all datasets
-		const datasets = await getDatasets();
+		// Query all datasets, excluding hidden (source-only) datasets
+		const allDatasets = await getDatasets();
+		const datasets = allDatasets.filter((d: any) => !d.hidden);
 
 		// Clear panel
 		this.panel.innerHTML = '';

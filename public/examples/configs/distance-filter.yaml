@@ -22,6 +22,7 @@ operations:
   - type: distance
     inputs: [parks, lstations]
     output: parks_near_l
+    name: Parks Near L Stations
     params:
       mode: filter
       maxDistance: 800
@@ -31,6 +32,7 @@ layers:
   # All parks as a muted baseline for comparison
   - id: parks-all
     source: parks
+    tooltip: label
     type: fill
     paint:
       fill-color: "#94a3b8"
@@ -39,6 +41,7 @@ layers:
   # Parks within 800m of an L station, highlighted
   - id: parks-near-l
     source: parks_near_l
+    tooltip: label
     type: fill
     paint:
       fill-color: "#22c55e"
@@ -47,6 +50,7 @@ layers:
   # L stations colored by line
   - id: l-stations
     source: lstations
+    tooltip: longname
     type: circle
     paint:
       circle-radius: 7

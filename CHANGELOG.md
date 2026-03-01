@@ -4,6 +4,144 @@ All notable changes to this project will be documented in this file.
 
 Format follows [Semantic Versioning](https://semver.org/).
 
+## v0.4.0 - 2026-03-01
+
+### Format Loader Module
+
+Multi-format data loading via a loader dispatch layer. Existing GeoJSON behavior is unchanged.
+
+- New `src/scripts/loaders/` directory: `types.ts` (FormatLoader interface, DetectedFormat/ConfigFormat unions, LoaderOptions), `detect.ts` (format detection by URL extension then Content-Type), `columns.ts` (shared lat/lng column detection with common aliases), and `index.ts` (dispatch function)
+- **GeoJSON loader** (`loaders/geojson.ts`): normalizes raw Feature, raw geometry, plain Feature array, and FeatureCollection; used as the default for all existing configs
+- **CSV loader** (`loaders/csv.ts`): parses CSV text (quoted fields, CRLF); auto-detects lat/lng columns via common aliases (`lat/lng`, `latitude/longitude`, `y/x`, etc.); builds a GeoJSON Point FeatureCollection with all other columns as properties; rows with invalid coordinates are skipped; delimiter auto-detection and `geoColumn` support added in subsequent pass (see below)
+- **GeoParquet loader** (`loaders/geoparquet.ts`): fetches as ArrayBuffer; registers with DuckDB via `registerFileBuffer()`; auto-detects WKB geometry column by name and BLOB type; queries via `read_parquet() + ST_GeomFromWKB() + ST_AsGeoJSON()`; virtual file cleaned up after query
+- **JSON array loader** (`loaders/json-array.ts`): handles plain JSON arrays of objects with coordinate properties; reuses column detection from `columns.ts`; applied as automatic fallback when a JSON response is not valid GeoJSON
+- `geojson-actions/` renamed to `data-actions/`; `geojson-control.ts` renamed to `data-control.ts` (class `DataControl`, placeholder updated to reflect multi-format support); `loadGeoJSONFromUrl` renamed to `loadDataFromUrl`
+- `format`, `latColumn`, and `lngColumn` optional fields added to `DatasetConfig` in `config/types.ts` and validated in `parser.ts`; `format` accepts `geojson | csv | geoparquet` as an explicit override when detection is ambiguous; `latColumn`/`lngColumn` override auto-detection for non-standard headers
+- `test-config.yaml`: `streets` annotated with `format: geojson` and `greenways` with `format: geoparquet`; combined with the existing `format: csv` on `parks_csv`, all three valid format values are exercised as explicit overrides; `parks_json` intentionally has no `format` field to keep the auto-detect fallback path covered
+
+---
+
+### CSV Loader Robustness
+
+Fixes found during real-data testing against Vancouver open data (OpenDataSoft portal).
+
+- **Delimiter auto-detection** (`loaders/csv.ts`): `detectDelimiter()` counts occurrences of `,`, `;`, `\t`, and `|` in the header line (outside quoted fields) and picks the highest; `parseCSVRow()` now accepts a delimiter argument instead of hardcoding comma; removes the need to normalize URLs to comma-separated output before loading
+- **Combined coordinate column** (`geoColumn`): new optional `geoColumn` field on `DatasetConfig` for datasets where both coordinates are stored in a single column as `"lat, lng"` (e.g. OpenDataSoft `GoogleMapDest`, `geo_point_2d`); `parseGeoPoint()` splits on `,` and parses both halves; `rowsFromGeoColumn()` builds the FeatureCollection from the combined value; `geoColumn` validated in `parser.ts` as mutually exclusive with `latColumn`/`lngColumn`; parallel implementation added to `loaders/json-array.ts` (`arrayFromGeoColumn()`)
+- `geoColumn` added to `LoaderOptions` in `loaders/types.ts`; wired through `LoadDataOptions` in `data-actions/load.ts` and forwarded to the loader dispatch
+- `test-config.yaml`: Vancouver Parks CSV dataset added (`parks_csv`) as a live test case - semicolon-delimited, `geoColumn: GoogleMapDest`
+
+---
+
+### GeoParquet Loader Robustness
+
+Fixes found during real-data testing against Vancouver Open Data (OpenDataSoft portal, 67,097 features).
+
+- **Extensionless URL detection** (`loaders/detect.ts`): added `SEGMENT_MAP` keyword check between the extension and Content-Type detection steps; handles OpenDataSoft-style paths like `/exports/parquet`, `/exports/csv`, `/exports/geojson` where the last path segment names the format without a dot; `getUrlExtension()` returns `''` for these paths so they previously fell through to Content-Type (unreliable) or defaulted to GeoJSON; the segment check catches them reliably before Content-Type is consulted
+- **Native `GEOMETRY` column support** (`loaders/geoparquet.ts`): DuckDB may report a GeoParquet geometry column as type `GEOMETRY` (already decoded) rather than `BLOB` (raw WKB) depending on the file producer; wrapping a `GEOMETRY` value with `ST_GeomFromWKB()` throws a binder error; `findGeometryColumn()` now returns `{ name, type }` instead of a plain string; when type is `GEOMETRY`, the query uses `ST_AsGeoJSON("geom")` directly; when type is `BLOB` or `WKB_GEOMETRY`, the existing `ST_AsGeoJSON(ST_GeomFromWKB("geom"))` path runs
+- **`BigInt` property serialization** (`loaders/geoparquet.ts`): DuckDB-WASM returns Arrow integer columns (e.g. large ID fields) as JS `BigInt`; `JSON.stringify()` throws on `BigInt` values; property values are now checked with `typeof val === 'bigint'` and coerced to `Number` when within `Number.MIN_SAFE_INTEGER`-`Number.MAX_SAFE_INTEGER`, or `String` for values that exceed safe integer range
+
+---
+
+### JSON Array Loader Robustness
+
+Fixes found during real-data testing against Vancouver Open Data (OpenDataSoft portal, parks polygon dataset).
+
+- **Embedded geometry column detection** (`loaders/json-array.ts`): new third detection path in `tryLoadJsonArray()` after lat/lng column detection fails; `findGeoShapeColumn()` scans object properties for any value that parses as a GeoJSON geometry; `arrayFromGeoShape()` builds a FeatureCollection using the detected column; handles polygon, line, and point data - not just coordinate-column point data
+- **Feature wrapper unwrapping** (`loaders/json-array.ts`): `parseGeoShape()` handles both raw geometry objects (`{"type": "Polygon", "coordinates": [...]}`) and Feature wrappers (`{"type": "Feature", "geometry": {...}}`); extracts the inner geometry from the wrapper; OpenDataSoft JSON exports embed geometry as a Feature wrapper in a `geom` field rather than a bare geometry
+- **Stringified geometry support** (`loaders/json-array.ts`): `parseGeoShape()` also accepts JSON strings that parse to a geometry or Feature; handles portals that serialize geometries as JSON strings rather than nested objects
+- `test-config.yaml`: Vancouver Parks polygon dataset added (`parks_json`) as a live test case - auto-detected from the `/exports/json` URL segment (no explicit `format` override needed), Feature-wrapped polygon geometry in `geom` field
+
+---
+
+### GUI Control Format Transparency
+
+The data loader control now handles all supported formats (GeoJSON, CSV, GeoParquet) from the URL input without a format selector or config overrides.
+
+- **CSV combined coordinate column auto-detection** (`loaders/csv.ts`): `detectGeoColumn()` added as a fallback when separate lat/lng column detection fails; checks known combined-column aliases (`googlemapdest`, `geo_point_2d`, `latlng`, `lat_lng`, `latlong`, `coordinates`, `location`, `geolocation`, `geo_point`, `point`) first, then scans all column values against `parseGeoPoint()` for any `"lat, lng"` formatted value; datasets like the Vancouver parks CSV with `GoogleMapDest` now load from the GUI without requiring a config `geoColumn` override
+- Error message in `columns.ts` no longer says "Use latColumn/lngColumn in config" - the hint is now generic since detection runs from both config and GUI paths
+
+---
+
+### Hover Tooltips
+
+- Hovering over any feature shows a compact tooltip with the dataset or layer display name; config layers can add `tooltip: field_name` (or an array) to also show a property value
+- Single shared popup and a single `mousemove` handler per map - `queryRenderedFeatures` with the full registered layer list returns features in stacking order; only the topmost result gets a tooltip
+- Clicking a feature opens the full property popup and dismisses the hover tooltip
+- `attachFeatureHoverHandlers()` added to `popup.ts` with a module-level registry and shared `maplibregl.Popup`; `attachFeatureClickHandlers()` updated to accept an optional hover popup for dismissal
+- `tooltip` field added to `LayerConfig` in `types.ts`; validated in `parser.ts` (string or non-empty string array)
+- `onLayersCreated` callback added to `OperationContext` in `operations/index.ts`; implemented in `executor.ts` to centralize handler wiring for all operation outputs and the OPFS restore path; all 8 operation files updated to use the callback instead of calling click handlers directly
+- `load.ts` and `map.ts` wired to call hover handlers on manual loads, config layers, and OPFS restores; `sourceNameMap` in `map.ts` resolves dataset and operation IDs to display names matching the layer panel
+- `.hover-tooltip` styles added to `global.css` (compact, semi-transparent, no tip arrow, `pointer-events: none`)
+
+---
+
+### `attribute` Operation
+
+New unary operation for attribute-based filtering on a single dataset. Complements MapLibre filter expressions with data-level filtering - downstream operations and exports see only the matched features, not the full source.
+
+**Two authoring modes:**
+- **Structured** (`property`, `operator`, `value`): simple equality and comparison filters; no SQL knowledge required; operator defaults to `=` when omitted; numeric values are automatically cast for numeric comparisons
+- **Advanced** (`where`): raw DuckDB SQL WHERE clause for multi-condition logic, `IN` lists, or expressions requiring JSON extraction that can't be expressed as a single property/value pair; mutually exclusive with structured params; config YAML is trusted input
+
+**Implementation:**
+- `operations/attribute.ts`: new unary operation file following the centroid pattern; `buildStructuredWhere()` compiles structured params to `json_extract_string(properties, '$.key') <op> value` with automatic `CAST ... AS DOUBLE` for numeric values; string values get single-quote escaping; raw `where` path interpolates the SQL fragment directly into the query template
+- `config/types.ts`: `'attribute'` added to `UnaryOperationType`; new `AttributeOperator` type (`=`, `!=`, `>`, `>=`, `<`, `<=`); new `AttributeParams` interface with mutually exclusive `property/operator/value` vs `where` fields
+- `config/parser.ts`: `'attribute'` added to `UNARY_OPERATIONS`; `validateAttributeParams()` enforces mutual exclusivity between structured and `where` modes, operator allowlist, non-empty `property`/`value` requirements, and that `params` is always present (unlike centroid which has no params)
+- `config/executor.ts`: `case 'attribute':` dispatch added with unary guard
+- `config/operations/index.ts`: `executeAttribute` re-exported
+
+**Example:**
+- `public/examples/configs/attribute.yaml`: Vancouver cycling network - full bikeways loaded as a hidden source; advanced `where` filter selects Local Streets and Protected Bike Lanes; 200m buffer dissolves that subset into a walkshed; structured filter selects Protected Bike Lanes only as a highlighted overlay; registered in `registry.ts` under Advanced Workflows
+
+---
+
+### Layer Fallback and Hidden Datasets
+
+Fixes a silent breakage where datasets defined in config but not referenced by any `layers` entry would load into DuckDB, appear in the layer panel, but render nothing - leaving them invisible and un-interactable.
+
+**Coverage-check fix:**
+- Replaced the blanket `hasExplicitLayers = layers !== undefined` flag (which skipped auto-layer creation for ALL datasets the moment any `layers` section was present) with a per-source coverage check
+- `coveredSources = new Set(layers?.map(l => l.source) ?? [])` computed once per pipeline; each dataset and operation output is checked individually
+- Sources explicitly covered by a `layers` entry still skip auto-layer creation (existing behavior)
+- Sources NOT covered by any `layers` entry now receive fallback default fill/line/circle layers, making them visible and fully interactable in the panel
+- `shouldSkipAutoLayers(outputId, layers?)` helper added to `operations/index.ts` and used across all 7 operation files; replaces duplicated inline logic in each
+- Same fix applied to the OPFS restore path in `executor.ts`
+
+**`hidden: true` on datasets:**
+- Optional `hidden` field added to `DatasetConfig` in `config/types.ts`
+- When set, the dataset is loaded into DuckDB (so operations can reference it) but no MapLibre source or layer is created and it is excluded from the layer panel
+- Intended for source-only datasets that feed spatial operations without needing direct visibility
+- `hidden` persisted to the `datasets` table in DuckDB so OPFS restore respects it across sessions
+- Parser validates `hidden` as an optional boolean
+- `SCHEMA_VERSION` bumped to `'2'` - existing OPFS sessions are automatically wiped on next load
+
+---
+
+### Operation Naming
+
+- Optional `name` field added to all operation types in config (`UnaryOperation` and `BinaryOperation` via `OperationBase`)
+- When set, the friendly name is used as the dataset display name in the layer panel and as the label in progress control messages; falls back to the `output` ID when omitted
+- Parser validates `name` as an optional string (same pattern as dataset `name`)
+- `displayName` variable introduced in all 7 operation files (`buffer`, `centroid`, `intersection`, `union`, `difference`, `contains`, `distance`) - cleanly separates user-facing display from the internal `outputId` used for DB and MapLibre source IDs
+- OPFS restore and error progress messages in `executor.ts` also use `op.name || op.output`
+- All existing configs without `name` fields continue to work unchanged
+
+### TypeScript Fix
+
+- Fixed `core.ts` type error: `cdnBundles.eh` is typed as optional in the DuckDB-WASM `getJsDelivrBundles()` return type; now guarded with a conditional (`cdnBundles.eh ? { ... } : undefined`) matching the existing pattern used for `cdnBundles.coi`
+
+---
+
+### Responsive Header with Hamburger Menu
+
+- Extracted shared `Header.astro` component - logo, inline nav, and hamburger button in one place; replaces duplicated header markup across `index.astro`, `app.astro`, `test.astro`, and `ExampleLayout.astro`
+- Below 768px the inline nav collapses and a hamburger button appears in its place
+- On examples pages the hamburger opens the existing left sidebar; About, App, and GitHub links added to the sidebar bottom (below a separator) so the header nav is fully accessible from mobile
+- On all other pages the hamburger opens a consistent slide-in sidebar with the four nav links; close button and link-click both dismiss it
+- Removes the temporary flush-edge pull-tab toggle introduced in v0.3.3
+
+---
+
 ## v0.3.4 - 2026-02-27
 
 ### Advanced Workflow + Styling Examples

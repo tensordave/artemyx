@@ -1,17 +1,17 @@
 import maplibregl from 'maplibre-gl';
-import { loadGeoJSONFromUrl } from './geojson-actions/load';
+import { loadDataFromUrl } from './data-actions/load';
 import { mapPinIcon } from './icons';
 import type { LayerToggleControl } from './layer-control';
 import type { ProgressControl } from './progress-control';
 
-interface GeoJSONControlOptions {
+interface DataControlOptions {
 	map: maplibregl.Map;
 	progressControl: ProgressControl;
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
 }
 
-export class GeoJSONControl implements maplibregl.IControl {
+export class DataControl implements maplibregl.IControl {
 	private container: HTMLDivElement | undefined;
 	private button: HTMLButtonElement | undefined;
 	private panel: HTMLDivElement | undefined;
@@ -23,7 +23,7 @@ export class GeoJSONControl implements maplibregl.IControl {
 	private layerToggleControl: LayerToggleControl;
 	private loadedDatasets: Set<string>;
 
-	constructor(options: GeoJSONControlOptions) {
+	constructor(options: DataControlOptions) {
 		this.map = options.map;
 		this.progressControl = options.progressControl;
 		this.layerToggleControl = options.layerToggleControl;
@@ -40,7 +40,7 @@ export class GeoJSONControl implements maplibregl.IControl {
 		this.button.type = 'button';
 		this.button.className = 'control-btn';
 		this.button.innerHTML = mapPinIcon;
-		this.button.title = 'Load GeoJSON';
+		this.button.title = 'Load Data';
 		this.container.appendChild(this.button);
 
 		// Panel (hidden by default)
@@ -52,7 +52,7 @@ export class GeoJSONControl implements maplibregl.IControl {
 		this.input = document.createElement('input');
 		this.input.type = 'text';
 		this.input.className = 'control-input';
-		this.input.placeholder = 'Paste GeoJSON URL...';
+		this.input.placeholder = 'Paste data URL (GeoJSON, CSV, Parquet)...';
 		this.panel.appendChild(this.input);
 
 		// Load button
@@ -83,7 +83,7 @@ export class GeoJSONControl implements maplibregl.IControl {
 			this.loadButton.disabled = true;
 
 			try {
-				const success = await loadGeoJSONFromUrl(url, {
+				const success = await loadDataFromUrl(url, {
 					map: this.map,
 					progressControl: this.progressControl,
 					layerToggleControl: this.layerToggleControl,

@@ -17,6 +17,7 @@ datasets:
 layers:
   - id: roads-line
     source: roads
+    tooltip: Class
     type: line
     paint:
       line-color:

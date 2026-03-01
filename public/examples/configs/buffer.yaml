@@ -17,6 +17,7 @@ operations:
   - type: buffer
     input: bikeways
     output: bikeway_walkshed
+    name: Bikeway Walkshed (200m)
     params:
       distance: 200
       units: meters

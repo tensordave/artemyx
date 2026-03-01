@@ -26,6 +26,7 @@ operations:
   - type: contains
     inputs: [parks, cycling_network]
     output: parks_with_cycling
+    name: Parks With Cycling
     params:
       mode: filter
     color: "#38bdf8"
@@ -34,6 +35,7 @@ operations:
   - type: contains
     inputs: [parks, cycling_network]
     output: cycling_in_parks
+    name: Cycling In Parks
     params:
       mode: within
     color: "#a78bfa"
@@ -42,6 +44,7 @@ layers:
   # All parks - faint green context
   - id: parks-fill
     source: parks
+    tooltip: park_name
     type: fill
     paint:
       fill-color: "#22c55e"
@@ -67,6 +70,7 @@ layers:
   # Filter result - parks that contain a complete cycling segment (sky blue)
   - id: parks-with-cycling-fill
     source: parks_with_cycling
+    tooltip: park_name
     type: fill
     paint:
       fill-color: "#38bdf8"

@@ -1,0 +1,100 @@
+# Artemyx Example - Attribute Filter
+# Vancouver cycling network filtered by infrastructure quality.
+#
+# Not all bike infrastructure is equal. This config filters Vancouver's full
+# cycling network down to progressively safer subsets using two authoring modes:
+#
+#   where (advanced)   - keep Local Streets and Protected Bike Lanes (safer routes)
+#   property/value     - keep Protected Bike Lanes only (highest-quality infrastructure)
+#
+# The safer-routes subset is buffered to show walkshed coverage, then the
+# protected-only corridors are highlighted on top - showing where cycling is
+# both accessible and fully separated from traffic.
+
+map:
+  center: [-123.1207, 49.2827]  # Vancouver, BC
+  zoom: 13
+  basemap: carto-dark
+
+datasets:
+  - id: bikeways
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/bikeways/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
+    name: Vancouver Bikeways
+    hidden: true  # Source-only - feeds operations without rendering directly
+
+operations:
+  # Advanced where: keep routes where separated or low-traffic conditions apply.
+  # Local Streets and Protected Bike Lanes represent the safer end of the spectrum.
+  # IN clause requires the where escape hatch - not expressible as a single property/value filter.
+  - type: attribute
+    input: bikeways
+    output: safe_bikeways
+    name: Safe Cycling Routes
+    params:
+      where: "json_extract_string(properties, '$.bikeway_type') IN ('Local Street', 'Protected Bike Lanes')"
+    color: "#4ade80"
+    style:
+      lineWidth: 2
+
+  # Buffer the safer routes to show 200m walking catchment area.
+  # Dissolve merges overlapping buffers into a single coverage polygon.
+  - type: buffer
+    input: safe_bikeways
+    output: safe_walkshed
+    name: Safe Route Walkshed (200m)
+    params:
+      distance: 200
+      units: meters
+      dissolve: true
+    color: "#4ade80"
+    style:
+      fillOpacity: 0.15
+      lineWidth: 1
+
+  # Structured filter: Protected Bike Lanes only - the highest-quality infrastructure.
+  # Simple equality check; no SQL knowledge required.
+  - type: attribute
+    input: bikeways
+    output: protected_only
+    name: Protected Bike Lanes
+    params:
+      property: bikeway_type
+      value: Protected Bike Lanes
+    color: "#06b6d4"
+    style:
+      lineWidth: 3
+
+layers:
+  # Safe route walkshed as background fill
+  - id: safe-walkshed-fill
+    source: safe_walkshed
+    type: fill
+    paint:
+      fill-color: "#4ade80"
+      fill-opacity: 0.1
+
+  - id: safe-walkshed-outline
+    source: safe_walkshed
+    type: line
+    paint:
+      line-color: "#4ade80"
+      line-width: 1
+      line-opacity: 0.35
+
+  # Safer routes (Local Streets + Protected) - contextual reference layer
+  - id: safe-bikeways-line
+    source: safe_bikeways
+    type: line
+    paint:
+      line-color: "#4ade80"
+      line-width: 1.5
+      line-opacity: 0.45
+
+  # Protected bike lanes - highlighted on top
+  - id: protected-only-line
+    source: protected_only
+    type: line
+    paint:
+      line-color: "#06b6d4"
+      line-width: 3
+      line-opacity: 0.9

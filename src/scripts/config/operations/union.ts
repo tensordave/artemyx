@@ -9,10 +9,9 @@
 import { getConnection } from '../../db/core';
 import { DEFAULT_COLOR } from '../../db/datasets';
 import { getFeaturesAsGeoJSON } from '../../db/features';
-import { attachFeatureClickHandlers } from '../../popup';
 import type { BinaryOperation, UnionParams } from '../types';
 import type { OperationContext } from './index';
-import { parseStyleConfig } from './index';
+import { parseStyleConfig, shouldSkipAutoLayers } from './index';
 import { addOperationResultToMap } from './buffer';
 
 /** Default simplification tolerance for dissolve mode (~1cm at mid-latitudes) */
@@ -29,8 +28,7 @@ export async function executeUnion(
 	op: BinaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets, layers } = context;
-	const hasExplicitLayers = layers !== undefined;
+	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as UnionParams | undefined;
 
 	// Validate inputs
@@ -46,12 +44,13 @@ export async function executeUnion(
 
 	const tolerance = params?.tolerance ?? DEFAULT_DISSOLVE_TOLERANCE;
 	const outputId = op.output;
+	const displayName = op.name || outputId;
 	const color = op.color ?? DEFAULT_COLOR;
 	const style = parseStyleConfig(op.style);
 	const inputList = op.inputs.join(', ');
 
 	const modeLabel = mode === 'merge' ? 'merging' : 'dissolving';
-	progressControl.updateProgress(outputId, 'processing', `Union ${inputList} (${modeLabel})...`);
+	progressControl.updateProgress(displayName, 'processing', `Union ${inputList} (${modeLabel})...`);
 
 	const connection = await getConnection();
 
@@ -127,7 +126,7 @@ export async function executeUnion(
 
 	if (featureCount === 0) {
 		console.log(`[Union] Warning: union of ${inputList} produced no features`);
-		progressControl.updateProgress(outputId, 'success', `No features produced`);
+		progressControl.updateProgress(displayName, 'success', `No features produced`);
 	}
 
 	// Register dataset metadata
@@ -135,27 +134,27 @@ export async function executeUnion(
 		INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
 		VALUES (?, 'operation:union', ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
 	`);
-	await insertDataset.query(outputId, outputId, color, featureCount, JSON.stringify(style));
+	await insertDataset.query(outputId, op.name || outputId, color, featureCount, JSON.stringify(style));
 	await insertDataset.close();
 
 	// Query features as GeoJSON for map rendering
 	const geoJsonData = await getFeaturesAsGeoJSON(outputId);
 
 	// Add source and layers to map (skip layers if explicit config exists)
-	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, hasExplicitLayers);
+	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, shouldSkipAutoLayers(outputId, context.layers));
 
 	// Track dataset
 	loadedDatasets.add(outputId);
 
-	// Attach popup handlers (only if default layers were created)
+	// Notify executor to attach popup/hover handlers
 	if (layerIds.length > 0) {
-		attachFeatureClickHandlers(map, layerIds);
+		context.onLayersCreated?.(layerIds, displayName);
 	}
 
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	progressControl.updateProgress(outputId, 'success', `${featureCount} feature(s) (${mode})`);
+	progressControl.updateProgress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
 
 	console.log(`[Union] Complete: ${outputId} with ${featureCount} features`);
 

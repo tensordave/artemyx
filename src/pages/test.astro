@@ -1,4 +1,5 @@
 ---
+import Header from '../components/Header.astro';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../styles/global.css';
 ---
@@ -13,23 +14,42 @@ import '../styles/global.css';
 		<title>artemyx — test</title>
 	</head>
 	<body>
-		<header>
-			<a href="/" class="header-logo">
-				<img src="/favicon.svg" alt="artemyx logo" class="header-logo-icon" />
-				<span class="header-logo-name">artemyx</span>
-			</a>
-			<nav class="header-nav">
-				<a href="/#about" class="header-nav-link">About</a>
-				<a href="/app" class="header-nav-link">App</a>
-				<a href="/examples" class="header-nav-link">Examples</a>
-				<a href="https://github.com/tensordave/artemyx" class="header-nav-link">GitHub</a>
-			</nav>
-		</header>
+		<Header />
+		<aside class="header-sidebar" id="header-sidebar">
+			<button class="header-sidebar-close" id="header-sidebar-close" aria-label="Close menu">&times;</button>
+			<a href="/#about" class="header-sidebar-link">About</a>
+			<a href="/app" class="header-sidebar-link">App</a>
+			<a href="/examples" class="header-sidebar-link">Examples</a>
+			<a href="https://github.com/tensordave/artemyx" class="header-sidebar-link">GitHub</a>
+		</aside>
 
 		<div id="map" data-config="/test-config.yaml"></div>
 
 		<script>
 			import '../scripts/map.ts';
+		</script>
+		<script>
+			const hamburger = document.getElementById('header-hamburger');
+			const sidebar = document.getElementById('header-sidebar');
+			const sidebarClose = document.getElementById('header-sidebar-close');
+
+			if (hamburger && sidebar) {
+				hamburger.addEventListener('click', () => {
+					sidebar.classList.toggle('header-sidebar--open');
+				});
+
+				sidebar.querySelectorAll('.header-sidebar-link').forEach(link => {
+					link.addEventListener('click', () => {
+						sidebar.classList.remove('header-sidebar--open');
+					});
+				});
+			}
+
+			if (sidebarClose && sidebar) {
+				sidebarClose.addEventListener('click', () => {
+					sidebar.classList.remove('header-sidebar--open');
+				});
+			}
 		</script>
 	</body>
 </html>
