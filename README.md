@@ -9,14 +9,14 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 This project demonstrates:
 - **Mapping:** MapLibre GL JS with WebGL-based rendering for smooth panning/zooming
 - **Data Storage:** DuckDB-WASM with spatial extension for in-browser SQL queries
-- **Data Loading:** Fetch GeoJSON from public API endpoints, store in DuckDB-WASM, then visualize
+- **Data Loading:** Fetch GeoJSON, CSV, GeoParquet, and JSON arrays from public API endpoints, store in DuckDB-WASM, then visualize
 
 ## Key Features
 
 - Interactive mapping with switchable basemaps (CARTO, Satellite)
 - Multi-dataset support with layer management UI (visibility, color, rename, delete)
 - YAML-driven configuration for declarative map setup and spatial operations
-- Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid)
+- Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
 - Multi-geometry rendering (Point, LineString, Polygon, Multi* variants)
 - Feature inspection with property popups
 - Fully client-side - no backend required
@@ -61,8 +61,10 @@ src/scripts/
 │   └── layer-row.ts   # Row DOM, inline rename
 ├── ui/                # Reusable UI components
 │   └── error-dialog.ts
+├── icons/             # Phosphor SVG icon strings
 ├── map.ts             # MapLibre init + config loading (entry point)
 ├── data-control.ts    # Custom control: load data from URL (GeoJSON, CSV, GeoParquet)
+├── config-control.ts  # Custom control: view active YAML config with syntax highlighting
 ├── layer-control.ts   # Custom control: layer visibility, color, rename, delete
 ├── storage-control.ts # Custom control: OPFS status and session management
 ├── basemap-control.ts # Custom control: basemap switcher
@@ -158,8 +160,6 @@ Layers support full MapLibre paint/layout properties including expressions (`mat
 
 ## Status
 
-**Current version:** v0.4.0
-
-**In progress:** v0.4.x+
+**Current version:** v0.4.1
 
 [changelog](CHANGELOG.md) - [roadmap](ROADMAP.md)

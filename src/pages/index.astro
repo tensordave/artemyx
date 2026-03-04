@@ -1,7 +1,15 @@
 ---
 import Header from '../components/Header.astro';
+import { codeToHtml } from 'shiki';
+import fs from 'node:fs';
+import path from 'node:path';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../styles/global.css';
+import { cloudArrowDownIcon, codeBlockIcon, stackIcon, databaseIcon, mapTrifoldIcon, circleIcon } from '../scripts/icons';
+
+const configFile = 'demo-config.yaml';
+const configYaml = fs.readFileSync(path.join(process.cwd(), 'public', configFile), 'utf-8');
+const highlightedYaml = await codeToHtml(configYaml, { lang: 'yaml', theme: 'github-dark' });
 ---
 
 <html lang="en">
@@ -23,95 +31,51 @@ import '../styles/global.css';
 			<a href="https://github.com/tensordave/artemyx" class="header-sidebar-link">GitHub</a>
 		</aside>
 
-		<!-- Hero -->
-		<section class="hero">
-			<h1 class="hero-title">Browser-based spatial analysis.</h1>
-			<p class="hero-sub">
-				Load GeoJSON, run spatial operations, style with MapLibre expressions —
-				declared in YAML, computed in your browser.
-			</p>
-			<a href="/app" class="cta-btn">Open the app</a>
-		</section>
-
 		<!-- Live demo -->
 		<section class="demo-section">
+			<div id="map" data-config="/demo-config.yaml" data-persistence="false"></div>
+			<div id="config-highlighted" data-config-filename={configFile} hidden set:html={highlightedYaml} />
 			<p class="demo-caption">
 				Vancouver bikeways colored by distance to the nearest rapid transit station.
 				Green = close, amber = moderate, red = far.
 			</p>
-			<div id="map" data-config="/demo-config.yaml" data-persistence="false"></div>
-			<details class="demo-code-details">
-				<summary class="demo-code-summary">View config</summary>
-				<pre class="demo-code"><code># Two datasets from Vancouver Open Data
+		</section>
 
-# Dataset definition:
-datasets:
-  - id: bikeways
-    url: "https://opendata.vancouver.ca/..."
-    name: Vancouver Bikeways
-    color: "#22c55e"
-
-  - id: rapidtransitstations
-    url: "https://opendata.vancouver.ca/..."
-    name: Rapid Transit Stations
-    color: "#4ade80"
-
-# Operation definition: in this example, annotate each bikeway with distance to nearest station
-operations:
-  - type: distance
-    inputs: [bikeways, rapidtransitstations]
-    output: bikeways_with_transit_dist
-    params:
-      mode: annotate
-      units: km
-
-
-# Layer definitions: interpolate expression colors bikeways by dist_km
-layers:
-  # bikeways line, shown under the bikeways layer with annotation
-  - id: bikeways-line
-    source: bikeways
-    type: line
-    paint:
-      line-color:
-        - interpolate
-        - ["linear"]
-        - ["coalesce", ["get", "speed_limit"], 0]
-        - 0
-        - "#94a3b8"
-        - 30
-        - "#22c55e"
-        - 50
-        - "#ef4444"
-      line-width: 2.5
-
-  # Bikeways colored green → amber → red by distance to transit (dist_km property)
-  - id: bikeways-dist
-    source: bikeways_with_transit_dist
-    type: line
-    paint:
-      line-color:
-        - interpolate
-        - ["linear"]
-        - ["get", "dist_km"]
-        - 0
-        - "#22c55e"   # green  — near transit
-        - 0.5
-        - "#eab308"   # amber  — moderate
-        - 2
-        - "#ef4444"   # red    — far from transit
-      line-width: 3
-	
-  # Rapid transit stations as circles on top
-  - id: transit-stations
-    source: rapidtransitstations
-    type: circle
-    paint:
-      circle-radius: 8
-      circle-color: "#4ade80"
-      circle-stroke-color: "#166534"
-      circle-stroke-width: 2</code></pre>
-			</details>
+		<!-- Controls guide -->
+		<section class="about-section" id="using">
+			<h2 class="section-heading">Using the app</h2>
+			<div class="features-grid controls-grid">
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={cloudArrowDownIcon} />
+					<div class="feature-card-title">Load data</div>
+					<p class="feature-card-body">Paste any GeoJSON, CSV, or GeoParquet URL to add a layer to the map.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={codeBlockIcon} />
+					<div class="feature-card-title">View config</div>
+					<p class="feature-card-body">Opens a panel showing the active YAML configuration with syntax highlighting.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={stackIcon} />
+					<div class="feature-card-title">Layers</div>
+					<p class="feature-card-body">Toggle layer visibility, change colors, rename, or delete datasets.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={databaseIcon} />
+					<div class="feature-card-title">Storage</div>
+					<p class="feature-card-body">Session persistence status - datasets survive page refresh via browser storage.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={mapTrifoldIcon} />
+					<div class="feature-card-title">Basemap</div>
+					<p class="feature-card-body">Switch between CARTO Dark and satellite basemaps.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={circleIcon} />
+					<div class="feature-card-title">Status</div>
+					<p class="feature-card-body">Shows loading and processing state; click to open the history log.</p>
+				</div>
+			</div>
 		</section>
 
 		<!-- About -->
@@ -122,14 +86,14 @@ layers:
 					<div class="feature-card-title">Declarative YAML config</div>
 					<p class="feature-card-body">
 						Define datasets, spatial operations, and layer styles in one file.
-						Point at any GeoJSON URL — municipal APIs, data portals, static files.
+						Point at any GeoJSON URL - municipal APIs, data portals, static files.
 					</p>
 				</div>
 				<div class="feature-card">
 					<div class="feature-card-title">Client-side spatial engine</div>
 					<p class="feature-card-body">
-						DuckDB-WASM runs full spatial SQL in the browser — buffer, intersect, union,
-						difference, contains, distance, centroid — no server required.
+						DuckDB-WASM runs full spatial SQL in the browser - buffer, intersect, union,
+						difference, contains, distance, centroid - no server required.
 					</p>
 				</div>
 				<div class="feature-card">

@@ -1,7 +1,14 @@
 ---
 import Header from '../components/Header.astro';
+import { codeToHtml } from 'shiki';
+import fs from 'node:fs';
+import path from 'node:path';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../styles/global.css';
+
+const configFile = 'app-config.yaml';
+const configYaml = fs.readFileSync(path.join(process.cwd(), 'public', configFile), 'utf-8');
+const highlightedYaml = await codeToHtml(configYaml, { lang: 'yaml', theme: 'github-dark' });
 ---
 
 <html lang="en">
@@ -24,6 +31,7 @@ import '../styles/global.css';
 		</aside>
 
 		<div id="map" data-config="/app-config.yaml"></div>
+		<div id="config-highlighted" data-config-filename={configFile} hidden set:html={highlightedYaml} />
 
 		<script>
 			import '../scripts/map.ts';

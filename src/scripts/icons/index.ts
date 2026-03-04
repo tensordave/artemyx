@@ -4,6 +4,7 @@
 // Active: controls in use
 export { mapPinIcon } from './map-pin';               // data-control button
 export { stackIcon } from './stack';                   // layer-control button
+export { mapTrifoldIcon } from './map-trifold';        // basemap-control button
 export { dotsThreeVerticalIcon } from './dots-three-vertical'; // layer row context menu
 export { gearIcon } from './gear';                     // context menu: style
 export { trashIcon } from './trash';                   // context menu: delete + clear history
@@ -15,7 +16,9 @@ export { eyeIcon, eyeSlashIcon } from './eye';             // visibility toggle
 export { dotsSixVerticalIcon } from './dots-six-vertical'; // drag-to-reorder handle
 
 // Roadmap: progress control
-export { circleNotchIcon } from './circle-notch';          // processing spinner
+export { circleIcon } from './circle';                     // base ring for composite progress icon
+export { circleNotchIcon } from './circle-notch';          // inner spinning icon (operations)
+export { cloudArrowDownIcon } from './cloud-arrow-down';   // inner icon (data loading) + dataset loader button
 
 // Roadmap: persistence (Phase 8)
 export { arrowClockwiseIcon } from './arrow-clockwise';    // clear session / retry

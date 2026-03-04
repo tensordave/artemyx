@@ -54,14 +54,7 @@ const { activeExample, highlightedYaml } = Astro.props;
 
 			<main class="examples-main">
 				<div id="map" data-config={activeExample.configPath} data-persistence="false"></div>
-				<button class="examples-config-btn" id="config-toggle">View config</button>
-				<div class="examples-sheet" id="config-sheet">
-					<div class="examples-sheet-header">
-						<span>{activeExample.configPath.split('/').pop()}</span>
-						<button class="examples-sheet-close" id="config-close">&times;</button>
-					</div>
-					<div class="examples-sheet-body" set:html={highlightedYaml} />
-				</div>
+				<div id="config-highlighted" data-config-filename={activeExample.configPath.split('/').pop()} hidden set:html={highlightedYaml} />
 			</main>
 		</div>
 
@@ -69,23 +62,6 @@ const { activeExample, highlightedYaml } = Astro.props;
 			import '../scripts/map.ts';
 		</script>
 		<script>
-			// Bottom sheet toggle
-			const toggleBtn = document.getElementById('config-toggle');
-			const closeBtn = document.getElementById('config-close');
-			const sheet = document.getElementById('config-sheet');
-
-			if (toggleBtn && sheet) {
-				toggleBtn.addEventListener('click', () => {
-					sheet.classList.toggle('examples-sheet--open');
-				});
-			}
-
-			if (closeBtn && sheet) {
-				closeBtn.addEventListener('click', () => {
-					sheet.classList.remove('examples-sheet--open');
-				});
-			}
-
 			// Mobile sidebar toggle
 			const hamburger = document.getElementById('header-hamburger');
 			const sidebar = document.getElementById('examples-sidebar');

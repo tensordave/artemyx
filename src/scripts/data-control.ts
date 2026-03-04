@@ -1,6 +1,6 @@
 import maplibregl from 'maplibre-gl';
 import { loadDataFromUrl } from './data-actions/load';
-import { mapPinIcon } from './icons';
+import { cloudArrowDownIcon } from './icons';
 import type { LayerToggleControl } from './layer-control';
 import type { ProgressControl } from './progress-control';
 
@@ -39,7 +39,7 @@ export class DataControl implements maplibregl.IControl {
 		this.button = document.createElement('button');
 		this.button.type = 'button';
 		this.button.className = 'control-btn';
-		this.button.innerHTML = mapPinIcon;
+		this.button.innerHTML = cloudArrowDownIcon;
 		this.button.title = 'Load Data';
 		this.container.appendChild(this.button);
 

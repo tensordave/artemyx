@@ -4,6 +4,75 @@ All notable changes to this project will be documented in this file.
 
 Format follows [Semantic Versioning](https://semver.org/).
 
+## v0.4.1 - 2026-03-03
+
+### Progress Control Update
+
+- Replaced text-only status line with a composite icon button: Phosphor `circle` ring as the persistent base, with a smaller inner icon that changes by state - `cloud-arrow-down` (pulsing blue) for data loading, `circle-notch` (spinning) for operation processing, empty for idle/success/error (color-only feedback)
+- Icon-only on mobile; icon + text label on desktop; clicking either opens the expanded history panel
+- Expanded panel gains `max-width: calc(100vw - 130px)` to prevent overlap with attribution/scalebar on narrow screens
+- New icons: `circle.ts`, `cloud-arrow-down.ts` added to `src/scripts/icons/`
+
+### Progress Control History Improvements
+
+- **Clear history button**: trash icon button added to the expanded panel header (left of the minimize button); clears all history entries in place without closing the panel; hover turns the icon red
+- **Horizontal scrolling**: history entries were already `white-space: nowrap`; history container changed from `overflow-x: hidden` to `overflow-x: auto` so long lines (error messages, full URLs) scroll rather than being clipped
+- **Desktop text truncation**: `.progress-status-text` gains `max-width: 300px`; the existing `overflow: hidden` + `text-overflow: ellipsis` now fires correctly on long messages in the collapsed status row
+
+### Landing Page Update
+
+- Removed the hero section (title, subtitle, top CTA); the live demo map now opens the page directly
+- Replaced the "View config" expandable code block with a controls guide: a 3-column icon grid describing each map control (Load data, View config, Layers, Storage, Basemap, Status)
+- Moved the demo caption below the map
+- Removed `.hero`, `.demo-code-details`, and related CSS; added `.controls-grid` and `.control-card-icon`
+
+### Dataset Loader Icon
+
+- Replaced `mapPinIcon` with `cloudArrowDownIcon` on the `DataControl` toggle button to better reflect loading data from the web
+
+### View Config Map Control
+
+- **`ConfigControl`** (`src/scripts/config-control.ts`): new `IControl` added to all map pages at `top-right`, below `DataControl`; button uses the `codeBlockIcon`; clicking opens a floating panel with Shiki-highlighted YAML
+- **Floating panel**: centered on desktop (~480px wide, `position: fixed`, drop shadow); full-width bottom-anchored on mobile (`max-width: 767px` breakpoint); same component and styling on both; dismissed via X button or ESC key; panel appended to the map container (not the control group) so it overlays the map freely
+- **Build-time highlighting**: each Astro page (`app.astro`, `index.astro`, `test.astro`, `[slug].astro`, `examples/index.astro`) runs `codeToHtml()` in its frontmatter and injects highlighted HTML into a hidden `<div id="config-highlighted" data-config-filename="...">` element; `ConfigControl.buildPanel()` reads this at runtime - no client-side Shiki bundle needed
+- **ExampleLayout cleanup**: removed the examples-only `examples-config-btn` button, `examples-sheet` bottom sheet, toggle JS, and all related CSS; config viewing now handled entirely by `ConfigControl` like every other page
+- **`.config-viewer-*` CSS classes** added to `global.css` (replaces removed `.examples-sheet-*` and `.examples-config-btn`)
+
+### Move Basemap Control
+
+- **Relocated** `BasemapControl` from `bottom-right` to `top-left`, below `StorageControl`; now participates in mutual-exclusion with `LayerToggleControl` and `StorageControl` via `closePanel()` / `setOnPanelOpen()`
+- **Icon button**: replaced the text label button (`"CARTO Dark ▲"`) with a `control-btn` icon button using new `mapTrifoldIcon`; new icon file `src/scripts/icons/map-trifold.ts`
+- **Drop-down panel**: uses shared `control-panel control-panel--left` classes (opens to the right of the button); old drop-up menu and text-button CSS removed; MapLibre's `.maplibregl-ctrl-group button` overrides countered with `.maplibregl-ctrl .basemap-option` specificity and `!important` on `padding`, `height`, `width`, and `display`
+
+### Progress Control Bug Fix
+
+- Fixed progress control stuck on "Processing session..." on `/app` when OPFS data existed but no config datasets were defined; `scheduleIdle()` was only called inside the config pipeline, which never runs on the blank-slate app config
+
+### Async Error Messaging
+
+- Config load failures (bad YAML, network error, validation error) are now surfaced in the progress control instead of silently falling back to defaults; error message is stored before the progress control DOM exists and emitted immediately after all controls are added to the map
+- Manual dataset restore failures during OPFS session restore now show a per-dataset error entry in the progress control alongside the existing `console.warn`; previously the user would see fewer layers than expected with no explanation
+
+### Attribution
+
+- **Artemyx attribution**: `customAttribution` added to the MapLibre map constructor pointing to `artemyx.org`; `compact: true` forces the toggle button on all layout widths
+- **Auto-collapse**: on wide layouts (>640px) the attribution starts expanded and auto-collapses after 4 seconds; on narrow/mobile it collapses immediately
+- **Dark theme**: CSS overrides on `.maplibregl-ctrl-attrib` force background, text, and link colors to match the app's dark theme, preventing clashes when the browser's `prefers-color-scheme` is dark
+
+### Scale Bar
+
+- **Scale bar** (`src/scripts/scale-control.ts`): `ScaleBarControl` renders a distance scale bar in the bottom-right corner, below the basemap picker; updates on every map move using `map.unproject()` + `LngLat.distanceTo()` (Haversine), matching MapLibre's internal approach; displays a classic three-sided bracket bar with a distance label (e.g. `500 km`)
+- **Metric/imperial toggle**: a muted unit button (showing the inactive unit) sits inline with the bar; clicking switches between metric (`m`/`km`) and imperial (`ft`/`mi`); sub-kilometre and sub-mile thresholds handled automatically
+
+### Mobile Bottom UX
+
+- **`100dvh` viewport fix**: `body` and `body.examples` updated from `height: 100vh` to `height: 100dvh`; resolves iOS Safari clipping the bottom of the app behind the browser chrome (address bar and bottom tab bar)
+- **Progress panel detached from MapLibre control group**: `ProgressControl`'s expanded history panel is now appended directly to `map.getContainer()` instead of the control's container element; gives the panel its own `position: absolute; z-index: 10` so it floats above all MapLibre control groups (scale bar, attribution, basemap), resolving overlap on expansion
+- **Persistent toggle button**: the collapsed status row (icon + text) now stays visible when the history panel is open; clicking it again closes the panel, matching the open/close affordance of other controls; the panel's minimize button remains as a secondary dismiss path
+- **Responsive panel width on mobile**: `.progress-expanded-panel` gains a `@media (max-width: 767px)` override setting `width: calc(100vw - 30px)`; previously the fixed `450px` width could extend beyond the viewport on narrow screens, cutting off the minimize button
+
+---
+
 ## v0.4.0 - 2026-03-01
 
 ### Format Loader Module

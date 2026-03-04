@@ -1,4 +1,5 @@
 import type { Map as MaplibreMap, IControl } from 'maplibre-gl';
+import { circleIcon, circleNotchIcon, cloudArrowDownIcon, trashIcon } from './icons';
 
 interface ProgressState {
   operation: string;
@@ -14,10 +15,15 @@ interface HistoryEntry extends ProgressState {
 export class ProgressControl implements IControl {
   private map?: MaplibreMap;
   private container?: HTMLDivElement;
-  private statusLine?: HTMLDivElement;
+  private mapContainer?: HTMLElement;
+  private statusRow?: HTMLDivElement;
+  private iconBase?: HTMLSpanElement;
+  private iconInner?: HTMLSpanElement;
+  private statusText?: HTMLSpanElement;
   private expandedPanel?: HTMLDivElement;
   private historyContainer?: HTMLDivElement;
   private minimizeButton?: HTMLButtonElement;
+  private clearHistoryButton?: HTMLButtonElement;
   private state: ProgressState = {
     operation: '',
     status: 'idle',
@@ -29,21 +35,42 @@ export class ProgressControl implements IControl {
 
   onAdd(map: MaplibreMap): HTMLElement {
     this.map = map;
+    this.mapContainer = map.getContainer();
     this.container = document.createElement('div');
     this.container.className = 'maplibregl-ctrl maplibregl-ctrl-group progress-control';
 
-    // Create the status line container (collapsed state)
-    this.statusLine = document.createElement('div');
-    this.statusLine.className = 'progress-status-line';
-    this.statusLine.textContent = 'Ready';
-    this.statusLine.addEventListener('click', () => this.toggleExpansion());
+    // Collapsed state: icon + text row
+    this.statusRow = document.createElement('div');
+    this.statusRow.className = 'progress-status-row status-idle';
+    this.statusRow.addEventListener('click', () => this.toggleExpansion());
 
-    // Create the expanded panel (hidden by default)
+    // Composite icon: base circle ring + state-driven inner icon
+    const iconWrapper = document.createElement('div');
+    iconWrapper.className = 'progress-icon-wrapper';
+
+    this.iconBase = document.createElement('span');
+    this.iconBase.className = 'progress-icon-base';
+    this.iconBase.innerHTML = circleIcon;
+
+    this.iconInner = document.createElement('span');
+    this.iconInner.className = 'progress-icon-inner';
+
+    iconWrapper.appendChild(this.iconBase);
+    iconWrapper.appendChild(this.iconInner);
+
+    // Text label (hidden on mobile via CSS)
+    this.statusText = document.createElement('span');
+    this.statusText.className = 'progress-status-text';
+    this.statusText.textContent = 'Ready';
+
+    this.statusRow.appendChild(iconWrapper);
+    this.statusRow.appendChild(this.statusText);
+
+    // Expanded panel (hidden by default) - unchanged from before
     this.expandedPanel = document.createElement('div');
     this.expandedPanel.className = 'progress-expanded-panel';
     this.expandedPanel.style.display = 'none';
 
-    // Create panel header with minimize button
     const header = document.createElement('div');
     header.className = 'progress-panel-header';
 
@@ -51,36 +78,49 @@ export class ProgressControl implements IControl {
     title.textContent = 'Progress History';
     header.appendChild(title);
 
+    const headerButtons = document.createElement('div');
+    headerButtons.className = 'progress-header-buttons';
+
+    this.clearHistoryButton = document.createElement('button');
+    this.clearHistoryButton.className = 'progress-clear-history-btn';
+    this.clearHistoryButton.innerHTML = trashIcon;
+    this.clearHistoryButton.title = 'Clear history';
+    this.clearHistoryButton.addEventListener('click', () => this.clearHistory());
+    headerButtons.appendChild(this.clearHistoryButton);
+
     this.minimizeButton = document.createElement('button');
     this.minimizeButton.className = 'progress-minimize-btn';
-    this.minimizeButton.textContent = '−';
+    this.minimizeButton.textContent = '\u2212';
     this.minimizeButton.title = 'Minimize';
     this.minimizeButton.addEventListener('click', () => this.toggleExpansion());
-    header.appendChild(this.minimizeButton);
+    headerButtons.appendChild(this.minimizeButton);
+
+    header.appendChild(headerButtons);
 
     this.expandedPanel.appendChild(header);
 
-    // Create scrollable history container
     this.historyContainer = document.createElement('div');
     this.historyContainer.className = 'progress-history-container';
     this.expandedPanel.appendChild(this.historyContainer);
 
-    this.container.appendChild(this.statusLine);
-    this.container.appendChild(this.expandedPanel);
+    this.container.appendChild(this.statusRow);
+    this.mapContainer.appendChild(this.expandedPanel);
 
     return this.container;
   }
 
   onRemove(): void {
     this.container?.parentNode?.removeChild(this.container);
+    this.expandedPanel?.parentNode?.removeChild(this.expandedPanel);
     this.map = undefined;
+    this.mapContainer = undefined;
   }
 
   /**
    * Update the progress display with current operation status
    */
   updateProgress(operation: string, status: ProgressState['status'], message?: string): void {
-    // Cancel any pending idle — new work is coming in
+    // Cancel any pending idle - new work is coming in
     if (this._idleTimeout) {
       clearTimeout(this._idleTimeout);
       this._idleTimeout = undefined;
@@ -123,6 +163,16 @@ export class ProgressControl implements IControl {
   }
 
   /**
+   * Clear all history entries and re-render the history panel.
+   */
+  private clearHistory(): void {
+    this.history = [];
+    if (this.isExpanded) {
+      this.renderHistory();
+    }
+  }
+
+  /**
    * Schedule a return to idle state after a delay.
    * Automatically cancelled if updateProgress() is called before it fires.
    */
@@ -137,20 +187,84 @@ export class ProgressControl implements IControl {
   }
 
   /**
-   * Toggle between collapsed (status line) and expanded (history panel) views
+   * Toggle the history panel. The status row stays visible at all times as the persistent toggle target.
    */
   private toggleExpansion(): void {
     this.isExpanded = !this.isExpanded;
 
-    if (this.statusLine && this.expandedPanel) {
+    if (this.expandedPanel) {
       if (this.isExpanded) {
-        this.statusLine.style.display = 'none';
         this.expandedPanel.style.display = 'flex';
         this.renderHistory();
       } else {
-        this.statusLine.style.display = 'block';
         this.expandedPanel.style.display = 'none';
       }
+    }
+  }
+
+  /**
+   * Get the inner icon SVG for the current status.
+   * Loading gets cloud-arrow-down, processing gets circle-notch (animated via CSS),
+   * idle/success/error show no inner icon - status conveyed by color on the base ring.
+   */
+  private getInnerIconSvg(status: ProgressState['status']): string {
+    switch (status) {
+      case 'loading':
+        return cloudArrowDownIcon;
+      case 'processing':
+        return circleNotchIcon;
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Render the current state to the UI
+   */
+  private render(): void {
+    if (!this.statusRow || !this.iconInner || !this.statusText) return;
+
+    const { operation, status, message } = this.state;
+
+    // Update composite icon inner element
+    this.iconInner.innerHTML = this.getInnerIconSvg(status);
+
+    // Animate inner icon: spin for processing, pulse for loading
+    this.iconInner.classList.remove('spinning', 'pulsing');
+    if (status === 'processing') {
+      this.iconInner.classList.add('spinning');
+    } else if (status === 'loading') {
+      this.iconInner.classList.add('pulsing');
+    }
+
+    // Build status text (same logic as before, minus the leading symbols)
+    let text = '';
+    switch (status) {
+      case 'idle':
+        text = 'Ready';
+        break;
+      case 'loading':
+        text = `Downloading ${operation}...`;
+        break;
+      case 'processing':
+        text = `Processing ${operation}...`;
+        break;
+      case 'success':
+        text = message || `${operation} complete`;
+        break;
+      case 'error':
+        text = `Error: ${message || operation}`;
+        break;
+    }
+
+    this.statusText.textContent = text;
+
+    // Apply status class to the row (drives icon base color via CSS)
+    this.statusRow.className = `progress-status-row status-${status}`;
+
+    // If expanded, also update the history view
+    if (this.isExpanded) {
+      this.renderHistory();
     }
   }
 
@@ -160,12 +274,9 @@ export class ProgressControl implements IControl {
   private renderHistory(): void {
     if (!this.historyContainer) return;
 
-    const container = this.historyContainer; // Capture for use in forEach
-
-    // Clear existing content
+    const container = this.historyContainer;
     container.innerHTML = '';
 
-    // Render each history entry
     this.history.forEach((entry) => {
       const line = document.createElement('div');
       line.className = 'progress-history-entry';
@@ -180,13 +291,9 @@ export class ProgressControl implements IControl {
       container.appendChild(line);
     });
 
-    // Auto-scroll to bottom
     container.scrollTop = container.scrollHeight;
   }
 
-  /**
-   * Format timestamp as HH:MM:SS
-   */
   private formatTimestamp(timestamp: number): string {
     const date = new Date(timestamp);
     const hours = date.getHours().toString().padStart(2, '0');
@@ -195,26 +302,20 @@ export class ProgressControl implements IControl {
     return `${hours}:${minutes}:${seconds}`;
   }
 
-  /**
-   * Get status symbol for history entries
-   */
   private getStatusSymbol(status: ProgressState['status']): string {
     switch (status) {
       case 'loading':
       case 'processing':
         return '>';
       case 'success':
-        return '✓';
+        return '\u2713';
       case 'error':
-        return '✗';
+        return '\u2717';
       case 'idle':
         return '-';
     }
   }
 
-  /**
-   * Get status text for history entry
-   */
   private getStatusText(entry: HistoryEntry): string {
     const { operation, status, message } = entry;
 
@@ -229,50 +330,6 @@ export class ProgressControl implements IControl {
         return message || `${operation} complete`;
       case 'error':
         return `Error: ${message || operation}`;
-    }
-  }
-
-  /**
-   * Render the current state to the UI
-   */
-  private render(): void {
-    if (!this.statusLine) return;
-
-    const { operation, status, message } = this.state;
-
-    // Build the status text with terminal-like formatting
-    let statusText = '';
-    let statusClass = '';
-
-    switch (status) {
-      case 'idle':
-        statusText = 'Ready';
-        statusClass = 'status-idle';
-        break;
-      case 'loading':
-        statusText = `> Downloading ${operation}...`;
-        statusClass = 'status-loading';
-        break;
-      case 'processing':
-        statusText = `> Processing ${operation}...`;
-        statusClass = 'status-processing';
-        break;
-      case 'success':
-        statusText = message || `✓ ${operation} complete`;
-        statusClass = 'status-success';
-        break;
-      case 'error':
-        statusText = `✗ Error: ${message || operation}`;
-        statusClass = 'status-error';
-        break;
-    }
-
-    this.statusLine.textContent = statusText;
-    this.statusLine.className = `progress-status-line ${statusClass}`;
-
-    // If expanded, also update the history view
-    if (this.isExpanded) {
-      this.renderHistory();
     }
   }
 }

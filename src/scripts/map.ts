@@ -4,6 +4,8 @@ import { ProgressControl } from './progress-control';
 import { DataControl } from './data-control';
 import { StorageControl } from './storage-control';
 import { BasemapControl } from './basemap-control';
+import { ScaleBarControl } from './scale-control';
+import { ConfigControl } from './config-control';
 import { getBasemap, getDefaultBasemap } from './basemaps';
 import { loadConfig, getDefaultMapSettings } from './config/parser';
 import { loadDatasetsFromConfig } from './data-actions/load';
@@ -51,6 +53,7 @@ const useOPFS = mapEl?.dataset.persistence !== 'false';
 startInit(useOPFS);
 
 // Load config from YAML (falls back to defaults on error)
+let configError: string | null = null;
 let mapConfig: MapConfig | null = null;
 let mapSettings: MapSettings;
 try {
@@ -60,6 +63,7 @@ try {
 	console.log('Loaded map config:', mapSettings);
 } catch (error) {
 	console.warn('Failed to load config, using defaults:', error);
+	configError = error instanceof Error ? error.message : 'Failed to load config';
 	mapSettings = getDefaultMapSettings();
 }
 
@@ -77,16 +81,35 @@ const map = new maplibregl.Map({
 		layers: [basemap.layer]
 	},
 	center: mapSettings.center,
-	zoom: mapSettings.zoom
+	zoom: mapSettings.zoom,
+	attributionControl: {
+		compact: true,
+		customAttribution: '<a href="https://artemyx.org">Artemyx</a>'
+	}
+});
+
+// Attribution starts expanded by default (compact: true still opens on init).
+// On wide layouts, auto-collapse after a few seconds. On narrow/mobile, collapse immediately.
+map.once('load', () => {
+	const btn = document.querySelector<HTMLButtonElement>('.maplibregl-ctrl-attrib-button');
+	if (!btn) return;
+	const isNarrow = map.getContainer().clientWidth <= 640;
+	if (isNarrow) {
+		btn.click();
+	} else {
+		setTimeout(() => btn.click(), 4000);
+	}
 });
 
 // Add controls to the map
 const layerToggleControl = new LayerToggleControl();
 const progressControl = new ProgressControl();
+const basemapControl = new BasemapControl();
 const storageControl = new StorageControl({
-	onPanelOpen: () => layerToggleControl.closePanel()
+	onPanelOpen: () => { layerToggleControl.closePanel(); basemapControl.closePanel(); }
 });
-layerToggleControl.setOnPanelOpen(() => storageControl.closePanel());
+layerToggleControl.setOnPanelOpen(() => { storageControl.closePanel(); basemapControl.closePanel(); });
+basemapControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); storageControl.closePanel(); });
 _progressControlRef = progressControl;
 const dataControl = new DataControl({
 	map,
@@ -95,10 +118,17 @@ const dataControl = new DataControl({
 	loadedDatasets
 });
 map.addControl(dataControl, 'top-right');
+map.addControl(new ConfigControl(), 'top-right');
 map.addControl(layerToggleControl, 'top-left');
 map.addControl(storageControl, 'top-left');
+map.addControl(basemapControl, 'top-left');
+map.addControl(new ScaleBarControl(), 'bottom-right');
 map.addControl(progressControl, 'bottom-left');
-map.addControl(new BasemapControl(), 'bottom-right');
+
+// Surface any config error now that the progress control is in the DOM
+if (configError) {
+	progressControl.updateProgress('config', 'error', configError);
+}
 
 /**
  * Restore manually-loaded datasets from OPFS that aren't covered by config.
@@ -154,6 +184,7 @@ async function restoreManualDatasets(): Promise<void> {
 			);
 		} catch (e) {
 			console.warn(`[OPFS] Failed to restore manual dataset ${dataset.id}:`, e);
+			progressControl.updateProgress(dataset.name || dataset.id, 'error', 'Failed to restore from session');
 		}
 	}
 
@@ -283,6 +314,10 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 		// All pipeline work done — schedule idle after the final status has been visible
 		progressControl.scheduleIdle(3000);
 	});
+} else {
+	// No config datasets — pipeline won't run, so schedule idle here
+	// (handles /app with OPFS data but no config, where "Processing session..." would otherwise stick)
+	progressControl.scheduleIdle(3000);
 }
 
 export { map, layerToggleControl, progressControl };
