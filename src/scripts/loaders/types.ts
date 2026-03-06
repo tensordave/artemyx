@@ -17,12 +17,18 @@ export interface LoaderOptions {
 	lngColumn?: string;
 	/** Combined coordinate column name containing "lat, lng" values (mutually exclusive with latColumn/lngColumn) */
 	geoColumn?: string;
+	/** Explicit CRS override from config (e.g. 'EPSG:27700'). Overrides file-detected CRS. */
+	crs?: string;
 }
 
 /** Result returned by a format loader */
 export interface LoaderResult {
 	/** Parsed GeoJSON FeatureCollection */
 	data: GeoJSON.FeatureCollection;
+	/** CRS detected from file metadata (e.g. 'EPSG:27700'). Undefined when no metadata found. */
+	detectedCrs?: string;
+	/** When true, the loader already reprojected to WGS84 - skip downstream ST_Transform. */
+	crsHandled?: boolean;
 }
 
 /**

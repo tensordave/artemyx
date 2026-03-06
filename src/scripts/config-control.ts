@@ -11,6 +11,15 @@ export class ConfigControl implements IControl {
 	private container: HTMLDivElement | null = null;
 	private panel: HTMLDivElement | null = null;
 	private isOpen = false;
+	private onPanelOpen?: () => void;
+
+	setOnPanelOpen(cb: () => void): void {
+		this.onPanelOpen = cb;
+	}
+
+	closePanel(): void {
+		this.close();
+	}
 
 	private handleEsc = (e: KeyboardEvent) => {
 		if (e.key === 'Escape') this.close();
@@ -94,6 +103,7 @@ export class ConfigControl implements IControl {
 		if (!this.panel) return;
 		this.isOpen = true;
 		this.panel.classList.add('config-viewer--open');
+		this.onPanelOpen?.();
 		document.addEventListener('keydown', this.handleEsc);
 	}
 

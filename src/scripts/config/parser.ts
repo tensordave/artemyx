@@ -38,6 +38,20 @@ const VALID_LAYER_TYPES: LayerType[] = ['fill', 'line', 'circle', 'symbol', 'hea
 const DEFAULT_CONFIG_PATH = '/app-config.yaml';
 
 /**
+ * Validate a CRS authority:code string (e.g. 'EPSG:27700', 'ESRI:102001').
+ * Returns array of error messages (empty if valid).
+ */
+function validateCrsString(value: unknown, prefix: string): string[] {
+	if (typeof value !== 'string' || value.trim() === '') {
+		return [`${prefix}: must be a non-empty string`];
+	}
+	if (!/^[A-Za-z]+:\S+$/.test(value.trim())) {
+		return [`${prefix}: must be an authority:code string (e.g. 'EPSG:27700'). Got '${value}'`];
+	}
+	return [];
+}
+
+/**
  * Validate the parsed config object.
  * Checks required fields, types, and valid values.
  */
@@ -93,6 +107,11 @@ function validateConfig(config: unknown): ValidationResult {
 		errors.push(
 			`'map.basemap' must be one of: ${VALID_BASEMAPS.join(', ')}. Got '${mapSection.basemap}'`
 		);
+	}
+
+	// Optional: crs (authority:code string for fallback CRS)
+	if ('crs' in mapSection && mapSection.crs !== undefined) {
+		errors.push(...validateCrsString(mapSection.crs, "'map.crs'"));
 	}
 
 	// Validate datasets (optional section)
@@ -218,6 +237,13 @@ function validateDataset(dataset: unknown, index: number): string[] {
 		}
 	}
 
+	// Optional: fitBounds (boolean, defaults to true)
+	if ('fitBounds' in d && d.fitBounds !== undefined) {
+		if (typeof d.fitBounds !== 'boolean') {
+			errors.push(`${prefix}.fitBounds: must be a boolean`);
+		}
+	}
+
 	// Optional: format (must be a valid config format)
 	if ('format' in d && d.format !== undefined) {
 		if (typeof d.format !== 'string') {
@@ -249,6 +275,27 @@ function validateDataset(dataset: unknown, index: number): string[] {
 		if (('latColumn' in d && d.latColumn !== undefined) || ('lngColumn' in d && d.lngColumn !== undefined)) {
 			errors.push(`${prefix}: geoColumn is mutually exclusive with latColumn/lngColumn`);
 		}
+	}
+
+	// Optional: paginate (boolean or { maxPages?: number })
+	if ('paginate' in d && d.paginate !== undefined) {
+		if (typeof d.paginate === 'boolean') {
+			// valid
+		} else if (typeof d.paginate === 'object' && d.paginate !== null && !Array.isArray(d.paginate)) {
+			const pag = d.paginate as Record<string, unknown>;
+			if ('maxPages' in pag && pag.maxPages !== undefined) {
+				if (typeof pag.maxPages !== 'number' || !Number.isInteger(pag.maxPages) || pag.maxPages < 1) {
+					errors.push(`${prefix}.paginate.maxPages: must be a positive integer`);
+				}
+			}
+		} else {
+			errors.push(`${prefix}.paginate: must be a boolean or an object with optional maxPages`);
+		}
+	}
+
+	// Optional: crs (authority:code string for explicit CRS override)
+	if ('crs' in d && d.crs !== undefined) {
+		errors.push(...validateCrsString(d.crs, `${prefix}.crs`));
 	}
 
 	return errors;

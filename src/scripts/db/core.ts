@@ -10,7 +10,7 @@
 
 import * as duckdb from '@duckdb/duckdb-wasm';
 
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 const OPFS_DB_PATH = 'opfs://gis_app.db';
 const OPFS_FILE_NAME = 'gis_app.db';
 
@@ -61,7 +61,8 @@ async function initSchema(): Promise<void> {
 			hidden BOOLEAN DEFAULT false,
 			feature_count INTEGER,
 			loaded_at TIMESTAMP,
-			style TEXT
+			style TEXT,
+			source_crs TEXT
 		)
 	`);
 

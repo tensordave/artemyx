@@ -19,6 +19,7 @@ export { dotsSixVerticalIcon } from './dots-six-vertical'; // drag-to-reorder ha
 export { circleIcon } from './circle';                     // base ring for composite progress icon
 export { circleNotchIcon } from './circle-notch';          // inner spinning icon (operations)
 export { cloudArrowDownIcon } from './cloud-arrow-down';   // inner icon (data loading) + dataset loader button
+export { fileArrowUpIcon } from './file-arrow-up';         // upload local file button
 
 // Roadmap: persistence (Phase 8)
 export { arrowClockwiseIcon } from './arrow-clockwise';    // clear session / retry

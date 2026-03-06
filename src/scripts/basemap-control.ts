@@ -13,9 +13,15 @@ export class BasemapControl implements IControl {
 	private panel: HTMLDivElement | null = null;
 	private currentBasemap: BasemapConfig;
 	private onPanelOpen?: () => void;
+	private onDocPointerDown: (e: PointerEvent) => void;
 
 	constructor() {
 		this.currentBasemap = getDefaultBasemap();
+		this.onDocPointerDown = (e: PointerEvent) => {
+			if (!this.container?.contains(e.target as Node)) {
+				this.closePanel();
+			}
+		};
 	}
 
 	setOnPanelOpen(cb: () => void): void {
@@ -47,6 +53,9 @@ export class BasemapControl implements IControl {
 			const isOpen = this.panel.classList.toggle('control-panel--open');
 			if (isOpen) {
 				this.onPanelOpen?.();
+				document.addEventListener('pointerdown', this.onDocPointerDown);
+			} else {
+				document.removeEventListener('pointerdown', this.onDocPointerDown);
 			}
 		});
 
@@ -54,7 +63,7 @@ export class BasemapControl implements IControl {
 	}
 
 	onRemove(): void {
-		this.closePanel();
+		document.removeEventListener('pointerdown', this.onDocPointerDown);
 		this.container?.remove();
 		this.map = null;
 		this.container = null;
@@ -64,6 +73,7 @@ export class BasemapControl implements IControl {
 
 	closePanel(): void {
 		this.panel?.classList.remove('control-panel--open');
+		document.removeEventListener('pointerdown', this.onDocPointerDown);
 	}
 
 	private renderPanelOptions(): void {

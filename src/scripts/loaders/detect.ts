@@ -38,6 +38,38 @@ const CONTENT_TYPE_MAP: [string, DetectedFormat][] = [
 ];
 
 /**
+ * Parse filename from a Content-Disposition header value.
+ * Handles quoted, unquoted, and RFC 5987 extended (filename*=) notations.
+ * Returns null if no filename is found.
+ */
+function parseContentDispositionFilename(header: string): string | null {
+	// Try filename*= first (RFC 5987 extended notation, e.g. UTF-8''data.geojson)
+	const extMatch = header.match(/filename\*\s*=\s*(?:UTF-8''|utf-8'')([^;\s]+)/i);
+	if (extMatch) {
+		try { return decodeURIComponent(extMatch[1]); } catch { /* fall through */ }
+	}
+
+	// Try filename= with quotes
+	const quotedMatch = header.match(/filename\s*=\s*"([^"]+)"/i);
+	if (quotedMatch) return quotedMatch[1];
+
+	// Try filename= without quotes
+	const unquotedMatch = header.match(/filename\s*=\s*([^;\s]+)/i);
+	if (unquotedMatch) return unquotedMatch[1];
+
+	return null;
+}
+
+/**
+ * Extract lowercase file extension (including dot) from a filename string.
+ */
+function getFilenameExtension(filename: string): string {
+	const dotIndex = filename.lastIndexOf('.');
+	if (dotIndex === -1) return '';
+	return filename.slice(dotIndex).toLowerCase();
+}
+
+/**
  * Extract file extension from a URL path, ignoring query params and fragments.
  * Returns lowercase extension including the dot, or empty string if none found.
  */
@@ -54,13 +86,41 @@ function getUrlExtension(url: string): string {
 }
 
 /**
- * Detect data format from URL extension and response Content-Type.
+ * Detect data format from a local File object.
+ * Uses filename extension first, then MIME type from file.type.
+ * Falls back to 'geojson' if neither matches.
+ */
+export function detectFormatFromFile(file: File): DetectedFormat {
+	const dotIndex = file.name.lastIndexOf('.');
+	if (dotIndex !== -1) {
+		const ext = file.name.slice(dotIndex).toLowerCase();
+		if (ext in EXTENSION_MAP) {
+			return EXTENSION_MAP[ext];
+		}
+	}
+
+	if (file.type) {
+		const mimeType = file.type.toLowerCase().split(';')[0].trim();
+		for (const [prefix, format] of CONTENT_TYPE_MAP) {
+			if (mimeType.startsWith(prefix)) {
+				return format;
+			}
+		}
+	}
+
+	return 'geojson';
+}
+
+/**
+ * Detect data format from response metadata.
  *
  * Priority:
  * 1. Explicit config format (if provided)
- * 2. URL file extension
- * 3. Content-Type header
- * 4. Falls back to 'geojson' (existing behavior)
+ * 2. Content-Disposition filename extension (download endpoints)
+ * 3. URL file extension (use response.url for post-redirect accuracy)
+ * 4. URL path segment keyword (e.g. /exports/parquet)
+ * 5. Content-Type header
+ * 6. Falls back to 'geojson' (existing behavior)
  *
  * Note: 'json-array' is never returned by detection - it's resolved
  * at parse time when a JSON response turns out to be a plain array
@@ -69,14 +129,26 @@ function getUrlExtension(url: string): string {
 export function detectFormat(
 	url: string,
 	contentType: string | null,
-	configFormat?: ConfigFormat
+	configFormat?: ConfigFormat,
+	contentDisposition?: string | null
 ): DetectedFormat {
 	// Explicit config override wins
 	if (configFormat) {
 		return configFormat;
 	}
 
-	// Try URL extension
+	// Try Content-Disposition filename (download endpoints)
+	if (contentDisposition) {
+		const filename = parseContentDispositionFilename(contentDisposition);
+		if (filename) {
+			const ext = getFilenameExtension(filename);
+			if (ext && ext in EXTENSION_MAP) {
+				return EXTENSION_MAP[ext];
+			}
+		}
+	}
+
+	// Try URL extension (callers should pass response.url for post-redirect accuracy)
 	const ext = getUrlExtension(url);
 	if (ext && ext in EXTENSION_MAP) {
 		return EXTENSION_MAP[ext];

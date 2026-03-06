@@ -1,5 +1,6 @@
 # Artemyx Example - Buffer / Dissolve
 # Vancouver bikeways buffered by 200m to show walking-distance zones.
+# Geodetically accurate - buffers use UTM reprojection for true circular geometry.
 # Dissolve merges overlapping buffers into a single walkshed polygon.
 
 map:
@@ -11,7 +12,7 @@ datasets:
   - id: bikeways
     url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/bikeways/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
     name: Vancouver Bikeways
-    color: "#22c55e"
+    color: "#38bdf8"
 
 operations:
   - type: buffer
@@ -22,7 +23,7 @@ operations:
       distance: 200
       units: meters
       dissolve: true
-    color: "#f59e0b"
+    color: "#a78bfa"
 
 layers:
   # Walkshed fill - dissolved buffer polygon
@@ -30,22 +31,22 @@ layers:
     source: bikeway_walkshed
     type: fill
     paint:
-      fill-color: "#f59e0b"
-      fill-opacity: 0.2
+      fill-color: "#a78bfa"
+      fill-opacity: 0.15
 
   # Walkshed outline
   - id: walkshed-outline
     source: bikeway_walkshed
     type: line
     paint:
-      line-color: "#f59e0b"
-      line-width: 1
-      line-opacity: 0.5
+      line-color: "#c4b5fd"
+      line-width: 1.5
+      line-opacity: 0.6
 
   # Bikeways on top
   - id: bikeways-line
     source: bikeways
     type: line
     paint:
-      line-color: "#22c55e"
+      line-color: "#38bdf8"
       line-width: 2.5

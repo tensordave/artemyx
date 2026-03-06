@@ -2,6 +2,7 @@ import maplibregl from 'maplibre-gl';
 import { LayerToggleControl } from './layer-control';
 import { ProgressControl } from './progress-control';
 import { DataControl } from './data-control';
+import { UploadControl } from './upload-control';
 import { StorageControl } from './storage-control';
 import { BasemapControl } from './basemap-control';
 import { ScaleBarControl } from './scale-control';
@@ -97,7 +98,7 @@ map.once('load', () => {
 	if (isNarrow) {
 		btn.click();
 	} else {
-		setTimeout(() => btn.click(), 4000);
+		setTimeout(() => btn.click(), 2000);
 	}
 });
 
@@ -105,11 +106,9 @@ map.once('load', () => {
 const layerToggleControl = new LayerToggleControl();
 const progressControl = new ProgressControl();
 const basemapControl = new BasemapControl();
-const storageControl = new StorageControl({
-	onPanelOpen: () => { layerToggleControl.closePanel(); basemapControl.closePanel(); }
-});
-layerToggleControl.setOnPanelOpen(() => { storageControl.closePanel(); basemapControl.closePanel(); });
-basemapControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); storageControl.closePanel(); });
+const storageControl = new StorageControl();
+layerToggleControl.setOnPanelOpen(() => { basemapControl.closePanel(); });
+basemapControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); });
 _progressControlRef = progressControl;
 const dataControl = new DataControl({
 	map,
@@ -117,10 +116,25 @@ const dataControl = new DataControl({
 	layerToggleControl,
 	loadedDatasets
 });
+const uploadControl = new UploadControl({
+	map,
+	progressControl,
+	layerToggleControl,
+	loadedDatasets
+});
+const configControl = new ConfigControl();
+
+// Right-hand controls: only one panel open at a time
+dataControl.setOnPanelOpen(() => { uploadControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
+uploadControl.setOnPanelOpen(() => { dataControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
+configControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); storageControl.closePanel(); });
+storageControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); configControl.closePanel(); });
+
 map.addControl(dataControl, 'top-right');
-map.addControl(new ConfigControl(), 'top-right');
+map.addControl(uploadControl, 'top-right');
+map.addControl(configControl, 'top-right');
+map.addControl(storageControl, 'top-right');
 map.addControl(layerToggleControl, 'top-left');
-map.addControl(storageControl, 'top-left');
 map.addControl(basemapControl, 'top-left');
 map.addControl(new ScaleBarControl(), 'bottom-right');
 map.addControl(progressControl, 'bottom-left');
@@ -219,7 +233,8 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 		progressControl,
 		layerToggleControl,
 		loadedDatasets,
-		layers: mapConfig.layers
+		layers: mapConfig.layers,
+		mapCrs: mapConfig.map.crs,
 	}).then(async (result) => {
 		if (result.failed > 0) {
 			console.warn('Some datasets failed to load:', result.errors);

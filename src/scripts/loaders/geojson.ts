@@ -5,6 +5,7 @@
  */
 
 import type { FormatLoader, LoaderResult } from './types';
+import { parseCrsAuthority } from './crs';
 
 /** GeoJSON geometry type names */
 const GEOMETRY_TYPES = new Set([
@@ -65,13 +66,30 @@ export function normalizeGeoJSON(data: unknown): GeoJSON.FeatureCollection | nul
 	return null;
 }
 
+/**
+ * Extract a CRS authority string from a legacy GeoJSON crs member.
+ * RFC 7946 deprecated the crs field, but older exports (ArcGIS, QGIS) still emit it.
+ * Example: { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::27700" } }
+ */
+export function extractGeoJsonCrs(data: unknown): string | undefined {
+	if (typeof data !== 'object' || data === null) return undefined;
+	const crsObj = (data as Record<string, unknown>).crs;
+	if (typeof crsObj !== 'object' || crsObj === null) return undefined;
+	const props = (crsObj as Record<string, unknown>).properties;
+	if (typeof props !== 'object' || props === null) return undefined;
+	const name = (props as Record<string, unknown>).name;
+	if (typeof name !== 'string') return undefined;
+	return parseCrsAuthority(name) ?? undefined;
+}
+
 export const geojsonLoader: FormatLoader = {
 	async load(response) {
 		const data = await response.json();
+		const detectedCrs = extractGeoJsonCrs(data);
 		const normalized = normalizeGeoJSON(data);
 		if (!normalized) {
 			throw new Error('Response is not valid GeoJSON (expected FeatureCollection, Feature, geometry, or Feature array)');
 		}
-		return { data: normalized };
+		return { data: normalized, detectedCrs };
 	},
 };

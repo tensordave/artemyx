@@ -1,6 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import { deleteDataset as deleteDatasetFromDB } from '../db';
 import { getLayersBySource, getSourceId } from '../layers';
+import { removeFeatureHandlers } from '../popup';
 import { ProgressControl } from '../progress-control';
 import { showErrorDialog } from '../ui/error-dialog';
 
@@ -104,6 +105,9 @@ export async function deleteDatasetWithLayers(
 	// (dynamic discovery — works with both default and config-defined layer IDs)
 	const sourceId = getSourceId(datasetId);
 	const layers = getLayersBySource(map, sourceId);
+
+	// Clean up hover/click handler registry before removing layers
+	removeFeatureHandlers(layers.map(l => l.id));
 
 	for (const layer of layers) {
 		map.removeLayer(layer.id);

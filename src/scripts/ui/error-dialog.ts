@@ -100,6 +100,103 @@ export function showErrorDialog(title: string, message: string): Promise<void> {
 }
 
 /**
+ * Show a CRS prompt dialog when projected coordinates are detected.
+ * Returns the CRS string entered by the user, or null if cancelled.
+ */
+export function showCrsPromptDialog(): Promise<string | null> {
+	return new Promise((resolve) => {
+		const overlay = document.createElement('div');
+		overlay.className = 'dialog-overlay';
+
+		const dialog = document.createElement('div');
+		dialog.className = 'dialog-box';
+
+		const titleEl = document.createElement('div');
+		titleEl.className = 'dialog-title dialog-title--warn';
+		titleEl.textContent = 'Projected Coordinate System Detected';
+		dialog.appendChild(titleEl);
+
+		const messageEl = document.createElement('div');
+		messageEl.className = 'dialog-message';
+		messageEl.textContent = 'This data uses coordinates outside the WGS84 range, indicating a projected coordinate system. Enter the source CRS to reproject:';
+		dialog.appendChild(messageEl);
+
+		const input = document.createElement('input');
+		input.type = 'text';
+		input.className = 'dialog-input';
+		input.placeholder = 'EPSG:26910';
+		dialog.appendChild(input);
+
+		const hintEl = document.createElement('div');
+		hintEl.className = 'dialog-hint';
+		dialog.appendChild(hintEl);
+
+		const buttonRow = document.createElement('div');
+		buttonRow.className = 'dialog-button-row';
+
+		const cancelButton = document.createElement('button');
+		cancelButton.className = 'dialog-btn';
+		cancelButton.textContent = 'Cancel';
+
+		const reprojectButton = document.createElement('button');
+		reprojectButton.className = 'dialog-btn dialog-btn--primary';
+		reprojectButton.textContent = 'Reproject';
+
+		const close = (result: string | null) => {
+			document.removeEventListener('keydown', handleKeydown);
+			document.body.removeChild(overlay);
+			resolve(result);
+		};
+
+		const submit = () => {
+			const value = input.value.trim();
+			if (!value) {
+				hintEl.textContent = 'Enter a CRS code (e.g. EPSG:26910)';
+				return;
+			}
+			if (!/^[A-Za-z]+:\S+$/.test(value)) {
+				hintEl.textContent = 'Invalid format. Use AUTHORITY:CODE (e.g. EPSG:26910)';
+				return;
+			}
+			close(value);
+		};
+
+		cancelButton.addEventListener('click', () => close(null));
+		reprojectButton.addEventListener('click', submit);
+
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				submit();
+			}
+		});
+
+		input.addEventListener('input', () => {
+			hintEl.textContent = '';
+		});
+
+		const handleKeydown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				close(null);
+			}
+		};
+		document.addEventListener('keydown', handleKeydown);
+
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) close(null);
+		});
+
+		buttonRow.appendChild(cancelButton);
+		buttonRow.appendChild(reprojectButton);
+		dialog.appendChild(buttonRow);
+		overlay.appendChild(dialog);
+		document.body.appendChild(overlay);
+
+		input.focus();
+	});
+}
+
+/**
  * Show a styled confirmation dialog as a modal overlay.
  * Returns true if the user confirms, false if they cancel.
  */

@@ -3,6 +3,7 @@ import { loadDataFromUrl } from './data-actions/load';
 import { cloudArrowDownIcon } from './icons';
 import type { LayerToggleControl } from './layer-control';
 import type { ProgressControl } from './progress-control';
+import { buildAdvancedOptions, type AdvancedOptionsHandle } from './ui/advanced-options';
 
 interface DataControlOptions {
 	map: maplibregl.Map;
@@ -17,17 +18,29 @@ export class DataControl implements maplibregl.IControl {
 	private panel: HTMLDivElement | undefined;
 	private input: HTMLInputElement | undefined;
 	private loadButton: HTMLButtonElement | undefined;
+	private advancedOptions: AdvancedOptionsHandle | undefined;
 
 	private map: maplibregl.Map;
 	private progressControl: ProgressControl;
 	private layerToggleControl: LayerToggleControl;
 	private loadedDatasets: Set<string>;
+	private onPanelOpen?: () => void;
+	private onDocPointerDown: (e: PointerEvent) => void;
+
+	setOnPanelOpen(cb: () => void): void {
+		this.onPanelOpen = cb;
+	}
 
 	constructor(options: DataControlOptions) {
 		this.map = options.map;
 		this.progressControl = options.progressControl;
 		this.layerToggleControl = options.layerToggleControl;
 		this.loadedDatasets = options.loadedDatasets;
+		this.onDocPointerDown = (e: PointerEvent) => {
+			if (!this.container?.contains(e.target as Node)) {
+				this.closePanel();
+			}
+		};
 	}
 
 	onAdd(_map: maplibregl.Map) {
@@ -62,12 +75,20 @@ export class DataControl implements maplibregl.IControl {
 		this.loadButton.textContent = 'Load';
 		this.panel.appendChild(this.loadButton);
 
+		// Advanced options (collapsible, below the main action)
+		this.advancedOptions = buildAdvancedOptions();
+		this.panel.appendChild(this.advancedOptions.element);
+
 		// Toggle panel visibility
 		this.button.addEventListener('click', () => {
 			if (this.panel && this.input) {
 				const isOpen = this.panel.classList.toggle('control-panel--open');
 				if (isOpen) {
+					this.onPanelOpen?.();
 					this.input.focus();
+					document.addEventListener('pointerdown', this.onDocPointerDown);
+				} else {
+					document.removeEventListener('pointerdown', this.onDocPointerDown);
 				}
 			}
 		});
@@ -82,17 +103,25 @@ export class DataControl implements maplibregl.IControl {
 			this.loadButton.textContent = 'Loading...';
 			this.loadButton.disabled = true;
 
+			const opts = this.advancedOptions?.getValues() ?? {};
+
 			try {
 				const success = await loadDataFromUrl(url, {
 					map: this.map,
 					progressControl: this.progressControl,
 					layerToggleControl: this.layerToggleControl,
-					loadedDatasets: this.loadedDatasets
+					loadedDatasets: this.loadedDatasets,
+					format: opts.format,
+					crs: opts.crs,
+					latColumn: opts.latColumn,
+					lngColumn: opts.lngColumn,
+					geoColumn: opts.geoColumn,
 				});
 
 				if (success) {
-					this.panel.classList.remove('control-panel--open');
+					this.closePanel();
 					this.input.value = '';
+					this.advancedOptions?.reset();
 				}
 			} finally {
 				this.loadButton.textContent = 'Load';
@@ -113,7 +142,13 @@ export class DataControl implements maplibregl.IControl {
 		return this.container;
 	}
 
+	closePanel(): void {
+		this.panel?.classList.remove('control-panel--open');
+		document.removeEventListener('pointerdown', this.onDocPointerDown);
+	}
+
 	onRemove() {
+		document.removeEventListener('pointerdown', this.onDocPointerDown);
 		if (this.container && this.container.parentNode) {
 			this.container.parentNode.removeChild(this.container);
 		}

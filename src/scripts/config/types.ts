@@ -16,6 +16,8 @@ export interface MapSettings {
 	zoom: number;
 	/** Basemap identifier */
 	basemap: BasemapId;
+	/** Fallback CRS for datasets without file-level metadata (CSV, JSON array). Defaults to EPSG:4326. */
+	crs?: string;
 }
 
 /** Partial style configuration for dataset rendering (all fields optional) */
@@ -42,6 +44,8 @@ export interface DatasetConfig {
 	style?: StyleConfigPartial;
 	/** When true, dataset is loaded into DuckDB but not rendered or shown in layer panel (source-only for operations) */
 	hidden?: boolean;
+	/** When false, this dataset's geometry is excluded from the initial fitBounds calculation (default: true) */
+	fitBounds?: boolean;
 	/** Explicit format override when URL or Content-Type is ambiguous */
 	format?: ConfigFormat;
 	/** Latitude column name override for CSV and JSON array formats */
@@ -50,6 +54,16 @@ export interface DatasetConfig {
 	lngColumn?: string;
 	/** Combined coordinate column containing "lat, lng" values (mutually exclusive with latColumn/lngColumn) */
 	geoColumn?: string;
+	/**
+	 * Pagination control for APIs that limit response size.
+	 * - true: force pagination detection
+	 * - false: disable pagination (single fetch only)
+	 * - { maxPages: N }: cap the number of pages fetched
+	 * - omitted: auto-detect from response (default)
+	 */
+	paginate?: boolean | { maxPages?: number };
+	/** Explicit source CRS override (e.g. 'EPSG:3005'). Takes priority over file-detected CRS and map.crs. */
+	crs?: string;
 }
 
 import type { ConfigFormat } from '../loaders/types';

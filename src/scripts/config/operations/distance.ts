@@ -1,9 +1,11 @@
 /**
  * Distance operation - proximity queries between two datasets.
+ * Reprojects to a local UTM CRS for geodetically accurate distance calculations,
+ * then stores results in WGS84. Falls back to degree approximation for polar regions.
  *
  * Two modes:
  * - 'filter': Keep features from inputs[0] within maxDistance of any feature in inputs[1] (ST_DWithin)
- * - 'annotate': Enrich features from inputs[0] with dist_<unit> property — distance to nearest feature in inputs[1]
+ * - 'annotate': Enrich features from inputs[0] with dist_<unit> property - distance to nearest feature in inputs[1]
  *
  * Input ordering: inputs[0] is always the primary dataset (filtered/enriched),
  * inputs[1] is the proximity target.
@@ -16,7 +18,7 @@ import type { BinaryOperation, DistanceParams } from '../types';
 import type { OperationContext } from './index';
 import { parseStyleConfig, shouldSkipAutoLayers } from './index';
 import { addOperationResultToMap } from './buffer';
-import { toMeters, fromMeters, metersToDegreesAtLatitude, degreesToMetersAtLatitude, unitSuffix } from './unit-conversion';
+import { toMeters, fromMeters, metersToDegreesAtLatitude, degreesToMetersAtLatitude, unitSuffix, getProjectedCrs } from './unit-conversion';
 
 /**
  * Execute a distance operation.
@@ -59,15 +61,8 @@ export async function executeDistance(
 
 	const connection = await getConnection();
 
-	// Get centroid latitude for meter-to-degree conversion
-	const centroidStmt = await connection.prepare(`
-		SELECT AVG(ST_Y(ST_Centroid(geometry))) as avg_lat
-		FROM features
-		WHERE dataset_id = ? OR dataset_id = ?
-	`);
-	const centroidResult = await centroidStmt.query(inputA, inputB);
-	await centroidStmt.close();
-	const avgLatitude = Number(centroidResult.toArray()[0]?.avg_lat) || 49;
+	// Derive projected CRS for geodetically accurate distance calculations
+	const crs = await getProjectedCrs(connection, inputA);
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -79,70 +74,139 @@ export async function executeDistance(
 	await deleteDatasets.close();
 
 	if (mode === 'filter') {
-		// Filter mode: keep features from A within maxDistance of any feature in B
 		const maxDistMeters = toMeters(maxDistance!, units);
-		const distanceDegrees = metersToDegreesAtLatitude(maxDistMeters, avgLatitude);
-		console.log(`[Distance] Filter: ${maxDistance} ${units} (${maxDistMeters}m) → ${distanceDegrees.toFixed(6)}° at lat ${avgLatitude.toFixed(2)}°`);
 
-		const insertFiltered = await connection.prepare(`
-			INSERT INTO features (dataset_id, source_url, geometry, properties)
-			SELECT
-				?,
-				'operation:distance',
-				a.geometry,
-				a.properties
-			FROM features a
-			WHERE a.dataset_id = ?
-			AND EXISTS (
-				SELECT 1 FROM features b
-				WHERE b.dataset_id = ?
-				AND ST_DWithin(a.geometry, b.geometry, ?)
-			)
-		`);
-		await insertFiltered.query(outputId, inputA, inputB, distanceDegrees);
-		await insertFiltered.close();
+		if (crs.fallback) {
+			// Polar fallback: degree approximation
+			const distanceDegrees = metersToDegreesAtLatitude(maxDistMeters, crs.latitude);
+			console.log(`[Distance] Filter (fallback): ${maxDistance} ${units} (${maxDistMeters}m) → ${distanceDegrees.toFixed(6)}° at lat ${crs.latitude.toFixed(2)}°`);
+
+			const insertFiltered = await connection.prepare(`
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
+				SELECT
+					?,
+					'operation:distance',
+					a.geometry,
+					a.properties
+				FROM features a
+				WHERE a.dataset_id = ?
+				AND EXISTS (
+					SELECT 1 FROM features b
+					WHERE b.dataset_id = ?
+					AND ST_DWithin(a.geometry, b.geometry, ?)
+				)
+			`);
+			await insertFiltered.query(outputId, inputA, inputB, distanceDegrees);
+			await insertFiltered.close();
+		} else {
+			// Projected CRS: ST_DWithin in meters
+			// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
+			console.log(`[Distance] Filter: ${maxDistance} ${units} (${maxDistMeters}m), crs=${crs.epsg}`);
+
+			const insertFiltered = await connection.prepare(`
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
+				SELECT
+					?,
+					'operation:distance',
+					a.geometry,
+					a.properties
+				FROM features a
+				WHERE a.dataset_id = ?
+				AND EXISTS (
+					SELECT 1 FROM features b
+					WHERE b.dataset_id = ?
+					AND ST_DWithin(
+						ST_Transform(ST_FlipCoordinates(a.geometry), 'EPSG:4326', ?),
+						ST_Transform(ST_FlipCoordinates(b.geometry), 'EPSG:4326', ?),
+						?
+					)
+				)
+			`);
+			await insertFiltered.query(outputId, inputA, inputB, crs.epsg, crs.epsg, maxDistMeters);
+			await insertFiltered.close();
+		}
 	} else {
 		// Annotate mode: enrich A features with distance to nearest B feature
-		// ST_Distance returns degrees; we convert to the user's unit via a scale factor.
-		// degrees → meters → user unit, collapsed into a single multiplier.
-		const metersPerDegree = degreesToMetersAtLatitude(1, avgLatitude);
-		const unitsPerDegree = fromMeters(metersPerDegree, units);
 		const propName = `dist_${suffix}`;
-		console.log(`[Distance] Annotate: scale factor ${unitsPerDegree.toFixed(4)} ${units}/° at lat ${avgLatitude.toFixed(2)}° (property: ${propName})`);
 
-		// Compute nearest distance per A feature, merge dist_<unit> into properties
-		// maxDistance cap is optional — when provided, excludes features beyond the threshold
-		const havingClause = maxDistance !== undefined
-			? `HAVING min_dist_deg <= ${metersToDegreesAtLatitude(toMeters(maxDistance, units), avgLatitude)}`
-			: '';
+		if (crs.fallback) {
+			// Polar fallback: degree approximation with scale factor
+			const metersPerDegree = degreesToMetersAtLatitude(1, crs.latitude);
+			const unitsPerDegree = fromMeters(metersPerDegree, units);
+			console.log(`[Distance] Annotate (fallback): scale factor ${unitsPerDegree.toFixed(4)} ${units}/° at lat ${crs.latitude.toFixed(2)}° (property: ${propName})`);
 
-		const insertAnnotated = await connection.prepare(`
-			INSERT INTO features (dataset_id, source_url, geometry, properties)
-			SELECT
-				?,
-				'operation:distance',
-				sub.geometry,
-				json_merge_patch(
-					sub.properties,
-					json_object('${propName}', ROUND(sub.min_dist_deg * ?, 1))
-				)
-			FROM (
+			const havingClause = maxDistance !== undefined
+				? `HAVING min_dist_deg <= ${metersToDegreesAtLatitude(toMeters(maxDistance, units), crs.latitude)}`
+				: '';
+
+			const insertAnnotated = await connection.prepare(`
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
 				SELECT
-					a.geometry,
-					a.properties,
-					MIN(ST_Distance(a.geometry, b.geometry)) as min_dist_deg
-				FROM features a
-				CROSS JOIN features b
-				WHERE a.dataset_id = ?
-				AND b.dataset_id = ?
-				AND a.geometry IS NOT NULL
-				AND b.geometry IS NOT NULL
-				GROUP BY a.rowid, a.geometry, a.properties
-				${havingClause}
-			) sub
-		`);
-		await insertAnnotated.query(outputId, unitsPerDegree, inputA, inputB);
-		await insertAnnotated.close();
+					?,
+					'operation:distance',
+					sub.geometry,
+					json_merge_patch(
+						sub.properties,
+						json_object('${propName}', ROUND(sub.min_dist_deg * ?, 1))
+					)
+				FROM (
+					SELECT
+						a.geometry,
+						a.properties,
+						MIN(ST_Distance(a.geometry, b.geometry)) as min_dist_deg
+					FROM features a
+					CROSS JOIN features b
+					WHERE a.dataset_id = ?
+					AND b.dataset_id = ?
+					AND a.geometry IS NOT NULL
+					AND b.geometry IS NOT NULL
+					GROUP BY a.rowid, a.geometry, a.properties
+					${havingClause}
+				) sub
+			`);
+			await insertAnnotated.query(outputId, unitsPerDegree, inputA, inputB);
+			await insertAnnotated.close();
+		} else {
+			// Projected CRS: ST_Distance in meters, convert to output unit
+			// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
+			const unitDivisor = toMeters(1, units); // meters per output unit
+			console.log(`[Distance] Annotate: crs=${crs.epsg}, output unit=${units} (property: ${propName})`);
+
+			const havingClause = maxDistance !== undefined
+				? `HAVING min_dist_m <= ${toMeters(maxDistance, units)}`
+				: '';
+
+			const insertAnnotated = await connection.prepare(`
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
+				SELECT
+					?,
+					'operation:distance',
+					sub.geometry,
+					json_merge_patch(
+						sub.properties,
+						json_object('${propName}', ROUND(sub.min_dist_m / ?, 1))
+					)
+				FROM (
+					SELECT
+						a.geometry,
+						a.properties,
+						MIN(ST_Distance(
+							ST_Transform(ST_FlipCoordinates(a.geometry), 'EPSG:4326', ?),
+							ST_Transform(ST_FlipCoordinates(b.geometry), 'EPSG:4326', ?)
+						)) as min_dist_m
+					FROM features a
+					CROSS JOIN features b
+					WHERE a.dataset_id = ?
+					AND b.dataset_id = ?
+					AND a.geometry IS NOT NULL
+					AND b.geometry IS NOT NULL
+					GROUP BY a.rowid, a.geometry, a.properties
+					${havingClause}
+				) sub
+			`);
+			await insertAnnotated.query(outputId, unitDivisor, crs.epsg, crs.epsg, inputA, inputB);
+			await insertAnnotated.close();
+		}
 	}
 
 	// Get feature count

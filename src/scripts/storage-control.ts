@@ -21,7 +21,7 @@ const ICON_COLORS: Record<string, string> = {
 const ERROR_REASONS: FallbackReason[] = ['opfs-failed', 'corruption', 'quota-exceeded'];
 
 interface StorageControlOptions {
-	/** Called when this control's panel opens, so the layer control can close */
+	/** Called when this control's panel opens, so other right-hand controls can close */
 	onPanelOpen?: () => void;
 }
 
@@ -63,9 +63,15 @@ export class StorageControl implements maplibregl.IControl {
 	private panel: HTMLDivElement | undefined;
 	private onPanelOpen?: () => void;
 	private multiTabDetected = false;
+	private onDocPointerDown: (e: PointerEvent) => void;
 
 	constructor(options?: StorageControlOptions) {
 		this.onPanelOpen = options?.onPanelOpen;
+		this.onDocPointerDown = (e: PointerEvent) => {
+			if (!this.container?.contains(e.target as Node)) {
+				this.closePanel();
+			}
+		};
 
 		// Start multi-tab detection immediately (non-blocking)
 		detectOtherTabs().then((detected) => {
@@ -92,7 +98,7 @@ export class StorageControl implements maplibregl.IControl {
 
 		// Panel (hidden by default)
 		this.panel = document.createElement('div');
-		this.panel.className = 'control-panel control-panel--left storage-panel';
+		this.panel.className = 'control-panel control-panel--right storage-panel';
 		this.container.appendChild(this.panel);
 
 		// Toggle panel on click
@@ -102,6 +108,9 @@ export class StorageControl implements maplibregl.IControl {
 				if (isOpen) {
 					this.onPanelOpen?.();
 					this.renderPanel();
+					document.addEventListener('pointerdown', this.onDocPointerDown);
+				} else {
+					document.removeEventListener('pointerdown', this.onDocPointerDown);
 				}
 			}
 		});
@@ -113,16 +122,22 @@ export class StorageControl implements maplibregl.IControl {
 	}
 
 	onRemove(): void {
+		document.removeEventListener('pointerdown', this.onDocPointerDown);
 		if (this.container?.parentNode) {
 			this.container.parentNode.removeChild(this.container);
 		}
 	}
 
+	setOnPanelOpen(cb: () => void): void {
+		this.onPanelOpen = cb;
+	}
+
 	/**
-	 * Close the panel (called externally for mutual exclusivity with layer control).
+	 * Close the panel (called externally for right-hand mutual exclusivity).
 	 */
 	closePanel(): void {
 		this.panel?.classList.remove('control-panel--open');
+		document.removeEventListener('pointerdown', this.onDocPointerDown);
 	}
 
 	/**

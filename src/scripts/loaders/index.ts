@@ -4,12 +4,13 @@
  */
 
 export type { DetectedFormat, ConfigFormat, LoaderOptions, LoaderResult, FormatLoader } from './types';
-export { detectFormat } from './detect';
+export { detectFormat, detectFormatFromFile } from './detect';
 export { normalizeGeoJSON } from './geojson';
 export { detectCoordinateColumns } from './columns';
+export { tryLoadJsonArray } from './json-array';
 
 import type { DetectedFormat, LoaderOptions, LoaderResult } from './types';
-import { geojsonLoader } from './geojson';
+import { extractGeoJsonCrs } from './geojson';
 import { tryLoadJsonArray } from './json-array';
 import { csvLoader } from './csv';
 import { geoparquetLoader } from './geoparquet';
@@ -35,7 +36,7 @@ export async function dispatch(
 			return csvLoader.load(response, options);
 
 		case 'geoparquet':
-			return geoparquetLoader.load(response);
+			return geoparquetLoader.load(response, options);
 
 		case 'json-array':
 			// Explicit json-array: parse JSON and try coordinate detection
@@ -61,9 +62,12 @@ async function geojsonWithFallback(
 	// Try GeoJSON normalization first
 	const { normalizeGeoJSON } = await import('./geojson');
 	const normalized = normalizeGeoJSON(data);
-	if (normalized) return { data: normalized };
+	if (normalized) {
+		const detectedCrs = extractGeoJsonCrs(data);
+		return { data: normalized, detectedCrs };
+	}
 
-	// Try json-array fallback
+	// Try json-array fallback (no CRS metadata available)
 	const arrayResult = tryLoadJsonArray(data, options);
 	if (arrayResult) return arrayResult;
 

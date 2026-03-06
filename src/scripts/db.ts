@@ -10,7 +10,7 @@ export { getDB, getConnection, query, startInit, ensureInit, getStorageMode, get
 export type { FallbackReason } from './db/core';
 
 // Dataset CRUD operations
-export { loadGeoJSON, getDatasets, datasetExists, updateDatasetColor, updateDatasetName, updateDatasetVisible, deleteDataset } from './db/datasets';
+export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, datasetExists, updateDatasetColor, updateDatasetName, updateDatasetVisible, deleteDataset } from './db/datasets';
 
 // Feature query operations
 export { getFeaturesAsGeoJSON } from './db/features';

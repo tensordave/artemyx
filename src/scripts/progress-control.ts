@@ -244,10 +244,10 @@ export class ProgressControl implements IControl {
         text = 'Ready';
         break;
       case 'loading':
-        text = `Downloading ${operation}...`;
+        text = message || `Downloading ${operation}...`;
         break;
       case 'processing':
-        text = `Processing ${operation}...`;
+        text = message || `Processing ${operation}...`;
         break;
       case 'success':
         text = message || `${operation} complete`;
@@ -323,9 +323,9 @@ export class ProgressControl implements IControl {
       case 'idle':
         return 'Ready';
       case 'loading':
-        return `Downloading ${operation}...`;
+        return message || `Downloading ${operation}...`;
       case 'processing':
-        return `Processing ${operation}...`;
+        return message || `Processing ${operation}...`;
       case 'success':
         return message || `${operation} complete`;
       case 'error':

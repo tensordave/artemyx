@@ -9,7 +9,7 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 This project demonstrates:
 - **Mapping:** MapLibre GL JS with WebGL-based rendering for smooth panning/zooming
 - **Data Storage:** DuckDB-WASM with spatial extension for in-browser SQL queries
-- **Data Loading:** Fetch GeoJSON, CSV, GeoParquet, and JSON arrays from public API endpoints, store in DuckDB-WASM, then visualize
+- **Data Loading:** Fetch GeoJSON, CSV, GeoParquet, and JSON arrays from public API endpoints or local files, with paginated fetching and CRS auto-detection
 
 ## Key Features
 
@@ -17,8 +17,12 @@ This project demonstrates:
 - Multi-dataset support with layer management UI (visibility, color, rename, delete)
 - YAML-driven configuration for declarative map setup and spatial operations
 - Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
+- Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays) with paginated fetching
+- Local file upload via drag-and-drop or file picker
+- CRS detection and automatic reprojection to WGS84
+- OPFS persistence - sessions survive page refresh
 - Multi-geometry rendering (Point, LineString, Polygon, Multi* variants)
-- Feature inspection with property popups
+- Feature inspection with property popups and hover tooltips
 - Fully client-side - no backend required
 
 ## Tech Stack
@@ -49,7 +53,9 @@ src/scripts/
 │   ├── csv.ts         # CSV parser, delimiter and coordinate auto-detection
 │   ├── geoparquet.ts  # GeoParquet via DuckDB registerFileBuffer
 │   ├── json-array.ts  # JSON array loader with geo column fallback
-│   └── columns.ts     # Shared lat/lng column detection heuristics
+│   ├── columns.ts     # Shared lat/lng column detection heuristics
+│   ├── crs.ts         # CRS parsing and detection utilities
+│   └── paginator.ts   # Paginated GeoJSON fetching (ArcGIS, Socrata, OGC)
 ├── data-actions/      # Data loading pipeline
 │   └── load.ts        # URL fetch, validation, loader dispatch, layer creation
 ├── layers/            # MapLibre layer creation
@@ -60,14 +66,17 @@ src/scripts/
 │   ├── context-menu.ts, context-menu-items.ts         # Context menu
 │   └── layer-row.ts   # Row DOM, inline rename
 ├── ui/                # Reusable UI components
-│   └── error-dialog.ts
+│   ├── error-dialog.ts
+│   └── advanced-options.ts  # DataControl advanced options panel
 ├── icons/             # Phosphor SVG icon strings
 ├── map.ts             # MapLibre init + config loading (entry point)
-├── data-control.ts    # Custom control: load data from URL (GeoJSON, CSV, GeoParquet)
+├── data-control.ts    # Custom control: load data from URL with advanced options (CRS, format, columns)
+├── upload-control.ts  # Custom control: local file upload (drag-and-drop, file picker)
 ├── config-control.ts  # Custom control: view active YAML config with syntax highlighting
 ├── layer-control.ts   # Custom control: layer visibility, color, rename, delete
 ├── storage-control.ts # Custom control: OPFS status and session management
 ├── basemap-control.ts # Custom control: basemap switcher
+├── scale-control.ts   # Custom control: distance scale bar with metric/imperial toggle
 ├── progress-control.ts # Custom control: status log with expandable history
 ├── basemaps.ts        # Basemap tile configurations
 └── popup.ts           # Feature popup and hover tooltip utilities
@@ -160,6 +169,6 @@ Layers support full MapLibre paint/layout properties including expressions (`mat
 
 ## Status
 
-**Current version:** v0.4.1
+**Current version:** v0.4.2
 
 [changelog](CHANGELOG.md) - [roadmap](ROADMAP.md)

@@ -7,14 +7,6 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.4.2 - Data Loading Robustness
-
-- **Download URL handling** - Properly handle file download endpoints (Content-Disposition attachments, direct file links) that don't return inline JSON; detect and follow download redirects; complements paginated fetching and format support
-- **Paginated GeoJSON fetching** - Stream pages directly into DuckDB as they arrive; detect pagination via `exceededTransferLimit` (ArcGIS), `$offset/$limit` (Socrata), `next` link (OGC API Features)
-- **Local file upload** - Drag-and-drop or file picker for loading local files (GeoJSON, CSV, GeoParquet) directly onto the map without requiring a hosted URL. Use Phosphor file-arrow-up icon. Top-right, alongside DataControl.
-- **CRS detection and reprojection** - Detect coordinate reference system from loaded data (GeoJSON `crs` field, GeoParquet metadata); reproject to WGS84 via `ST_Transform(geometry, source_crs, 'EPSG:4326')` using DuckDB Spatial's built-in PROJ support; optional `map.crs` field in `MapSettings` sets the assumed input CRS for formats without metadata (CSV, JSON array) - defaults to `EPSG:4326` when omitted; a small CRS indicator label in the map UI shows the active assumed CRS
-- **Geodetically accurate spatial operations** - Replace the `metersToDegreesAtLatitude()` approximation in `unit-conversion.ts` with auto-selected local projected CRS per operation; compute the input dataset's centroid, derive the appropriate UTM zone, reproject with `ST_Transform` before the operation and back to WGS84 after; eliminates oval buffers and distance distortion at high latitudes (Edmonton, Helsinki, etc.); affects buffer, distance, and any future area-dependent operations
-
 ### v0.4.3 - Map Interactivity
 
 - **Mouse coordinate display** - Show lat/lng of cursor position in map corner; toggleable
@@ -26,8 +18,10 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 - **Parser refactor** - Review and simplify `parser.ts`
 - **Paint/layout validation** - Per-type validation of `paint`/`layout` properties at config load time
 - **CSS refactor** - Reorganize `global.css` into logical styling groups
+- **Load.ts Refactor** - Split out loading functions into separate scripts
 - **Unit test expansion** - Coverage for `db.ts` (dataset ID generation, bulk insert, query performance); establish testing patterns alongside new feature work going forward
 - **Map page config injection refactor** - Build-time Shiki highlighting for config YAML is currently duplicated across all Astro map pages (app, index, test, examples); extract into a shared utility function or layout-level helper to reduce per-page boilerplate
+- **Update example pages with pagination** - where applicable, update some of the example configs to auto-paginate
 
 ### v0.5.x - Styling Overhaul
 
@@ -80,7 +74,7 @@ Goal: generate PMTiles archives directly in the browser from any DuckDB-backed d
 - **Undo/redo** - Session history stack for operations and dataset changes; step backward and forward through state; covers dataset loads, operation executions, and layer modifications
 - **Statistics panel** - Per-dataset summary statistics: feature count, and for numeric attribute columns, min/max/mean/median. Use Phosphor chart-bar icon. Top-left.
 - **Measurement tools** - Distance, area, bearing calculations. Use Phosphor ruler icon. Top-left.
-- **Keyboard shortcuts** - L (layer control), P (progress), Esc (close), Delete (remove feature)
+- **Keyboard shortcuts** - L (layer control), P (progress), Esc (close), Delete (remove feature), WASD for panning map, R/F to zoom in and out.
 - **Collapsed tools menu** - By v0.7.x the top-left control group (LayerControl, StorageControl, BasemapControl, style panel, geocoding, stats, measurement) will be too tall for smaller screens; introduce a collapsible "tools" menu or grouped overflow control to keep the UI manageable without hiding functionality
 - **ARIA labels** - Accessibility improvements for `layer-control.ts`
 - **Toggle for showing text beside icons** - Accessibility improvement for desktop mainly, a button to expand all buttons to show their text value (ie the tooltip button title)
@@ -162,6 +156,9 @@ Items worth building eventually but not yet assigned to a version:
 - **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc. 
 
 ## Completed
+
+### v0.4.2 - Data Loading Robustness
+- Local file upload, paginated GeoJSON fetching (ArcGIS, Socrata, OGC), download URL handling, CRS detection and reprojection, DataControl advanced options, geodetically accurate spatial operations (UTM auto-projection), controls UX updates, import fixes
 
 ### v0.4.1 - Polish and Feedback
 - View config map control, scale bar, attribution, progress control overhaul, basemap control move, mobile UX polish, landing page update

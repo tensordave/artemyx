@@ -155,6 +155,15 @@ header {
 	background: #1a1a1a;
 }
 
+#map.map--dragover {
+	box-shadow: inset 0 0 0 3px #3388ff;
+}
+
+/* Upload button highlights white when a file is being dragged over the map */
+.maplibregl-ctrl .control-btn--dragover svg {
+	fill: #fff !important;
+}
+
 /* Dark mode popup styling */
 .maplibregl-popup-content {
 	background: #2c2c2c !important;
@@ -194,6 +203,18 @@ header {
 
 .maplibregl-popup-anchor-right .maplibregl-popup-tip {
 	border-left-color: #2c2c2c !important;
+}
+
+/* Attribution above scale bar: MapLibre uses floats by default; switch to
+   flex column-reverse so attribution (order: 1) renders above the scale bar. */
+.maplibregl-ctrl-bottom-right {
+	display: flex !important;
+	flex-direction: column-reverse !important;
+	align-items: flex-end !important;
+}
+
+.maplibregl-ctrl-bottom-right > .maplibregl-ctrl-attrib {
+	order: 1 !important;
 }
 
 /* Attribution control - force dark theme regardless of system color scheme.
@@ -597,6 +618,158 @@ header {
 .maplibregl-ctrl .control-submit:disabled {
 	background-color: #555;
 	cursor: not-allowed;
+}
+
+/* Upload Control - drop zone panel */
+
+.upload-drop-zone {
+	width: 200px;
+	padding: 14px 12px;
+	border: 1px dashed #555;
+	border-radius: 4px;
+	background-color: #1a1a1a;
+	text-align: center;
+	transition: border-color 0.15s, background-color 0.15s;
+}
+
+.upload-drop-zone--active {
+	border-color: #3388ff;
+	background-color: rgba(51, 136, 255, 0.08);
+}
+
+.upload-drop-label {
+	margin: 0 0 10px;
+	font-size: 12px;
+	color: #aaa;
+	line-height: 1.5;
+}
+
+.maplibregl-ctrl .upload-browse-btn {
+	width: 100% !important;
+	height: auto !important;
+	padding: 8px !important;
+	background-color: #3388ff !important;
+	color: #fff !important;
+	border: none !important;
+	border-radius: 4px !important;
+	font-size: 12px !important;
+	font-weight: bold !important;
+	cursor: pointer !important;
+	display: block !important;
+	box-sizing: border-box !important;
+}
+
+.maplibregl-ctrl .upload-browse-btn:hover {
+	background-color: #2277ee !important;
+}
+
+/* Advanced Options (shared by DataControl and UploadControl) */
+
+.advanced-options-wrapper {
+	margin-top: 8px;
+	border-top: 1px solid #444;
+	padding-top: 6px;
+}
+
+.maplibregl-ctrl .advanced-options-toggle {
+	display: flex !important;
+	align-items: center !important;
+	gap: 4px !important;
+	width: 100% !important;
+	height: auto !important;
+	padding: 4px 2px !important;
+	background: none !important;
+	border: none !important;
+	color: #aaa !important;
+	font-size: 11px !important;
+	cursor: pointer !important;
+}
+
+.maplibregl-ctrl .advanced-options-toggle:hover {
+	color: #ddd !important;
+	background: none !important;
+}
+
+.maplibregl-ctrl .advanced-options-toggle svg {
+	width: 14px;
+	height: 14px;
+	fill: #aaa;
+	transition: transform 0.15s;
+}
+
+.maplibregl-ctrl .advanced-options-toggle:hover svg {
+	fill: #ddd;
+}
+
+.advanced-options-toggle--open svg {
+	transform: rotate(90deg);
+}
+
+.advanced-options {
+	display: none;
+	flex-direction: column;
+	gap: 6px;
+	padding-top: 6px;
+}
+
+.advanced-options--open {
+	display: flex;
+}
+
+.advanced-options-field {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.advanced-options-label {
+	font-size: 10px;
+	color: #888;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.advanced-options-select,
+.advanced-options-input {
+	width: 100%;
+	padding: 5px 6px;
+	background-color: #1a1a1a;
+	color: #fff;
+	border: 1px solid #555;
+	border-radius: 3px;
+	font-size: 12px;
+	box-sizing: border-box;
+}
+
+.advanced-options-select:focus,
+.advanced-options-input:focus {
+	outline: none;
+	border-color: #3388ff;
+}
+
+.advanced-options-input:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+.advanced-options-input--invalid {
+	border-color: #ef4444;
+}
+
+.advanced-options-hint {
+	font-size: 10px;
+	color: #ef4444;
+	min-height: 14px;
+}
+
+.advanced-options-columns {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+}
+
+.advanced-options-columns .advanced-options-field:last-child {
+	grid-column: 1 / -1;
 }
 
 /* Config Viewer (floating panel for YAML config display) */
@@ -1486,4 +1659,103 @@ body.examples #map {
 	.examples-sidebar-nav {
 		display: flex;
 	}
+}
+
+/* ── Dialog overlay ── */
+
+.dialog-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10000;
+}
+
+.dialog-box {
+	background-color: #2a2a2a;
+	border-radius: 8px;
+	padding: 16px;
+	min-width: 280px;
+	max-width: 420px;
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+	border: 1px solid #444;
+}
+
+.dialog-title {
+	font-size: 14px;
+	font-weight: bold;
+	margin-bottom: 10px;
+}
+
+.dialog-title--error {
+	color: #ff6b6b;
+}
+
+.dialog-title--warn {
+	color: #f59e0b;
+}
+
+.dialog-message {
+	color: #ccc;
+	font-size: 12px;
+	line-height: 1.4;
+	margin-bottom: 16px;
+}
+
+.dialog-button-row {
+	display: flex;
+	gap: 8px;
+}
+
+.dialog-btn {
+	flex: 1;
+	padding: 8px;
+	background-color: #3a3a3a;
+	color: #fff;
+	border: 1px solid #555;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 12px;
+}
+
+.dialog-btn:hover {
+	background-color: #4a4a4a;
+}
+
+.dialog-btn--primary {
+	background-color: #3388ff;
+	border-color: #3388ff;
+}
+
+.dialog-btn--primary:hover {
+	background-color: #2277ee;
+}
+
+.dialog-input {
+	width: 100%;
+	padding: 8px;
+	margin-bottom: 4px;
+	background-color: #1a1a1a;
+	color: #fff;
+	border: 1px solid #555;
+	border-radius: 3px;
+	font-size: 12px;
+	box-sizing: border-box;
+}
+
+.dialog-input:focus {
+	border-color: #3388ff;
+	outline: none;
+}
+
+.dialog-hint {
+	color: #ff6b6b;
+	font-size: 11px;
+	min-height: 16px;
+	margin-bottom: 12px;
 }

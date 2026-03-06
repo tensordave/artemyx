@@ -278,3 +278,13 @@ export function attachFeatureHoverHandlers(
 
 	return sharedHoverPopup;
 }
+
+/**
+ * Remove layer IDs from the hover tooltip registry.
+ * Call when deleting a dataset to prevent queryRenderedFeatures errors on stale layers.
+ */
+export function removeFeatureHandlers(layerIds: string[]): void {
+	for (const id of layerIds) {
+		hoverRegistry.delete(id);
+	}
+}

@@ -4,6 +4,114 @@ All notable changes to this project will be documented in this file.
 
 Format follows [Semantic Versioning](https://semver.org/).
 
+## v0.4.2 - 2026-03-05
+
+### CRS Detection and Reprojection
+
+- **CRS detection on ingest**: datasets in non-WGS84 coordinate reference systems are now detected and reprojected to EPSG:4326 on load via DuckDB's `ST_Transform`; all data in the `features` table is always WGS84
+- **GeoJSON legacy `crs` member** (`loaders/geojson.ts`): `extractGeoJsonCrs()` reads the deprecated `crs.properties.name` URN field from older GeoJSON exports (ArcGIS, QGIS) and normalizes it to an authority:code string
+- **GeoParquet metadata** (`loaders/geoparquet.ts`): queries `parquet_kv_metadata()` for the `geo` key defined by the GeoParquet spec; extracts CRS from PROJJSON objects in `columns[geomCol].crs`; reprojects directly in the SQL query with `ST_Transform` + `ST_FlipCoordinates` (corrects EPSG:4326 axis order)
+- **CRS parsing utilities** (`loaders/crs.ts`): `parseCrsAuthority()` handles URN (`urn:ogc:def:crs:EPSG::27700`), PROJJSON (`{ id: { authority, code } }`), and bare authority strings; `isWgs84()` recognizes EPSG:4326/4979/4269/CRS84; `resolveSourceCrs()` implements the priority chain
+- **CRS priority chain**: explicit `dataset.crs` config > file-detected CRS > `map.crs` fallback > EPSG:4326 default; resolved in `load.ts` before DuckDB insert
+- **Projected coordinate guard** (`loaders/crs.ts`, `data-actions/load.ts`): `hasProjectedCoordinates()` samples features for coordinates outside WGS84 range; when detected without a known CRS, prompts the user with `showCrsPromptDialog()` to enter the source CRS before loading
+- **CRS prompt dialog** (`ui/error-dialog.ts`): amber-themed dialog with text input, validation, Cancel/Reproject buttons; styled with new `.dialog-input`, `.dialog-hint` classes in `global.css`
+- **Config fields** (`config/types.ts`): `crs` on `DatasetConfig` (explicit override, e.g. `"EPSG:3005"`) and `MapSettings` (fallback for metadata-less formats like CSV); validated in `parser.ts` with `validateCrsString()`
+- **Schema v3** (`db/core.ts`): `SCHEMA_VERSION` bumped from `'2'` to `'3'`; `source_crs TEXT` column added to `datasets` table for provenance tracking; triggers OPFS wipe on existing sessions
+- **Reprojection in DuckDB insert** (`db/datasets.ts`): `loadGeoJSON()` and `appendFeatures()` conditionally wrap the geometry expression with `ST_Transform(..., sourceCrs, 'EPSG:4326')` + `ST_FlipCoordinates` when `sourceCrs` is set
+- **Loader interface** (`loaders/types.ts`): `detectedCrs` added to `LoaderResult`; `crs` added to `LoaderOptions`; threaded through `dispatch()`, `geojsonWithFallback()`, and the paginated loading path
+
+### Paginated GeoJSON Fetching
+
+- **Pagination detection** (`loaders/paginator.ts`): new module that auto-detects paginated API responses after the first fetch and provides an async generator for subsequent pages; supports three API types:
+  - **ArcGIS REST**: detects `exceededTransferLimit: true` in response; paginates via `resultOffset` query param; requires `f=geojson` in the URL (native ArcGIS format not converted)
+  - **OGC API Features**: detects `links[]` array with `rel: "next"`; follows the `next` href directly
+  - **Socrata**: detects `/resource/` URL pattern with item count equal to the page limit (explicit `$limit` or default 1000); paginates via `$offset`/`$limit`; handles both plain array (`.json`) and FeatureCollection (`.geojson`) response formats
+  - Safety cap of 100 pages (configurable via `maxPages`) prevents runaway loops
+- **Streaming render**: first page renders on the map immediately while subsequent pages load in the background; after all pages complete, the MapLibre source is updated with the full dataset via `updateSourceData()`; progress messages show page-by-page status (`"Loading bikeways (page 3, 2000 features)..."`)
+- **`appendFeatures()`** (`db/datasets.ts`): new function that inserts additional features into an existing dataset without deleting existing data or recreating metadata; uses the same virtual-file + `INSERT...SELECT` pattern as `loadGeoJSON()` with unique filenames per call
+- **`updateFeatureCount()`** (`db/datasets.ts`): recounts features for a dataset and updates the `feature_count` in metadata; called once after all pages are loaded
+- **`paginate` config field** (`config/types.ts`): optional field on `DatasetConfig` - `true` to force detection, `false` to disable, `{ maxPages: N }` to cap pages, omit for auto-detect; validated in `parser.ts`; passed through from `loadDatasetsFromConfig`
+- **Progress message fix** (`progress-control.ts`): `render()` and `getStatusText()` were ignoring the `message` parameter for `loading`/`processing` statuses, always showing generic text; now uses `message || fallback` so page-level progress messages display in both the live status and history panel
+
+### Controls UX Updates
+
+- **Right-hand control group**: `StorageControl` moved from `top-left` to `top-right`; panel direction updated from `control-panel--left` to `control-panel--right` so it opens leftward alongside the other right-side panels
+- **Right-side mutual exclusion**: `DataControl`, `UploadControl`, `ConfigControl`, and `StorageControl` now close each other when a panel opens; same `setOnPanelOpen` / `closePanel` pattern already used by the left-side group; all four controls expose public `closePanel()` and `setOnPanelOpen()` methods; wired in `map.ts`
+- **Left-side mutual exclusion**: `StorageControl` removed from the left-side group; `LayerToggleControl` and `BasemapControl` now only close each other
+- **Click-outside to close**: `pointerdown` listener on `document` added to all quick-access panels - `DataControl`, `UploadControl`, `StorageControl`, and `BasemapControl`; listener is added on open and removed on close and `onRemove`; `ConfigControl` excluded (has an X button and dominates the viewport)
+- **Browse files button**: `.upload-browse-btn` scoped under `.maplibregl-ctrl` with `!important` overrides to win over MapLibre's `button` reset (`height: 29px`, `padding: 0`, `width: 29px`); now renders full-width at correct height with bold label
+
+### Local File Upload
+
+- **`UploadControl`** (`src/scripts/upload-control.ts`): new `IControl` added at `top-right`, between `DataControl` and `ConfigControl`; button uses `fileArrowUpIcon` (Phosphor `FileArrowUp`)
+- **File picker**: clicking the button opens a panel with an explainer label and a "Browse files" button that triggers a hidden `<input type="file" accept=".geojson,.json,.csv,.parquet,.geoparquet">`; selecting a file closes the panel and loads it
+- **Drag-and-drop**: `dragover`/`dragleave`/`drop` registered on `map.getContainer()`; dropping a file anywhere on the map loads it; if the panel is open when a drop lands, it closes automatically
+- **Drag state feedback**: `map--dragover` (inset blue ring on the map), `control-btn--dragover` (upload icon turns white), and `upload-drop-zone--active` (blue border + tint on the panel drop zone) are all toggled together via `clearDragState()`; all three are removed on drop, dragleave, or panel close
+- **Panel**: drop zone `div` with dashed border and explainer text; "Browse files" button styled to match `control-submit`; Esc closes the panel; listener added on open and removed on close
+- **`loadDataFromFile(file, options)`** added to `src/scripts/data-actions/load.ts`: checks `file.size` against the 50MB limit, runs the quota preflight, wraps `File` in `new Response(file)` (File extends Blob), detects format via `detectFormatFromFile()`, then runs the same DuckDB insert and MapLibre render pipeline as `loadDataFromUrl()`; display name strips the file extension
+- **`detectFormatFromFile(file)`** added to `src/scripts/loaders/detect.ts`: uses `file.name` extension against `EXTENSION_MAP`, falls back to `file.type` MIME against `CONTENT_TYPE_MAP`; exported from `loaders/index.ts`
+- **`file-arrow-up` icon** (`src/scripts/icons/file-arrow-up.ts`): Phosphor `FileArrowUp` SVG; re-exported from `icons/index.ts`
+- **CSS**: `#map.map--dragover` (inset ring), `.control-btn--dragover svg` (white fill), `.upload-drop-zone` (dashed border, dark bg), `.upload-drop-zone--active` (blue border + tint), `.upload-drop-label` (muted 12px text), `.upload-browse-btn` (blue button matching control-submit style)
+
+### Download URL Handling
+
+- **Content-Disposition format detection** (`loaders/detect.ts`): `detectFormat()` now parses the `Content-Disposition` header for a filename and uses its extension for format detection; handles quoted, unquoted, and RFC 5987 `filename*=` notations; takes priority over URL extension and Content-Type since download endpoints often serve files from generic URLs with ambiguous content types
+- **Post-redirect URL detection** (`data-actions/load.ts`): format detection now uses `response.url` (final URL after redirects) instead of the original URL; download endpoints that redirect from a generic path (e.g. `/download/12345`) to a file URL (e.g. `/cdn/parks.geojson`) now resolve the correct format from the final extension
+- **CORS error messaging** (`data-actions/load.ts`): network errors from servers that block cross-origin requests now show a specific "Cross-Origin Request Blocked" dialog advising the user to download the file and use the upload button to load it locally, instead of a generic "Failed to Load Data" error
+
+### Data Loading Edge Cases
+
+- **3D coordinate tolerance** (`db/datasets.ts`): `read_json_auto` infers a schema from sampled features and fails when later records have 3D coordinates (`[lng, lat, elevation]`) while the sample contained only 2D ones - common in ArcGIS Open Data exports; fixed by adding `maximum_depth=1` to stop DuckDB from recursing into geometry/coordinate structures during schema inference
+- **Bounds fitting robustness** (`data-actions/load.ts`): `fitMapToFeatures` crashed on features with empty or partially-null coordinate arrays (e.g. paginated ArcGIS API responses with malformed features); all geometry type cases now use optional chaining and length guards; `LineString`/`MultiPoint` and `Polygon`/`MultiLineString` cases collapsed (identical iteration)
+- **Empty coordinate filtering** (`db/features.ts`): geometry validation now rejects features with `coordinates: []` (empty array) which previously passed the `!geometry.coordinates` truthy check and reached MapLibre as invalid geometries
+
+### Opt-out of Auto-fit Bounds
+
+- **`fitBounds` config field** (`config/types.ts`): optional boolean on `DatasetConfig` (default `true`); when `false`, the dataset's geometry is excluded from the initial `fitBounds` calculation after config load; useful for datasets whose geometry would pull the view far from the area of interest (e.g. long ferry routes stretching across a strait)
+- **Validation** (`config/parser.ts`): type-checked as boolean if present, same pattern as `hidden`
+- **Selective bounds** (`data-actions/load.ts`): replaced the previous "query all features" approach with a per-dataset filter; only datasets where `fitBounds !== false` contribute to the combined bounds calculation at the end of `loadDatasetsFromConfig`
+- **Match styling example** (`public/examples/configs/match-styling.yaml`): removed the attribute operation that filtered out ferry routes; dataset now uses `fitBounds: false` instead, with ferry routes styled as sky blue lines
+
+### DataControl Advanced Options
+
+- **Shared advanced options panel** (`ui/advanced-options.ts`): reusable `buildAdvancedOptions()` builder creates a collapsible options row with gear icon toggle; returns `{ element, getValues(), reset() }`; used by both `DataControl` and `UploadControl`
+- **Format override**: `<select>` dropdown with Auto-detect (default), GeoJSON, CSV, GeoParquet; short-circuits format detection when set
+- **CRS override**: free text input with inline validation against `AUTHORITY:CODE` pattern (EPSG, CRS, ESRI, etc.); red border and hint on invalid input; placeholder shows `EPSG:3005, CRS:84`
+- **Column overrides**: lat/lng/geo column text inputs with visual mutual exclusivity - typing in geo column disables lat+lng fields and vice versa; lat/lng side-by-side in a 2-column grid, geo column spans full width below
+- **DataControl integration** (`data-control.ts`): options row inserted below the Load button; values passed to `loadDataFromUrl` on submit; fields reset on successful load
+- **UploadControl integration** (`upload-control.ts`): options row inserted below the drop zone; values passed to `loadDataFromFile` on file select or drag-and-drop; fields reset on successful load
+- **`loadDataFromFile` wiring** (`data-actions/load.ts`): now reads `format`, `crs`, `latColumn`, `lngColumn`, `geoColumn` from `LoadDataOptions` and threads them through format detection, loader dispatch, and CRS resolution - previously ignored these fields for file uploads
+- **CSS** (`global.css`): `.advanced-options-wrapper` (separator + toggle), `.advanced-options` / `--open` (collapsible body), `.advanced-options-field` / `-label` / `-select` / `-input` (field styling), `.advanced-options-input--invalid` (red border), `.advanced-options-hint` (validation text), `.advanced-options-columns` (2-column grid for lat/lng + full-width geo)
+
+### Geodetically Accurate Spatial Operations
+
+- **UTM reprojection for buffer and distance**: replaced the `metersToDegreesAtLatitude()` degree approximation with auto-selected UTM projected CRS per operation; computes the input dataset's centroid, derives the appropriate UTM zone (`EPSG:326xx`/`327xx`), reprojects with `ST_Transform` before the operation and back to WGS84 after; eliminates oval buffers and distance distortion at higher latitudes
+- **UTM zone helper** (`operations/unit-conversion.ts`): `getUtmEpsg(lat, lng)` derives the UTM EPSG code from coordinates; `getProjectedCrs(conn, datasetId)` queries the dataset centroid and returns the projected CRS; returns a fallback flag for polar regions outside UTM coverage (>84N/<80S)
+- **Buffer operation** (`operations/buffer.ts`): `ST_Buffer` now operates in meters on UTM-projected geometry; dissolve path uses `ST_Simplify` (5% tolerance) + `ST_Buffer(geom, 0)` topology repair before `ST_Union_Agg` to prevent `TopologyException` from near-coincident vertices in precise projected coordinates
+- **Distance operation** (`operations/distance.ts`): filter mode uses `ST_DWithin` on projected geometry with meter threshold; annotate mode uses `ST_Distance` on projected geometry returning meters, then converts to the requested output unit
+- **EPSG:4326 axis order handling**: `ST_FlipCoordinates` applied before forward transform (stored lng/lat to PROJ's expected lat/lng) and after reverse transform (PROJ's lat/lng back to stored lng/lat); matches the pattern already used in `datasets.ts` for load-time reprojection
+- **Polar fallback**: datasets with centroids outside UTM coverage (>84N/<80S) fall back to the previous degree approximation with a console warning; covers edge cases without adding UPS projection complexity
+- **Example config updates**: buffer example (`buffer.yaml`) updated with new color palette (sky blue bikeways, violet walkshed); multi-step example (`multi-step.yaml`) refreshed with warmer palette (orange schools, sky blue transit, emerald dual-access zones) and explicit layers for all datasets
+
+### GeoParquet Double-Reprojection Fix
+
+- **`crsHandled` flag** (`loaders/types.ts`): new boolean on `LoaderResult`; when true, signals that the loader already reprojected to WGS84 and downstream `loadGeoJSON` should skip `ST_Transform`
+- **GeoParquet loader** (`loaders/geoparquet.ts`): sets `crsHandled: true` when `needsReprojection` was true (i.e. `ST_Transform` was applied in the SQL query); prevents `loadFeatureCollection` and `loadDataFromFile` from applying a second `ST_Transform` on already-WGS84 coordinates
+- **Consumer paths** (`data-actions/load.ts`): both `loadFeatureCollection` and `loadDataFromFile` now check `crsHandled` from the loader result; when set, `resolveSourceCrs` is skipped entirely
+- This was a pre-existing bug: any GeoParquet file with CRS metadata (or explicit `crs` config) would be double-reprojected, producing coordinates in the wrong location; the advanced options CRS field made it easy to trigger but the root cause predated this feature
+
+### Layer Delete Hover Error Fix
+
+- Deleting a dataset left stale layer IDs in the hover tooltip registry (`popup.ts`); the shared `mousemove` handler passed these to `queryRenderedFeatures`, which threw one console error per mouse movement over the map area
+- `removeFeatureHandlers(layerIds)` added to `popup.ts` - removes layer IDs from the registry; called in `deleteDatasetWithLayers` before `map.removeLayer()` so no stale queries can fire
+
+### Attribution and Scale Bar
+
+- Attribution control now renders above the scale bar in the bottom-right corner via CSS flex override
+- Attribution auto-collapse delay reduced from 4 seconds to 2 seconds on wide layouts
+
+---
+
 ## v0.4.1 - 2026-03-03
 
 ### Progress Control Update

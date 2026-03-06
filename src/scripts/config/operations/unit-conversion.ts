@@ -1,12 +1,18 @@
 /**
  * Unit conversion utilities for spatial operations.
  *
- * All operations work internally in degrees (DuckDB spatial lacks GEOGRAPHY type).
+ * DuckDB spatial lacks a GEOGRAPHY type, so geometry is stored in WGS84 degrees.
+ * For geodetic accuracy, operations reproject to a local UTM CRS (meters) via
+ * ST_Transform, run the operation, then reproject back to WGS84.
+ *
  * This module provides:
  * - Unit ↔ meters conversion (km, feet, miles)
- * - Meters ↔ degrees conversion (latitude-adjusted approximation)
+ * - UTM zone derivation from centroid coordinates
+ * - Meters ↔ degrees fallback for polar regions outside UTM coverage
  * - Unit suffix mapping for dynamic property names (e.g. dist_km)
  */
+
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 
 /** Supported distance units */
 export type DistanceUnit = 'meters' | 'km' | 'feet' | 'miles';
@@ -68,4 +74,54 @@ export function degreesToMetersAtLatitude(degrees: number, latitude: number): nu
 	const metersPerDegreeLon = METERS_PER_DEGREE_LAT * Math.cos(latRadians);
 	const avgMetersPerDegree = (METERS_PER_DEGREE_LAT + metersPerDegreeLon) / 2;
 	return degrees * avgMetersPerDegree;
+}
+
+/** Result of projected CRS lookup for a dataset. */
+export interface ProjectedCrs {
+	epsg: string | null;
+	fallback: boolean;
+	latitude: number;
+}
+
+/**
+ * Derive the UTM EPSG code for a given lat/lng coordinate.
+ * Returns null if the coordinate is outside UTM coverage (>84°N or <80°S).
+ */
+export function getUtmEpsg(lat: number, lng: number): string | null {
+	if (lat > 84 || lat < -80) return null;
+	const zone = Math.floor((lng + 180) / 6) + 1;
+	const prefix = lat >= 0 ? 326 : 327;
+	return `EPSG:${prefix}${String(zone).padStart(2, '0')}`;
+}
+
+/**
+ * Compute the centroid of a dataset's features and derive the best projected CRS.
+ * Uses UTM zone from the centroid; falls back for polar regions.
+ */
+export async function getProjectedCrs(
+	conn: AsyncDuckDBConnection,
+	datasetId: string
+): Promise<ProjectedCrs> {
+	const stmt = await conn.prepare(`
+		SELECT
+			AVG(ST_X(ST_Centroid(geometry))) as avg_lng,
+			AVG(ST_Y(ST_Centroid(geometry))) as avg_lat
+		FROM features
+		WHERE dataset_id = ?
+		AND geometry IS NOT NULL
+	`);
+	const result = await stmt.query(datasetId);
+	await stmt.close();
+	const row = result.toArray()[0];
+	const lat = Number(row?.avg_lat) || 49;
+	const lng = Number(row?.avg_lng) || -123;
+
+	const epsg = getUtmEpsg(lat, lng);
+	if (!epsg) {
+		console.warn(`[CRS] Dataset ${datasetId} centroid at ${lat.toFixed(2)}°N is outside UTM coverage, using degree approximation`);
+		return { epsg: null, fallback: true, latitude: lat };
+	}
+
+	console.log(`[CRS] Dataset ${datasetId} centroid at ${lat.toFixed(2)}°N, ${lng.toFixed(2)}°E → ${epsg}`);
+	return { epsg, fallback: false, latitude: lat };
 }

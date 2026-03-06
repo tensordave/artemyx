@@ -49,11 +49,12 @@ export async function getFeaturesAsGeoJSON(datasetId?: string): Promise<any> {
 					const geometry = typeof row.geometry === 'string' ? JSON.parse(row.geometry) : row.geometry;
 					const properties = typeof row.properties === 'string' ? JSON.parse(row.properties) : row.properties;
 
-					// Validate geometry - must have type and either coordinates or geometries (for GeometryCollection)
+					// Validate geometry - must have type and non-empty coordinates (or geometries for GeometryCollection)
 					if (!geometry || !geometry.type) {
 						return null;
 					}
-					if (!geometry.coordinates && !geometry.geometries) {
+					const hasCoords = Array.isArray(geometry.coordinates) && geometry.coordinates.length > 0;
+					if (!hasCoords && !geometry.geometries) {
 						return null;
 					}
 

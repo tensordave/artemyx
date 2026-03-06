@@ -1,6 +1,7 @@
 /**
  * Buffer operation - creates a polygon around input features at a specified distance.
- * Uses DuckDB spatial ST_Buffer with meter-to-degree conversion.
+ * Reprojects to a local UTM CRS for geodetically accurate buffering, then back to WGS84.
+ * Falls back to degree approximation for polar regions outside UTM coverage.
  */
 
 import type maplibregl from 'maplibre-gl';
@@ -12,7 +13,7 @@ import { getSourceId, addSource, removeDefaultLayers, addDefaultLayers } from '.
 import type { UnaryOperation, BufferParams } from '../types';
 import type { OperationContext } from './index';
 import { parseStyleConfig, shouldSkipAutoLayers } from './index';
-import { toMeters, metersToDegreesAtLatitude } from './unit-conversion';
+import { toMeters, metersToDegreesAtLatitude, getProjectedCrs } from './unit-conversion';
 
 /**
  * Add GeoJSON data to map as source, optionally with default layers.
@@ -47,8 +48,8 @@ export function addOperationResultToMap(
 
 /**
  * Execute a buffer operation.
- * Converts meter distance to degrees for DuckDB spatial (which lacks GEOGRAPHY type).
- * Optionally dissolves overlapping buffers with ST_Union_Agg.
+ * Reprojects input geometry to a local UTM CRS so ST_Buffer operates in meters,
+ * then reprojects the result back to WGS84. Optionally dissolves with ST_Union_Agg.
  */
 export async function executeBuffer(
 	op: UnaryOperation,
@@ -76,19 +77,10 @@ export async function executeBuffer(
 
 	const connection = await getConnection();
 
-	// Get centroid latitude of input features for meter-to-degree conversion
-	const centroidStmt = await connection.prepare(`
-		SELECT AVG(ST_Y(ST_Centroid(geometry))) as avg_lat
-		FROM features
-		WHERE dataset_id = ?
-	`);
-	const centroidResult = await centroidStmt.query(inputId);
-	await centroidStmt.close();
-	const avgLatitude = Number(centroidResult.toArray()[0]?.avg_lat) || 49; // Default to Vancouver lat
+	// Derive projected CRS for geodetically accurate buffering
+	const crs = await getProjectedCrs(connection, inputId);
 
-	// Convert meters to degrees (DuckDB spatial lacks GEOGRAPHY type)
-	const distanceDegrees = metersToDegreesAtLatitude(distanceMeters, avgLatitude);
-	console.log(`[Buffer] ${params.distance} ${units} (${distanceMeters}m) → ${distanceDegrees.toFixed(6)}° at lat ${avgLatitude.toFixed(2)}°, quadSegs=${quadSegs}`);
+	console.log(`[Buffer] ${params.distance} ${units} (${distanceMeters}m), quadSegs=${quadSegs}, crs=${crs.epsg ?? 'degree-fallback'}`);
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -99,38 +91,81 @@ export async function executeBuffer(
 	await deleteDatasets.query(outputId);
 	await deleteDatasets.close();
 
-	if (dissolve) {
-		// Dissolve: merge all buffered geometries into a single feature
-		// ST_Simplify with small tolerance reduces vertices and avoids
-		// TopologyException from near-coincident edges during union.
-		// Keep tolerance low (1%) to preserve curve detail from quadSegs.
-		const simplifyTolerance = distanceDegrees * 0.01;
+	if (crs.fallback) {
+		// Polar fallback: use degree approximation (same as pre-v0.4.2 behavior)
+		const distanceDegrees = metersToDegreesAtLatitude(distanceMeters, crs.latitude);
+
+		if (dissolve) {
+			const simplifyTolerance = distanceDegrees * 0.05;
+			const insertDissolved = await connection.prepare(`
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
+				SELECT
+					?,
+					'operation:buffer',
+					ST_Union_Agg(ST_Simplify(ST_Buffer(geometry, ?, CAST(? AS INTEGER)), ?)),
+					'{"dissolved": true}'
+				FROM features
+				WHERE dataset_id = ?
+				AND geometry IS NOT NULL
+			`);
+			await insertDissolved.query(outputId, distanceDegrees, quadSegs, simplifyTolerance, inputId);
+			await insertDissolved.close();
+		} else {
+			const insertBuffered = await connection.prepare(`
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
+				SELECT
+					?,
+					'operation:buffer',
+					ST_Buffer(geometry, ?, CAST(? AS INTEGER)),
+					properties
+				FROM features
+				WHERE dataset_id = ?
+			`);
+			await insertBuffered.query(outputId, distanceDegrees, quadSegs, inputId);
+			await insertBuffered.close();
+		}
+	} else if (dissolve) {
+		// Projected CRS dissolve: flip → reproject → buffer → simplify → union → reproject back → flip
+		// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
+		// ST_Simplify (5% of buffer distance) reduces vertices, then ST_Buffer(geom, 0)
+		// repairs topology to prevent TopologyException during union.
+		const simplifyTolerance = distanceMeters * 0.05;
 		const insertDissolved = await connection.prepare(`
 			INSERT INTO features (dataset_id, source_url, geometry, properties)
 			SELECT
 				?,
 				'operation:buffer',
-				ST_Union_Agg(ST_Simplify(ST_Buffer(geometry, ?, CAST(? AS INTEGER)), ?)),
+				ST_FlipCoordinates(ST_Transform(
+					ST_Union_Agg(ST_Buffer(ST_Simplify(
+						ST_Buffer(ST_Transform(ST_FlipCoordinates(geometry), 'EPSG:4326', ?), ?, CAST(? AS INTEGER)),
+						?
+					), 0)),
+					?, 'EPSG:4326'
+				)),
 				'{"dissolved": true}'
 			FROM features
 			WHERE dataset_id = ?
 			AND geometry IS NOT NULL
 		`);
-		await insertDissolved.query(outputId, distanceDegrees, quadSegs, simplifyTolerance, inputId);
+		await insertDissolved.query(outputId, crs.epsg, distanceMeters, quadSegs, simplifyTolerance, crs.epsg, inputId);
 		await insertDissolved.close();
 	} else {
-		// No dissolve: buffer each feature individually
+		// Projected CRS: flip → reproject → buffer → reproject back → flip
+		// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
 		const insertBuffered = await connection.prepare(`
 			INSERT INTO features (dataset_id, source_url, geometry, properties)
 			SELECT
 				?,
 				'operation:buffer',
-				ST_Buffer(geometry, ?, CAST(? AS INTEGER)),
+				ST_FlipCoordinates(ST_Transform(
+					ST_Buffer(ST_Transform(ST_FlipCoordinates(geometry), 'EPSG:4326', ?), ?, CAST(? AS INTEGER)),
+					?, 'EPSG:4326'
+				)),
 				properties
 			FROM features
 			WHERE dataset_id = ?
 		`);
-		await insertBuffered.query(outputId, distanceDegrees, quadSegs, inputId);
+		await insertBuffered.query(outputId, crs.epsg, distanceMeters, quadSegs, crs.epsg, inputId);
 		await insertBuffered.close();
 	}
 

@@ -68,9 +68,9 @@ layers:
     source: rapidtransitstations
     type: circle
     paint:
-      circle-radius: 8
+      circle-radius: 5
       circle-color: "#4ade80"
       circle-stroke-color: "#166534"
-      circle-stroke-width: 2
+      circle-stroke-width: 1
   
 

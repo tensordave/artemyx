@@ -40,6 +40,12 @@ export interface LoadGeoJSONOptions {
 	style?: Partial<StyleConfig>;
 	/** When true, dataset is source-only (not rendered or shown in layer panel) */
 	hidden?: boolean;
+	/**
+	 * Source CRS for reprojection. When set, ST_Transform is applied during INSERT
+	 * to convert from this CRS to WGS84 (EPSG:4326). Null or undefined = already WGS84.
+	 * Resolved via resolveSourceCrs() before calling this function.
+	 */
+	sourceCrs?: string | null;
 }
 
 /**
@@ -81,15 +87,28 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 		const featuresJson = JSON.stringify(features);
 		await database.registerFileText(virtualFileName, featuresJson);
 
-		// Bulk insert JSON into features table with spatial transformation
+		// Bulk insert JSON into features table with spatial transformation.
+		// maximum_depth=1 prevents DuckDB from inferring deep nested types inside
+		// geometry/coordinates, which breaks on mixed 2D/3D coordinates (e.g. ArcGIS
+		// data with elevation values that fail auto-detected numeric array schemas).
+		// When sourceCrs is set, ST_Transform reprojects from source CRS to WGS84.
+		// CRS string is interpolated (not parameterized) because DuckDB-WASM doesn't
+		// support parameterizing CRS args to spatial functions. Values come from
+		// trusted sources (YAML config or file metadata parsed by this app).
+		const rawGeomExpr = 'ST_GeomFromGeoJSON(json_extract_string(j, \'$.geometry\'))';
+		// ST_FlipCoordinates corrects EPSG:4326 axis order (lat/lng -> lng/lat for GeoJSON)
+		const geomExpr = options?.sourceCrs
+			? `ST_FlipCoordinates(ST_Transform(${rawGeomExpr}, '${options.sourceCrs}', 'EPSG:4326'))`
+			: rawGeomExpr;
+
 		const insertFeatures = await connection.prepare(`
 			INSERT INTO features
 			SELECT
 				? as dataset_id,
 				? as source_url,
-				ST_GeomFromGeoJSON(json_extract_string(j, '$.geometry')) as geometry,
+				${geomExpr} as geometry,
 				json_extract_string(j, '$.properties') as properties
-			FROM read_json_auto('${virtualFileName}', format='array') j
+			FROM read_json_auto('${virtualFileName}', format='array', maximum_depth=1) j
 			WHERE json_extract_string(j, '$.geometry') IS NOT NULL
 		`);
 		await insertFeatures.query(datasetId, sourceUrl);
@@ -104,10 +123,10 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 		// Insert dataset metadata with configured style and color
 		const datasetHidden = options?.hidden ?? false;
 		const insertDataset = await connection.prepare(`
-			INSERT INTO datasets (id, source_url, name, color, visible, hidden, feature_count, loaded_at, style)
-			VALUES (?, ?, ?, ?, true, ?, ?, CURRENT_TIMESTAMP, ?)
+			INSERT INTO datasets (id, source_url, name, color, visible, hidden, feature_count, loaded_at, style, source_crs)
+			VALUES (?, ?, ?, ?, true, ?, ?, CURRENT_TIMESTAMP, ?, ?)
 		`);
-		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, datasetHidden, count, JSON.stringify(datasetStyle));
+		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, datasetHidden, count, JSON.stringify(datasetStyle), options?.sourceCrs ?? null);
 		await insertDataset.close();
 
 		console.log(`[DuckDB] Successfully loaded dataset ${datasetId} with ${count} features`);
@@ -134,6 +153,96 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 		}
 
 		return false;
+	}
+}
+
+/**
+ * Append additional features to an existing dataset (used for paginated loading).
+ * Unlike loadGeoJSON(), this does NOT delete existing features or create dataset metadata.
+ * @param datasetId - The dataset to append to (must already exist)
+ * @param data - GeoJSON FeatureCollection to append
+ * @param sourceUrl - Source URL for the data
+ * @param sourceCrs - Source CRS for reprojection (null = already WGS84)
+ * @returns Number of features inserted in this batch
+ */
+export async function appendFeatures(datasetId: string, data: GeoJSON.FeatureCollection, sourceUrl: string, sourceCrs?: string | null): Promise<number> {
+	const virtualFileName = `temp_append_${Date.now()}.json`;
+
+	try {
+		const connection = await getConnection();
+		const database = await getDB();
+
+		const features = data.features;
+		console.log(`[DuckDB] Appending ${features.length} features to dataset ${datasetId}`);
+
+		const featuresJson = JSON.stringify(features);
+		await database.registerFileText(virtualFileName, featuresJson);
+
+		const rawGeomExpr = 'ST_GeomFromGeoJSON(json_extract_string(j, \'$.geometry\'))';
+		const geomExpr = sourceCrs
+			? `ST_Transform(${rawGeomExpr}, '${sourceCrs}', 'EPSG:4326')`
+			: rawGeomExpr;
+
+		const insertStmt = await connection.prepare(`
+			INSERT INTO features
+			SELECT
+				? as dataset_id,
+				? as source_url,
+				${geomExpr} as geometry,
+				json_extract_string(j, '$.properties') as properties
+			FROM read_json_auto('${virtualFileName}', format='array', maximum_depth=1) j
+			WHERE json_extract_string(j, '$.geometry') IS NOT NULL
+		`);
+		await insertStmt.query(datasetId, sourceUrl);
+		await insertStmt.close();
+
+		await database.dropFile(virtualFileName);
+
+		return features.length;
+	} catch (error) {
+		if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+			console.error('[DuckDB] Storage quota exceeded during append:', error);
+			setFallbackReason('quota-exceeded');
+		} else {
+			console.error('Failed to append features:', error);
+		}
+
+		try {
+			const database = await getDB();
+			await database.dropFile(virtualFileName);
+		} catch { /* ignore cleanup errors */ }
+
+		throw error;
+	}
+}
+
+/**
+ * Recount features for a dataset and update the metadata.
+ * Called after paginated loading completes to set the final feature_count.
+ * @returns The updated total feature count
+ */
+export async function updateFeatureCount(datasetId: string): Promise<number> {
+	try {
+		const connection = await getConnection();
+
+		const countStmt = await connection.prepare(
+			'SELECT COUNT(*) as count FROM features WHERE dataset_id = ?'
+		);
+		const result = await countStmt.query(datasetId);
+		await countStmt.close();
+		const count = Number(result.toArray()[0].count);
+
+		const updateStmt = await connection.prepare(
+			'UPDATE datasets SET feature_count = ? WHERE id = ?'
+		);
+		await updateStmt.query(count, datasetId);
+		await updateStmt.close();
+
+		console.log(`[DuckDB] Updated feature count for ${datasetId}: ${count}`);
+		return count;
+	} catch (error) {
+		console.error('Failed to update feature count:', error);
+		throw error;
 	}
 }
 
