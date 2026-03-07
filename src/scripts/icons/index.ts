@@ -11,9 +11,11 @@ export { trashIcon } from './trash';                   // context menu: delete +
 export { paletteIcon } from './palette';               // context menu: change color
 export { pencilIcon } from './pencil';                 // context menu: rename
 
-// Roadmap: layer control improvements
+// Layer control
 export { eyeIcon, eyeSlashIcon } from './eye';             // visibility toggle
 export { dotsSixVerticalIcon } from './dots-six-vertical'; // drag-to-reorder handle
+export { arrowUpIcon } from './arrow-up';                  // context menu: move layer up
+export { arrowDownIcon } from './arrow-down';              // context menu: move layer down
 
 // Roadmap: progress control
 export { circleIcon } from './circle';                     // base ring for composite progress icon
@@ -24,6 +26,9 @@ export { fileArrowUpIcon } from './file-arrow-up';         // upload local file 
 // Roadmap: persistence (Phase 8)
 export { arrowClockwiseIcon } from './arrow-clockwise';    // clear session / retry
 export { databaseIcon } from './database'; // OPFS Database Controls
+
+// Geocoding
+export { magnifyingGlassIcon } from './magnifying-glass'; // geocoding search button
 
 // Roadmap: future features
 export { downloadSimpleIcon } from './download-simple';    // export datasets

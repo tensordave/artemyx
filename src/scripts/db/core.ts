@@ -32,6 +32,22 @@ let storageMode: 'opfs' | 'memory' = 'memory';
 let fallbackReason: FallbackReason = 'none';
 let opfsHadExistingData = false;
 
+/** Timestamped init log entries for replay into ProgressControl after it mounts. */
+interface InitLogEntry {
+	message: string;
+	timestamp: number;
+}
+const initLog: InitLogEntry[] = [];
+
+function logInitStep(message: string): void {
+	initLog.push({ message, timestamp: Date.now() });
+}
+
+/** Get recorded init steps for replay into progress history. */
+export function getInitLog(): InitLogEntry[] {
+	return initLog;
+}
+
 /**
  * Initialize database schema for multi-dataset support
  */
@@ -76,6 +92,19 @@ async function initSchema(): Promise<void> {
 	await conn.query(`
 		INSERT INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
 		ON CONFLICT (key) DO NOTHING
+	`);
+
+	// Migration: add layer_order column (non-destructive, no schema version bump)
+	await conn.query(`
+		ALTER TABLE datasets ADD COLUMN IF NOT EXISTS layer_order INTEGER DEFAULT 0
+	`);
+
+	// Backfill layer_order for existing rows that still have the default (0)
+	await conn.query(`
+		UPDATE datasets SET layer_order = sub.rn
+		FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY loaded_at ASC) as rn
+		      FROM datasets WHERE layer_order = 0) sub
+		WHERE datasets.id = sub.id AND datasets.layer_order = 0
 	`);
 
 	// Create spatial index for geometry queries (bounding box, intersections, etc.)
@@ -127,6 +156,8 @@ async function wipeSchema(): Promise<void> {
  */
 export async function initDB(useOPFS: boolean = false): Promise<void> {
 	try {
+		logInitStep('Resolving DuckDB bundle...');
+
 		// Workers are self-hosted; WASM loads from jsDelivr (files exceed Cloudflare's 25MB limit)
 		const cdnBundles = duckdb.getJsDelivrBundles();
 		const bundle = await duckdb.selectBundle({
@@ -150,28 +181,34 @@ export async function initDB(useOPFS: boolean = false): Promise<void> {
 		const logger = new duckdb.VoidLogger();
 
 		// Initialize database
+		logInitStep('Downloading DuckDB engine...');
 		db = new duckdb.AsyncDuckDB(logger, worker);
 		await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
 		if (useOPFS) {
 			try {
+				logInitStep('Opening OPFS database...');
 				await db.open({
 					path: OPFS_DB_PATH,
 					accessMode: duckdb.DuckDBAccessMode.READ_WRITE
 				});
 				conn = await db.connect();
+				logInitStep('Loading spatial extension...');
 				await conn.query('INSTALL spatial; LOAD spatial;');
 
 				// Check if this is an existing DB with a valid schema
+				logInitStep('Validating schema...');
 				const valid = await validateSchema();
 				if (valid) {
 					opfsHadExistingData = true;
 				} else {
+					logInitStep('Initializing schema...');
 					await initSchema();
 				}
 
 				storageMode = 'opfs';
 				fallbackReason = 'none';
+				logInitStep('Database ready (OPFS)');
 				console.log('[DuckDB] Initialized with OPFS persistence');
 				return;
 			} catch (opfsError) {
@@ -186,9 +223,12 @@ export async function initDB(useOPFS: boolean = false): Promise<void> {
 
 		// In-memory path (default or OPFS fallback)
 		conn = await db.connect();
+		logInitStep('Loading spatial extension...');
 		await conn.query('INSTALL spatial; LOAD spatial;');
+		logInitStep('Initializing schema...');
 		await initSchema();
 		storageMode = 'memory';
+		logInitStep('Database ready (in-memory)');
 		console.log('[DuckDB] Initialized in-memory');
 	} catch (error) {
 		console.error('Failed to initialize DuckDB-WASM:', error);

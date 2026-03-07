@@ -231,6 +231,28 @@ export function addLayerFromConfig(map: maplibregl.Map, config: LayerConfig): vo
 	map.addLayer(layerSpec as maplibregl.LayerSpecification);
 }
 
+/**
+ * Reorder MapLibre layers to match the given dataset order.
+ * Processes from lowest order (bottom of map) to highest (top), moving each
+ * dataset's layers to the top of the stack. After the loop the highest-order
+ * dataset's layers sit on top, matching the panel order.
+ *
+ * @param map - MapLibre map instance
+ * @param orderedDatasetIds - Dataset IDs sorted by layer_order DESC (top of panel first)
+ */
+export function resyncLayerOrder(map: maplibregl.Map, orderedDatasetIds: string[]): void {
+	// Iterate in reverse: lowest order first (bottom of map) → moved to top first
+	for (let i = orderedDatasetIds.length - 1; i >= 0; i--) {
+		const sourceId = getSourceId(orderedDatasetIds[i]);
+		const layers = getLayersBySource(map, sourceId);
+		for (const layer of layers) {
+			if (map.getLayer(layer.id)) {
+				map.moveLayer(layer.id);
+			}
+		}
+	}
+}
+
 /** Result of executing layers from config */
 export interface LayerExecutionResult {
 	/** Number of layers successfully created */

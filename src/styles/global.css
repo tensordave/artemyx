@@ -267,13 +267,15 @@ header {
 /* Progress Control - Icon + text status display */
 .progress-control {
 	position: absolute !important;
-	bottom: 10px !important;
-	left: 10px !important;
-	background: #0f0f0f !important;
-	border: 1px solid #333 !important;
-	border-radius: 2px !important;
+	bottom: 0 !important;
+	left: 0 !important;
+	background: rgba(30, 30, 30, 0.85) !important;
+	border: 1px solid #3a3a3a !important;
+	border-radius: 3px !important;
 	padding: 0 !important;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+	backdrop-filter: blur(8px) !important;
+	-webkit-backdrop-filter: blur(8px) !important;
 	font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace !important;
 	font-size: 12px !important;
 }
@@ -282,8 +284,8 @@ header {
 .progress-status-row {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 6px 10px;
+	gap: 6px;
+	padding: 6px 8px;
 	cursor: pointer;
 	transition: background-color 0.2s ease;
 	white-space: nowrap;
@@ -344,6 +346,22 @@ header {
 	animation: progress-pulse 1.5s ease-in-out infinite;
 }
 
+/* Glow pulse for database init */
+@keyframes progress-glow {
+	0%, 100% {
+		filter: drop-shadow(0 0 2px rgba(74, 158, 255, 0.3));
+		fill: #4a9eff;
+	}
+	50% {
+		filter: drop-shadow(0 0 6px rgba(74, 158, 255, 0.8));
+		fill: #7fc0ff;
+	}
+}
+
+.progress-icon-inner.glowing svg {
+	animation: progress-glow 2s ease-in-out infinite;
+}
+
 /* Status text label (hidden on mobile) */
 .progress-status-text {
 	overflow: hidden;
@@ -395,17 +413,19 @@ header {
 /* Expanded panel - detached from control group, appended to map container */
 .progress-expanded-panel {
 	position: absolute;
-	bottom: 52px;
-	left: 20px;
+	bottom: 46px;
+	left: 6px;
 	z-index: 10;
 	display: flex;
 	flex-direction: column;
 	width: 450px;
 	max-width: calc(100vw - 44px);
 	height: 300px;
-	background: #0f0f0f;
-	border: 1px solid #333;
-	border-radius: 2px;
+	background: rgba(20, 20, 20, 0.92);
+	border: 1px solid #3a3a3a;
+	border-radius: 3px;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
 }
 
 /* Panel header */
@@ -414,8 +434,8 @@ header {
 	justify-content: space-between;
 	align-items: center;
 	padding: 8px 12px;
-	background: #1a1a1a;
-	border-bottom: 1px solid #333;
+	background: rgba(26, 26, 26, 0.5);
+	border-bottom: 1px solid #3a3a3a;
 	color: #888;
 	font-weight: 500;
 }
@@ -482,7 +502,7 @@ header {
 	overflow-y: auto;
 	overflow-x: auto;
 	padding: 8px 12px;
-	background: #0f0f0f;
+	background: transparent;
 }
 
 /* History entry */
@@ -518,7 +538,7 @@ header {
 }
 
 .progress-history-container::-webkit-scrollbar-track {
-	background: #0f0f0f;
+	background: transparent;
 }
 
 .progress-history-container::-webkit-scrollbar-thumb {
@@ -532,13 +552,19 @@ header {
 
 /* Shared Control Styles */
 
+/* Strip the opaque group wrapper so individual buttons show through */
+.maplibregl-ctrl-group {
+	background: transparent !important;
+	box-shadow: none !important;
+}
+
 /* Control toggle button (used by GeoJSON, Layer controls) */
 /* Scoped to .maplibregl-ctrl to override MapLibre's default button styles */
 .maplibregl-ctrl .control-btn {
-	background-color: #2c2c2c !important;
+	background-color: rgba(30, 30, 30, 0.85) !important;
 	color: #fff !important;
-	border: 1px solid #444 !important;
-	border-radius: 4px;
+	border: 1px solid #3a3a3a !important;
+	border-radius: 3px;
 	cursor: pointer;
 	width: 29px;
 	height: 29px;
@@ -547,6 +573,8 @@ header {
 	align-items: center;
 	justify-content: center;
 	font-size: 16px;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
 }
 
 .maplibregl-ctrl .control-btn:hover {
@@ -559,10 +587,12 @@ header {
 	position: absolute;
 	top: 0;
 	padding: 10px;
-	background-color: #2c2c2c;
-	border: 1px solid #444;
-	border-radius: 4px;
+	background-color: rgba(30, 30, 30, 0.85);
+	border: 1px solid #3a3a3a;
+	border-radius: 3px;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
 }
 
 .control-panel--open {
@@ -869,9 +899,9 @@ header {
 .layer-item {
 	display: flex;
 	align-items: center;
-	padding: 5px;
+	padding: 3px;
 	padding-left: 8px;
-	margin-bottom: 5px;
+	margin-bottom: 2px;
 	cursor: pointer;
 	border-radius: 3px;
 	/* Note: border-left color is set dynamically via inline style (dataset.color) */
@@ -914,6 +944,49 @@ header {
 	background-color: rgba(51, 136, 255, 0.4);
 }
 
+/* Reorder buttons (inline up/down arrows) */
+.layer-reorder {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	margin-left: 4px;
+	flex-shrink: 0;
+}
+
+.layer-reorder-btn {
+	width: 16px;
+	height: 14px;
+	padding: 0;
+	cursor: pointer;
+	background-color: transparent;
+	border: 1px solid transparent;
+	border-radius: 2px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.layer-reorder-btn svg {
+	width: 10px;
+	height: 10px;
+}
+
+.layer-reorder-btn:not(:disabled):hover {
+	background-color: rgba(51, 136, 255, 0.3);
+	border-color: #3388ff;
+}
+
+.layer-reorder-btn:disabled {
+	opacity: 0.2;
+	cursor: default;
+}
+
+/* Brief highlight flash after reorder */
+.layer-item--moved {
+	background-color: rgba(51, 136, 255, 0.072);
+	transition: background-color 0.6s ease-out;
+}
+
 /* Kebab menu button */
 .layer-menu-btn {
 	width: 24px;
@@ -941,10 +1014,12 @@ header {
 
 .context-menu {
 	position: fixed;
-	background-color: #2c2c2c;
-	border: 1px solid #444;
-	border-radius: 4px;
+	background-color: rgba(30, 30, 30, 0.85);
+	border: 1px solid #3a3a3a;
+	border-radius: 3px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
 	min-width: 160px;
 	z-index: 1000;
 	padding: 4px 0;
@@ -1089,43 +1164,84 @@ header {
 
 .scale-bar-control {
 	display: flex;
+	flex-direction: column;
+	padding: 3px 6px;
+	background-color: rgba(30, 30, 30, 0.85);
+	border: 1px solid #3a3a3a;
+	border-radius: 3px;
+}
+
+.scale-bar-row {
+	display: flex;
 	align-items: center;
-	gap: 7px;
-	padding: 5px 8px;
-	background-color: #2c2c2c;
-	border: 1px solid #444;
-	border-radius: 4px;
+	gap: 5px;
 }
 
 .scale-bar {
-	border: 2px solid #aaa;
+	border: 1.5px solid #999;
 	border-top: none;
-	height: 7px;
+	height: 5px;
 	min-width: 10px;
 	flex-shrink: 0;
 }
 
 .scale-bar-label {
-	font-size: 11px;
-	color: #ccc;
+	font-size: 10px;
+	color: #aaa;
 	font-family: system-ui, -apple-system, sans-serif;
 	white-space: nowrap;
 }
 
 .maplibregl-ctrl .scale-unit-btn {
 	background: transparent !important;
-	color: #666 !important;
-	border: 1px solid #555 !important;
-	border-radius: 3px;
-	padding: 1px 4px;
+	color: #555 !important;
+	border: 1px solid #444 !important;
+	border-radius: 2px;
+	padding: 0px 3px;
 	cursor: pointer;
-	font-size: 10px;
+	font-size: 9px;
 	font-family: inherit;
 	line-height: 1.4;
 	flex-shrink: 0;
 }
 
 .maplibregl-ctrl .scale-unit-btn:hover {
+	color: #ccc !important;
+	border-color: #888 !important;
+}
+
+.coord-row {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	border-top: 1px solid #3a3a3a;
+	padding-top: 3px;
+	margin-top: 3px;
+}
+
+.coord-label {
+	font-size: 10px;
+	color: #aaa;
+	font-family: system-ui, -apple-system, sans-serif;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.maplibregl-ctrl .coord-format-btn {
+	background: transparent !important;
+	color: #555 !important;
+	border: 1px solid #444 !important;
+	border-radius: 2px;
+	padding: 0px 3px;
+	cursor: pointer;
+	font-size: 9px;
+	font-family: inherit;
+	line-height: 1.4;
+	flex-shrink: 0;
+	margin-left: auto;
+}
+
+.maplibregl-ctrl .coord-format-btn:hover {
 	color: #ccc !important;
 	border-color: #888 !important;
 }
@@ -1351,6 +1467,73 @@ header {
 	background-color: #555;
 	cursor: not-allowed;
 	color: #888;
+}
+
+/* Geocoding Control Styles */
+
+.geocoding-panel {
+	min-width: 260px;
+}
+
+.geocoding-panel .control-input {
+	margin-bottom: 0;
+}
+
+.geocoding-results {
+	max-height: 240px;
+	overflow-y: auto;
+}
+
+.maplibregl-ctrl .geocoding-result-item {
+	display: flex !important;
+	flex-direction: column !important;
+	align-items: flex-start !important;
+	width: 100% !important;
+	height: auto !important;
+	padding: 8px !important;
+	background: none !important;
+	border: none !important;
+	border-bottom: 1px solid #333 !important;
+	color: #fff !important;
+	font-size: 12px !important;
+	text-align: left !important;
+	cursor: pointer !important;
+}
+
+.maplibregl-ctrl .geocoding-result-item:last-child {
+	border-bottom: none !important;
+}
+
+.maplibregl-ctrl .geocoding-result-item:hover,
+.maplibregl-ctrl .geocoding-result-item--active {
+	background-color: rgba(51, 136, 255, 0.15) !important;
+}
+
+.geocoding-result-name {
+	color: #fff;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.geocoding-result-detail {
+	color: #888;
+	font-size: 11px;
+	margin-top: 2px;
+}
+
+.geocoding-no-results,
+.geocoding-error {
+	font-size: 12px;
+	padding: 8px;
+	text-align: center;
+}
+
+.geocoding-no-results {
+	color: #888;
+}
+
+.geocoding-error {
+	color: #ef4444;
 }
 
 /* ==========================================================================

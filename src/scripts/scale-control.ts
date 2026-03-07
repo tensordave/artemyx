@@ -1,6 +1,7 @@
-import type { Map, IControl } from 'maplibre-gl';
+import type { Map, IControl, MapMouseEvent } from 'maplibre-gl';
 
 type Unit = 'metric' | 'imperial';
+type CoordFormat = 'dd' | 'dms';
 
 // Max bar width in pixels - drives scale calculation
 const MAX_WIDTH = 120;
@@ -16,8 +17,23 @@ function getRoundNum(num: number): number {
 	return pow10 * d;
 }
 
+function formatDD(lat: number, lng: number): string {
+	return `${lat.toFixed(4)}\u00b0, ${lng.toFixed(4)}\u00b0`;
+}
+
+function formatDMS(deg: number, isLat: boolean): string {
+	const abs = Math.abs(deg);
+	const d = Math.floor(abs);
+	const minFloat = (abs - d) * 60;
+	const m = Math.floor(minFloat);
+	const s = ((minFloat - m) * 60).toFixed(1);
+	const dir = isLat ? (deg >= 0 ? 'N' : 'S') : (deg >= 0 ? 'E' : 'W');
+	return `${d}\u00b0${m}'${s}"${dir}`;
+}
+
 /**
- * Custom map control that renders a distance scale bar with a metric/imperial toggle.
+ * Custom map control that renders a distance scale bar with a metric/imperial toggle
+ * and a mouse coordinate display with a decimal/DMS toggle.
  * Scale calculation uses map.unproject() + LngLat.distanceTo() (Haversine),
  * the same approach as MapLibre's built-in ScaleControl.
  */
@@ -29,32 +45,67 @@ export class ScaleBarControl implements IControl {
 	private toggleBtn: HTMLButtonElement | null = null;
 	private unit: Unit = 'metric';
 
+	private coordLabel: HTMLSpanElement | null = null;
+	private coordFormatBtn: HTMLButtonElement | null = null;
+	private coordFormat: CoordFormat = 'dd';
+	private isMobile = false;
+	private hasMouseOver = false;
+	private cursorLat = 0;
+	private cursorLng = 0;
+
 	onAdd(map: Map): HTMLElement {
 		this.map = map;
+		this.isMobile = window.matchMedia('(pointer: coarse)').matches;
 
 		this.container = document.createElement('div');
 		this.container.className = 'maplibregl-ctrl scale-bar-control';
 
-		// Bar element: three-sided bracket (left, bottom, right borders; no top)
+		// Scale bar row
+		const scaleRow = document.createElement('div');
+		scaleRow.className = 'scale-bar-row';
+
 		this.bar = document.createElement('div');
 		this.bar.className = 'scale-bar';
 
-		// Distance label (e.g. "500 km")
 		this.label = document.createElement('span');
 		this.label.className = 'scale-bar-label';
 
-		// Unit toggle button (shows the inactive unit as a hint: click to switch)
 		this.toggleBtn = document.createElement('button');
 		this.toggleBtn.type = 'button';
 		this.toggleBtn.className = 'scale-unit-btn';
 		this.toggleBtn.title = 'Toggle scale units';
 		this.toggleBtn.addEventListener('click', () => this.toggle());
 
-		this.container.appendChild(this.bar);
-		this.container.appendChild(this.label);
-		this.container.appendChild(this.toggleBtn);
+		scaleRow.appendChild(this.bar);
+		scaleRow.appendChild(this.label);
+		scaleRow.appendChild(this.toggleBtn);
+
+		// Coordinate row
+		const coordRow = document.createElement('div');
+		coordRow.className = 'coord-row';
+
+		this.coordLabel = document.createElement('span');
+		this.coordLabel.className = 'coord-label';
+
+		this.coordFormatBtn = document.createElement('button');
+		this.coordFormatBtn.type = 'button';
+		this.coordFormatBtn.className = 'coord-format-btn';
+		this.coordFormatBtn.title = 'Toggle coordinate format';
+		this.coordFormatBtn.addEventListener('click', () => this.toggleCoordFormat());
+
+		coordRow.appendChild(this.coordLabel);
+		coordRow.appendChild(this.coordFormatBtn);
+
+		this.container.appendChild(scaleRow);
+		this.container.appendChild(coordRow);
 
 		map.on('move', this.update);
+
+		if (!this.isMobile) {
+			map.on('mousemove', this.onMouseMove);
+			map.getCanvas().addEventListener('mouseleave', this.onMouseLeave);
+		}
+
 		this.update();
 
 		return this.container;
@@ -62,17 +113,59 @@ export class ScaleBarControl implements IControl {
 
 	onRemove(): void {
 		this.map?.off('move', this.update);
+		if (!this.isMobile) {
+			this.map?.off('mousemove', this.onMouseMove);
+			this.map?.getCanvas().removeEventListener('mouseleave', this.onMouseLeave);
+		}
 		this.container?.remove();
 		this.map = null;
 		this.container = null;
 		this.bar = null;
 		this.label = null;
 		this.toggleBtn = null;
+		this.coordLabel = null;
+		this.coordFormatBtn = null;
 	}
 
 	private toggle(): void {
 		this.unit = this.unit === 'metric' ? 'imperial' : 'metric';
 		this.update();
+	}
+
+	private toggleCoordFormat(): void {
+		this.coordFormat = this.coordFormat === 'dd' ? 'dms' : 'dd';
+		this.updateCoords();
+	}
+
+	private onMouseMove = (e: MapMouseEvent): void => {
+		this.hasMouseOver = true;
+		this.cursorLat = e.lngLat.lat;
+		this.cursorLng = e.lngLat.lng;
+		this.updateCoords();
+	};
+
+	private onMouseLeave = (): void => {
+		this.hasMouseOver = false;
+		this.updateCoordsFromCenter();
+	};
+
+	private updateCoordsFromCenter(): void {
+		if (!this.map) return;
+		const center = this.map.getCenter();
+		this.cursorLat = center.lat;
+		this.cursorLng = center.lng;
+		this.updateCoords();
+	}
+
+	private updateCoords(): void {
+		if (!this.coordLabel || !this.coordFormatBtn) return;
+
+		if (this.coordFormat === 'dms') {
+			this.coordLabel.textContent = `${formatDMS(this.cursorLat, true)}, ${formatDMS(this.cursorLng, false)}`;
+		} else {
+			this.coordLabel.textContent = formatDD(this.cursorLat, this.cursorLng);
+		}
+		this.coordFormatBtn.textContent = this.coordFormat === 'dd' ? 'DMS' : 'DD';
 	}
 
 	// Arrow function so it can be passed directly to map.on/off without rebinding
@@ -116,5 +209,10 @@ export class ScaleBarControl implements IControl {
 		this.bar.style.width = `${barWidth}px`;
 		this.label.textContent = `${distance}\u00a0${unitLabel}`;
 		this.toggleBtn.textContent = this.unit === 'metric' ? 'mi' : 'km';
+
+		// Update coords from map center when cursor isn't over the map
+		if (!this.hasMouseOver) {
+			this.updateCoordsFromCenter();
+		}
 	};
 }

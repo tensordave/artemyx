@@ -1,11 +1,12 @@
 import type { Map as MaplibreMap, IControl } from 'maplibre-gl';
-import { circleIcon, circleNotchIcon, cloudArrowDownIcon, trashIcon } from './icons';
+import { circleIcon, circleNotchIcon, cloudArrowDownIcon, databaseIcon, trashIcon } from './icons';
 
 interface ProgressState {
   operation: string;
   status: 'idle' | 'loading' | 'processing' | 'success' | 'error';
   message?: string;
   timestamp?: number;
+  iconOverride?: string;
 }
 
 interface HistoryEntry extends ProgressState {
@@ -119,7 +120,7 @@ export class ProgressControl implements IControl {
   /**
    * Update the progress display with current operation status
    */
-  updateProgress(operation: string, status: ProgressState['status'], message?: string): void {
+  updateProgress(operation: string, status: ProgressState['status'], message?: string, iconOverride?: string): void {
     // Cancel any pending idle - new work is coming in
     if (this._idleTimeout) {
       clearTimeout(this._idleTimeout);
@@ -133,6 +134,7 @@ export class ProgressControl implements IControl {
       status,
       message,
       timestamp,
+      iconOverride,
     };
 
     // Append to history
@@ -149,6 +151,29 @@ export class ProgressControl implements IControl {
     }
 
     this.render();
+  }
+
+  /**
+   * Inject pre-recorded history entries (e.g. from DB init that ran before the control mounted).
+   * Entries are prepended to history with their original timestamps.
+   */
+  injectHistory(entries: Array<{ message: string; timestamp: number }>): void {
+    const mapped: HistoryEntry[] = entries.map((e) => ({
+      operation: 'database',
+      status: 'processing' as const,
+      message: e.message,
+      timestamp: e.timestamp,
+    }));
+    this.history.unshift(...mapped);
+
+    // Cap history
+    if (this.history.length > this.MAX_HISTORY) {
+      this.history = this.history.slice(-this.MAX_HISTORY);
+    }
+
+    if (this.isExpanded) {
+      this.renderHistory();
+    }
   }
 
   /**
@@ -207,8 +232,9 @@ export class ProgressControl implements IControl {
    * Loading gets cloud-arrow-down, processing gets circle-notch (animated via CSS),
    * idle/success/error show no inner icon - status conveyed by color on the base ring.
    */
-  private getInnerIconSvg(status: ProgressState['status']): string {
-    switch (status) {
+  private getInnerIconSvg(state: ProgressState): string {
+    if (state.iconOverride) return state.iconOverride;
+    switch (state.status) {
       case 'loading':
         return cloudArrowDownIcon;
       case 'processing':
@@ -224,14 +250,16 @@ export class ProgressControl implements IControl {
   private render(): void {
     if (!this.statusRow || !this.iconInner || !this.statusText) return;
 
-    const { operation, status, message } = this.state;
+    const { operation, status, message, iconOverride } = this.state;
 
     // Update composite icon inner element
-    this.iconInner.innerHTML = this.getInnerIconSvg(status);
+    this.iconInner.innerHTML = this.getInnerIconSvg(this.state);
 
-    // Animate inner icon: spin for processing, pulse for loading
-    this.iconInner.classList.remove('spinning', 'pulsing');
-    if (status === 'processing') {
+    // Animate inner icon: glow for icon override, spin for processing, pulse for loading
+    this.iconInner.classList.remove('spinning', 'pulsing', 'glowing');
+    if (iconOverride) {
+      this.iconInner.classList.add('glowing');
+    } else if (status === 'processing') {
       this.iconInner.classList.add('spinning');
     } else if (status === 'loading') {
       this.iconInner.classList.add('pulsing');

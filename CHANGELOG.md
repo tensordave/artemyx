@@ -1,8 +1,52 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
 Format follows [Semantic Versioning](https://semver.org/).
+
+## v0.4.3 - 2026-03-06
+
+### Progress Control Init Logging
+
+- **DB init milestone logging** (`db/core.ts`): `logInitStep()` records timestamped messages at each phase of DuckDB-WASM initialization - bundle resolution, WASM engine download, OPFS open, spatial extension load, schema validation/init, and final ready state; `getInitLog()` export exposes the recorded entries for replay
+- **History injection** (`progress-control.ts`): `injectHistory()` method prepends pre-recorded entries into the progress history panel with their original timestamps; entries appear chronologically even though the control didn't exist when they were recorded
+- **Icon override support** (`progress-control.ts`): `updateProgress()` accepts an optional `iconOverride` parameter that replaces the default status-based inner icon; used to show the Phosphor database icon during init instead of the generic circle-notch spinner
+- **Glow animation** (`global.css`): new `progress-glow` keyframes animation with `drop-shadow` pulse for icon overrides; visually distinct from the existing spin (processing) and color-pulse (loading) animations; 2s cycle with blue glow ramp
+- **Startup sequence** (`map.ts`): "Initializing database..." shown with glowing database icon before `ensureInit()`; init log replayed into history after completion; transitions to "Database ready" or "Restoring session from storage..." based on OPFS state
+
+### Dataset Layer Reordering
+
+- **Inline reorder buttons** (`layer-row.ts`): compact up/down arrow buttons on each layer row for one-click reordering; buttons are disabled at the top/bottom boundaries; Phosphor ArrowUp/ArrowDown icons at 10x10px inside 16x14px hit areas
+- **Layer order persistence** (`db/core.ts`, `db/datasets.ts`): `layer_order INTEGER` column added to the `datasets` table via non-destructive `ALTER TABLE` migration (no schema version bump, no OPFS wipe); existing rows backfilled from `loaded_at` order; new datasets auto-assigned the next order value; `getDatasets()` now sorts by `layer_order DESC`
+- **MapLibre layer sync** (`layers/layers.ts`): `resyncLayerOrder()` reorders MapLibre's layer stack to match stored order using `map.moveLayer()`; handles both default three-layer groups (fill/line/point) and explicit config layers; called after OPFS restore, config pipeline completion, and each reorder action
+- **Swap operation** (`db/datasets.ts`): `swapLayerOrder()` exchanges `layer_order` values between two datasets; wired from the layer control through the inline buttons
+- **Move highlight** (`layer-control.ts`, `global.css`): moved row briefly flashes blue (`layer-item--moved`) then fades out over 2 seconds via CSS transition
+- **Tighter panel layout** (`global.css`): row padding reduced from 5px to 3px, inter-row gap from 5px to 2px to keep the panel compact with the added reorder buttons
+
+### Geocoding / Address Search
+
+- **`GeocodingControl`** (`geocoding-control.ts`): new `IControl` at `top-left` below `BasemapControl`; button uses Phosphor `MagnifyingGlass` icon; opens a search panel with a text input and results list
+- **Photon autocomplete**: searches the Photon geocoding API (Komoot-hosted, OSM data, no API key); debounced at 400ms with a 3-character minimum; Enter key triggers an immediate search bypassing the debounce; in-flight requests cancelled via `AbortController` when new input arrives
+- **Viewport biasing**: passes the current map center as `lat`/`lon` parameters to bias results toward the visible area
+- **Result display**: each result shows the place name with a context line (city, state, country); clicking a result calls `map.fitBounds()` if the result has an extent (areas like cities/regions) or `map.flyTo()` at zoom 15 for point results (addresses, POIs)
+- **Keyboard navigation**: ArrowDown/ArrowUp moves through results with a visual highlight (`geocoding-result-item--active`); Enter selects the highlighted result; focus stays in the input throughout
+- **Mutual exclusion**: wired into the top-left control group alongside `LayerToggleControl` and `BasemapControl` via `setOnPanelOpen`/`closePanel`; click-outside closes the panel
+- **Icon** (`icons/magnifying-glass.ts`): Phosphor `MagnifyingGlass` (Regular), `fill="#3388ff"`; exported from `icons/index.ts`
+- **CSS** (`global.css`): `.geocoding-panel`, `.geocoding-results`, `.geocoding-result-item` (flex column, border-bottom separator, hover/active highlight), `.geocoding-result-name`/`.geocoding-result-detail`, `.geocoding-no-results`/`.geocoding-error` message states
+
+### Bug Fixes
+
+- **Explicit layer order preserved after restore** (`map.ts`): after `executeLayersFromConfig()`, `layer_order` in the DB is recomputed to reflect the config's visual intent - each dataset's priority is determined by the position of its topmost explicit layer; `resyncLayerOrder()` and the layer panel both use the same source of truth, so config stacking, panel order, and user reordering all stay consistent
+
+### Mouse Coordinate Display
+
+- **Coordinate readout** (`scale-control.ts`): cursor lat/lng displayed below the scale bar in a unified control; on desktop, `mousemove` tracks cursor position and `mouseleave` falls back to map center; on mobile (`pointer: coarse`), always shows map center updated on pan/zoom
+- **Format toggle**: click the DD/DMS button to switch between decimal degrees (`49.2827, -123.1207`) and degrees-minutes-seconds (`49 16'57.7"N, 123 7'14.5"W`); same toggle pattern as the scale bar's metric/imperial button
+- **Compact styling**: semi-transparent background (`rgba(30,30,30,0.85)`), 10px labels, `tabular-nums` to prevent width jitter during mouse movement; designed to feel like an instrument readout that doesn't compete with the map
+
+### Control Styling Overhaul
+
+- **Unified semi-transparent styling** (`global.css`): all map control buttons (`.control-btn`), dropdown panels (`.control-panel`), context menus, and the progress control now share the scale bar's visual language - `rgba(30, 30, 30, 0.85)` background, `#3a3a3a` border, `3px` border-radius, and `backdrop-filter: blur(8px)` for a frosted-glass effect over the map
+- **Transparent control group wrapper**: stripped MapLibre's default opaque `.maplibregl-ctrl-group` background and box-shadow so individual button transparency shows through
+- **Progress control tightened**: button nudged closer to the map corner (`bottom: 0; left: 0`); status row padding reduced; expanded history panel uses a higher opacity (`rgba(20, 20, 20, 0.92)`) for text readability with transparent header and history container backgrounds
 
 ## v0.4.2 - 2026-03-05
 

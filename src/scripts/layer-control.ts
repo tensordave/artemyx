@@ -1,5 +1,5 @@
 import maplibregl from 'maplibre-gl';
-import { getDatasets, updateDatasetName, updateDatasetVisible } from './db';
+import { getDatasets, updateDatasetName, updateDatasetVisible, swapLayerOrder } from './db';
 import { stackIcon } from './icons';
 import { progressControl } from './map';
 import { toggleLayerVisibility } from './layer-actions/visibility';
@@ -9,6 +9,7 @@ import { createContextMenu, type ContextMenuHandle } from './layer-actions/conte
 import { createColorPickerItem, createRenameItem, createStyleItem, createDeleteItem, createMenuDivider } from './layer-actions/context-menu-items';
 import { showStylePanel, closeStylePanel } from './layer-actions/style';
 import { createLayerRow, startRenameEdit, type Dataset } from './layer-actions/layer-row';
+import { resyncLayerOrder } from './layers';
 
 /**
  * Custom control for toggling layer visibility
@@ -21,7 +22,8 @@ export class LayerToggleControl implements maplibregl.IControl {
 	private contextMenuHandle: ContextMenuHandle | undefined;
 	private currentContextMenuDatasetId: string | undefined;
 	private onPanelOpen?: () => void;
-
+	/** Cached ordered dataset list from last refreshPanel(), used for reorder logic */
+	private datasets: any[] = [];
 	/**
 	 * Set the callback for when this panel opens (wired after both controls exist).
 	 */
@@ -68,6 +70,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 		// Query all datasets, excluding hidden (source-only) datasets
 		const allDatasets = await getDatasets();
 		const datasets = allDatasets.filter((d: any) => !d.hidden);
+		this.datasets = datasets;
 
 		// Clear panel
 		this.panel.innerHTML = '';
@@ -81,7 +84,26 @@ export class LayerToggleControl implements maplibregl.IControl {
 		}
 
 		// Create row for each dataset
-		datasets.forEach((dataset: any) => {
+		datasets.forEach((dataset: any, index: number) => {
+			const isFirst = index === 0;
+			const isLast = index === datasets.length - 1;
+
+			const handleMove = async (targetIndex: number) => {
+				const targetDataset = this.datasets[targetIndex];
+				const success = await swapLayerOrder(dataset.id, targetDataset.id);
+				if (success) {
+					await this.refreshPanel();
+					resyncLayerOrder(this.map!, this.datasets.map((d: any) => d.id));
+
+					// Brief highlight flash on the moved row
+					const movedRow = this.panel?.querySelector(`[data-dataset-id="${dataset.id}"]`) as HTMLDivElement | null;
+					if (movedRow) {
+						movedRow.classList.add('layer-item--moved');
+						setTimeout(() => movedRow.classList.remove('layer-item--moved'), 100);
+					}
+				}
+			};
+
 			const row = createLayerRow(dataset as Dataset, {
 				onToggleVisibility: (datasetId, visible) => {
 					toggleLayerVisibility(this.map!, datasetId, visible);
@@ -94,7 +116,9 @@ export class LayerToggleControl implements maplibregl.IControl {
 					} else {
 						this.showContextMenu(ds, menuButton);
 					}
-				}
+				},
+				onMoveUp: isFirst ? undefined : () => handleMove(index - 1),
+				onMoveDown: isLast ? undefined : () => handleMove(index + 1)
 			});
 			this.panel!.appendChild(row);
 		});
@@ -187,7 +211,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 		});
 		menu.appendChild(styleItem);
 
-		// Add divider
+		// Add divider before delete
 		menu.appendChild(createMenuDivider());
 
 		// Add delete item

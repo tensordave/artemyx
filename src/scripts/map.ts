@@ -5,6 +5,7 @@ import { DataControl } from './data-control';
 import { UploadControl } from './upload-control';
 import { StorageControl } from './storage-control';
 import { BasemapControl } from './basemap-control';
+import { GeocodingControl } from './geocoding-control';
 import { ScaleBarControl } from './scale-control';
 import { ConfigControl } from './config-control';
 import { getBasemap, getDefaultBasemap } from './basemaps';
@@ -12,13 +13,14 @@ import { loadConfig, getDefaultMapSettings } from './config/parser';
 import { loadDatasetsFromConfig } from './data-actions/load';
 import { createExecutionPlan } from './config/operations-graph';
 import { executeOperations } from './config/executor';
-import { executeLayersFromConfig } from './layers';
+import { executeLayersFromConfig, resyncLayerOrder } from './layers';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from './popup';
 import { toggleLayerVisibility } from './layer-actions/visibility';
-import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData } from './db/core';
+import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog } from './db/core';
+import { databaseIcon } from './icons';
 import { getDatasets, getFeaturesAsGeoJSON } from './db';
 import { addOperationResultToMap } from './config/operations/buffer';
-import { DEFAULT_STYLE } from './db/datasets';
+import { DEFAULT_STYLE, setLayerOrders } from './db/datasets';
 import type { MapConfig, MapSettings } from './config/types';
 
 // Catch uncaught OOM and other fatal errors so the UI doesn't silently stall
@@ -106,9 +108,11 @@ map.once('load', () => {
 const layerToggleControl = new LayerToggleControl();
 const progressControl = new ProgressControl();
 const basemapControl = new BasemapControl();
+const geocodingControl = new GeocodingControl();
 const storageControl = new StorageControl();
-layerToggleControl.setOnPanelOpen(() => { basemapControl.closePanel(); });
-basemapControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); });
+layerToggleControl.setOnPanelOpen(() => { basemapControl.closePanel(); geocodingControl.closePanel(); });
+basemapControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); geocodingControl.closePanel(); });
+geocodingControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); basemapControl.closePanel(); });
 _progressControlRef = progressControl;
 const dataControl = new DataControl({
 	map,
@@ -136,6 +140,7 @@ map.addControl(configControl, 'top-right');
 map.addControl(storageControl, 'top-right');
 map.addControl(layerToggleControl, 'top-left');
 map.addControl(basemapControl, 'top-left');
+map.addControl(geocodingControl, 'top-left');
 map.addControl(new ScaleBarControl(), 'bottom-right');
 map.addControl(progressControl, 'bottom-left');
 
@@ -205,14 +210,30 @@ async function restoreManualDatasets(): Promise<void> {
 	layerToggleControl.refreshPanel();
 }
 
-// Await DB init and show early progress if restoring from OPFS
+// Await DB init and show early progress
+progressControl.updateProgress('database', 'processing', 'Initializing database...', databaseIcon);
 await ensureInit();
-if (hasExistingOPFSData()) {
-	progressControl.updateProgress('session', 'processing', 'Restoring session from storage...');
+
+// Replay DB init log into progress history (steps ran before the control mounted)
+const initLog = getInitLog();
+if (initLog.length > 0) {
+	progressControl.injectHistory(initLog);
 }
 
-// Restore manual datasets from OPFS, then load config pipeline
+if (hasExistingOPFSData()) {
+	progressControl.updateProgress('session', 'processing', 'Restoring session from storage...');
+} else {
+	progressControl.updateProgress('database', 'success', 'Database ready');
+}
+
+// Restore manual datasets from OPFS, then sync layer order
 await restoreManualDatasets();
+
+// Ensure MapLibre layer stack matches stored layer_order after restore
+const restoredDatasets = await getDatasets();
+if (restoredDatasets.length > 0) {
+	resyncLayerOrder(map, restoredDatasets.filter((d: any) => !d.hidden).map((d: any) => d.id));
+}
 
 // DB is now initialized — update storage icon to reflect actual state
 storageControl.updateIconColor();
@@ -277,6 +298,22 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 
 			const layerResult = executeLayersFromConfig(map, mapConfig.layers);
 
+			// Recompute layer_order so it matches the config's visual intent.
+			// The topmost config layer referencing a dataset determines that dataset's
+			// visual priority. This keeps the panel and resyncLayerOrder consistent
+			// with the config's layer stacking.
+			const datasetTopIndex = new Map<string, number>();
+			for (let i = 0; i < mapConfig.layers.length; i++) {
+				datasetTopIndex.set(mapConfig.layers[i].source, i);
+			}
+			const currentDatasets = await getDatasets();
+			const visible = currentDatasets.filter((d: any) => !d.hidden);
+			const referenced = visible.filter((d: any) => datasetTopIndex.has(d.id));
+			const unreferenced = visible.filter((d: any) => !datasetTopIndex.has(d.id));
+			referenced.sort((a: any, b: any) => datasetTopIndex.get(a.id)! - datasetTopIndex.get(b.id)!);
+			const finalOrder = [...unreferenced.map((d: any) => d.id), ...referenced.map((d: any) => d.id)];
+			await setLayerOrders(finalOrder);
+
 			if (layerResult.failed > 0) {
 				console.warn('Some layers failed to create:', layerResult.errors);
 				progressControl.updateProgress('layers', 'error', `${layerResult.created} created, ${layerResult.failed} failed`);
@@ -321,6 +358,11 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 					toggleLayerVisibility(map, ds.id, false);
 				}
 			}
+
+			// Sync MapLibre layer stack to match stored layer_order
+			// (layer_order was recomputed above if config has explicit layers)
+			resyncLayerOrder(map, allDatasets.filter((d: any) => !d.hidden).map((d: any) => d.id));
+
 			layerToggleControl.refreshPanel();
 		} catch (e) {
 			console.warn('[Visibility] Failed to restore visibility state:', e);

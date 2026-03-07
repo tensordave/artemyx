@@ -122,11 +122,12 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 
 		// Insert dataset metadata with configured style and color
 		const datasetHidden = options?.hidden ?? false;
+		const layerOrder = await getNextLayerOrder();
 		const insertDataset = await connection.prepare(`
-			INSERT INTO datasets (id, source_url, name, color, visible, hidden, feature_count, loaded_at, style, source_crs)
-			VALUES (?, ?, ?, ?, true, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+			INSERT INTO datasets (id, source_url, name, color, visible, hidden, feature_count, loaded_at, style, source_crs, layer_order)
+			VALUES (?, ?, ?, ?, true, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
 		`);
-		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, datasetHidden, count, JSON.stringify(datasetStyle), options?.sourceCrs ?? null);
+		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, datasetHidden, count, JSON.stringify(datasetStyle), options?.sourceCrs ?? null, layerOrder);
 		await insertDataset.close();
 
 		console.log(`[DuckDB] Successfully loaded dataset ${datasetId} with ${count} features`);
@@ -247,6 +248,73 @@ export async function updateFeatureCount(datasetId: string): Promise<number> {
 }
 
 /**
+ * Get the next layer_order value (one higher than the current maximum).
+ * Used when inserting new datasets so they appear at the top.
+ */
+export async function getNextLayerOrder(): Promise<number> {
+	try {
+		const connection = await getConnection();
+		const result = await connection.query('SELECT COALESCE(MAX(layer_order), 0) + 1 as next_order FROM datasets');
+		return Number(result.toArray()[0].next_order);
+	} catch (error) {
+		console.error('Failed to get next layer order:', error);
+		return 1;
+	}
+}
+
+/**
+ * Swap the layer_order values of two datasets.
+ * This is the core reorder operation used by "Move up" / "Move down".
+ */
+export async function swapLayerOrder(idA: string, idB: string): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+
+		// Read both current orders
+		const stmt = await connection.prepare('SELECT id, layer_order FROM datasets WHERE id = ? OR id = ?');
+		const result = await stmt.query(idA, idB);
+		await stmt.close();
+
+		const rows = result.toArray();
+		if (rows.length !== 2) return false;
+
+		const orderA = Number(rows.find((r: any) => r.id === idA)!.layer_order);
+		const orderB = Number(rows.find((r: any) => r.id === idB)!.layer_order);
+
+		// Swap
+		const updateA = await connection.prepare('UPDATE datasets SET layer_order = ? WHERE id = ?');
+		await updateA.query(orderB, idA);
+		await updateA.close();
+
+		const updateB = await connection.prepare('UPDATE datasets SET layer_order = ? WHERE id = ?');
+		await updateB.query(orderA, idB);
+		await updateB.close();
+
+		return true;
+	} catch (error) {
+		console.error('Failed to swap layer order:', error);
+		return false;
+	}
+}
+
+/**
+ * Bulk-update layer_order for datasets to match a given visual ordering.
+ * @param orderedIds - Dataset IDs sorted bottom-to-top (index 0 = bottom of map)
+ */
+export async function setLayerOrders(orderedIds: string[]): Promise<void> {
+	try {
+		const connection = await getConnection();
+		for (let i = 0; i < orderedIds.length; i++) {
+			const stmt = await connection.prepare('UPDATE datasets SET layer_order = ? WHERE id = ?');
+			await stmt.query(i + 1, orderedIds[i]);
+			await stmt.close();
+		}
+	} catch (error) {
+		console.error('Failed to set layer orders:', error);
+	}
+}
+
+/**
  * Get all loaded datasets metadata
  */
 export async function getDatasets(): Promise<any[]> {
@@ -254,7 +322,7 @@ export async function getDatasets(): Promise<any[]> {
 		const connection = await getConnection();
 		const result = await connection.query(`
 			SELECT * FROM datasets
-			ORDER BY loaded_at DESC
+			ORDER BY layer_order DESC
 		`);
 		return result.toArray();
 	} catch (error) {

@@ -3,7 +3,7 @@
  * Handles DOM structure and event wiring for individual dataset rows.
  */
 
-import { dotsThreeVerticalIcon } from '../icons';
+import { dotsThreeVerticalIcon, arrowUpIcon, arrowDownIcon } from '../icons';
 
 export interface Dataset {
 	id: string;
@@ -16,6 +16,8 @@ export interface Dataset {
 export interface LayerRowCallbacks {
 	onToggleVisibility: (datasetId: string, visible: boolean) => void;
 	onMenuClick: (dataset: Dataset, menuButton: HTMLButtonElement) => void;
+	onMoveUp?: () => void;
+	onMoveDown?: () => void;
 }
 
 /**
@@ -55,12 +57,14 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 
 	checkbox.addEventListener('change', handleToggleVisibility);
 
-	// Row click toggles checkbox (except when clicking checkbox or menu button)
+	// Row click toggles checkbox (except when clicking interactive elements)
 	itemDiv.addEventListener('click', (e) => {
-		if (e.target !== checkbox && e.target !== menuButton) {
-			checkbox.checked = !checkbox.checked;
-			handleToggleVisibility();
+		const target = e.target as HTMLElement;
+		if (target === checkbox || target === menuButton || target.closest('.layer-reorder')) {
+			return;
 		}
+		checkbox.checked = !checkbox.checked;
+		handleToggleVisibility();
 	});
 
 	// Menu button opens context menu
@@ -69,10 +73,46 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 		callbacks.onMenuClick(dataset, menuButton);
 	});
 
+	// Reorder buttons container
+	const reorderGroup = document.createElement('div');
+	reorderGroup.className = 'layer-reorder';
+
+	const upBtn = document.createElement('button');
+	upBtn.type = 'button';
+	upBtn.className = 'layer-reorder-btn';
+	upBtn.innerHTML = arrowUpIcon;
+	upBtn.title = 'Move up';
+	if (callbacks.onMoveUp) {
+		upBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			callbacks.onMoveUp!();
+		});
+	} else {
+		upBtn.disabled = true;
+	}
+
+	const downBtn = document.createElement('button');
+	downBtn.type = 'button';
+	downBtn.className = 'layer-reorder-btn';
+	downBtn.innerHTML = arrowDownIcon;
+	downBtn.title = 'Move down';
+	if (callbacks.onMoveDown) {
+		downBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			callbacks.onMoveDown!();
+		});
+	} else {
+		downBtn.disabled = true;
+	}
+
+	reorderGroup.appendChild(upBtn);
+	reorderGroup.appendChild(downBtn);
+
 	// Assemble row
 	itemDiv.appendChild(checkbox);
 	itemDiv.appendChild(menuButton);
 	itemDiv.appendChild(label);
+	itemDiv.appendChild(reorderGroup);
 
 	return itemDiv;
 }

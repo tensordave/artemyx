@@ -15,7 +15,8 @@ export {
 	addCircleLayer,
 	addDefaultLayers,
 	addLayerFromConfig,
-	executeLayersFromConfig
+	executeLayersFromConfig,
+	resyncLayerOrder
 } from './layers';
 
 export type { LayerExecutionResult } from './layers';
