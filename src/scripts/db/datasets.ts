@@ -2,7 +2,7 @@
  * Dataset CRUD operations
  */
 
-import { getConnection, getDB, setFallbackReason } from './core';
+import { getConnection, getDB, setFallbackReason, checkpoint } from './core';
 import { generateDatasetId, extractDatasetName } from './utils';
 
 /**
@@ -10,6 +10,8 @@ import { generateDatasetId, extractDatasetName } from './utils';
  */
 export interface StyleConfig {
 	fillOpacity: number;
+	lineOpacity: number;
+	pointOpacity: number;
 	lineWidth: number;
 	pointRadius: number;
 }
@@ -19,6 +21,8 @@ export interface StyleConfig {
  */
 export const DEFAULT_STYLE: StyleConfig = {
 	fillOpacity: 0.2,
+	lineOpacity: 0.6,
+	pointOpacity: 0.6,
 	lineWidth: 2,
 	pointRadius: 6
 };
@@ -357,6 +361,7 @@ export async function updateDatasetColor(datasetId: string, color: string): Prom
 		await stmt.query(color, datasetId);
 		await stmt.close();
 		console.log(`[DuckDB] Updated dataset ${datasetId} color to ${color}`);
+		await checkpoint();
 		return true;
 	} catch (error) {
 		console.error('Failed to update dataset color:', error);
@@ -374,6 +379,7 @@ export async function updateDatasetName(datasetId: string, name: string): Promis
 		await stmt.query(name, datasetId);
 		await stmt.close();
 		console.log(`[DuckDB] Updated dataset ${datasetId} name to "${name}"`);
+		await checkpoint();
 		return true;
 	} catch (error) {
 		console.error('Failed to update dataset name:', error);
@@ -390,6 +396,7 @@ export async function updateDatasetVisible(datasetId: string, visible: boolean):
 		const stmt = await connection.prepare('UPDATE datasets SET visible = ? WHERE id = ?');
 		await stmt.query(visible, datasetId);
 		await stmt.close();
+		await checkpoint();
 		return true;
 	} catch (error) {
 		console.error('Failed to update dataset visibility:', error);
@@ -415,6 +422,7 @@ export async function deleteDataset(datasetId: string): Promise<boolean> {
 		await deleteDatasets.close();
 
 		console.log(`[DuckDB] Successfully deleted dataset ${datasetId} and all associated features`);
+		await checkpoint();
 		return true;
 	} catch (error) {
 		console.error('Failed to delete dataset:', error);
@@ -441,6 +449,8 @@ export async function getDatasetStyle(datasetId: string): Promise<StyleConfig> {
 		const parsed = JSON.parse(rows[0].style);
 		return {
 			fillOpacity: parsed.fillOpacity ?? DEFAULT_STYLE.fillOpacity,
+			lineOpacity: parsed.lineOpacity ?? DEFAULT_STYLE.lineOpacity,
+			pointOpacity: parsed.pointOpacity ?? DEFAULT_STYLE.pointOpacity,
 			lineWidth: parsed.lineWidth ?? DEFAULT_STYLE.lineWidth,
 			pointRadius: parsed.pointRadius ?? DEFAULT_STYLE.pointRadius
 		};
@@ -460,9 +470,39 @@ export async function updateDatasetStyle(datasetId: string, style: StyleConfig):
 		await stmt.query(JSON.stringify(style), datasetId);
 		await stmt.close();
 		console.log(`[DuckDB] Updated dataset ${datasetId} style:`, style);
+		await checkpoint();
 		return true;
 	} catch (error) {
 		console.error('Failed to update dataset style:', error);
 		return false;
 	}
+}
+
+const VIEWPORT_STORAGE_KEY = 'artemyx-viewport';
+
+/**
+ * Save the current map viewport (center + zoom) to localStorage.
+ */
+export function saveViewport(center: [number, number], zoom: number): void {
+	try { localStorage.setItem(VIEWPORT_STORAGE_KEY, JSON.stringify({ center, zoom })); } catch { /* quota or private mode */ }
+}
+
+/**
+ * Synchronously read the cached viewport from localStorage.
+ */
+export function getCachedViewport(): { center: [number, number]; zoom: number } | null {
+	try {
+		const raw = localStorage.getItem(VIEWPORT_STORAGE_KEY);
+		if (!raw) return null;
+		return JSON.parse(raw);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Clear the saved viewport from localStorage.
+ */
+export function clearCachedViewport(): void {
+	try { localStorage.removeItem(VIEWPORT_STORAGE_KEY); } catch { /* private mode */ }
 }

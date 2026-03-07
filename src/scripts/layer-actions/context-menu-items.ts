@@ -5,7 +5,7 @@
  * Callbacks are provided by the caller to handle actions.
  */
 
-import { gearIcon, trashIcon, paletteIcon, pencilIcon } from '../icons';
+import { trashIcon, pencilIcon } from '../icons';
 
 /**
  * Create a generic menu item with icon and label
@@ -45,59 +45,12 @@ export function createMenuDivider(): HTMLDivElement {
 }
 
 /**
- * Create a color picker menu item
- *
- * Opens the native color picker when clicked. Calls onColorChange with the
- * new color value when user selects a color.
- *
- * @param disabled - If true, item is greyed out (color is controlled by config expressions)
- */
-export function createColorPickerItem(
-	currentColor: string,
-	onColorChange: (newColor: string) => void,
-	disabled: boolean = false
-): HTMLDivElement {
-	if (disabled) {
-		const item = createMenuItem(paletteIcon, 'Change color', () => {});
-		item.classList.add('context-menu-item--disabled');
-		item.title = 'Color controlled by config expression';
-		return item;
-	}
-
-	return createMenuItem(paletteIcon, 'Change color', () => {
-		// Create a hidden color input
-		const colorInput = document.createElement('input');
-		colorInput.type = 'color';
-		colorInput.value = currentColor;
-		colorInput.style.display = 'none';
-
-		colorInput.addEventListener('change', () => {
-			onColorChange(colorInput.value);
-		});
-
-		// Trigger color picker and clean up
-		document.body.appendChild(colorInput);
-		colorInput.click();
-		setTimeout(() => document.body.removeChild(colorInput), 100);
-	});
-}
-
-/**
  * Create a rename dataset menu item
  *
  * Calls onRename when clicked to trigger inline edit mode.
  */
 export function createRenameItem(onRename: () => void): HTMLDivElement {
 	return createMenuItem(pencilIcon, 'Rename', onRename);
-}
-
-/**
- * Create a style settings menu item
- *
- * Opens the inline style panel for adjusting fill opacity, line width, point radius.
- */
-export function createStyleItem(onStyle: () => void): HTMLDivElement {
-	return createMenuItem(gearIcon, 'Style...', onStyle);
 }
 
 /**

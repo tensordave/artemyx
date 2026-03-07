@@ -33,6 +33,16 @@ export function validateStyle(style: unknown, prefix: string): string[] {
 	} else if ('fillOpacity' in s && ((s.fillOpacity as number) < 0 || (s.fillOpacity as number) > 1)) {
 		errors.push(`${prefix}.fillOpacity: must be between 0 and 1`);
 	}
+	if ('lineOpacity' in s && typeof s.lineOpacity !== 'number') {
+		errors.push(`${prefix}.lineOpacity: must be a number`);
+	} else if ('lineOpacity' in s && ((s.lineOpacity as number) < 0 || (s.lineOpacity as number) > 1)) {
+		errors.push(`${prefix}.lineOpacity: must be between 0 and 1`);
+	}
+	if ('pointOpacity' in s && typeof s.pointOpacity !== 'number') {
+		errors.push(`${prefix}.pointOpacity: must be a number`);
+	} else if ('pointOpacity' in s && ((s.pointOpacity as number) < 0 || (s.pointOpacity as number) > 1)) {
+		errors.push(`${prefix}.pointOpacity: must be between 0 and 1`);
+	}
 	if ('lineWidth' in s && typeof s.lineWidth !== 'number') {
 		errors.push(`${prefix}.lineWidth: must be a number`);
 	}

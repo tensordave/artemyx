@@ -343,3 +343,20 @@ export async function query(sql: string): Promise<any> {
 	const result = await connection.query(sql);
 	return result.toArray();
 }
+
+/**
+ * Flush WAL to the OPFS database file.
+ * DuckDB-WASM auto-checkpoints after large writes but small UPDATE statements
+ * (color, style, visibility) may sit in the WAL unflushed. Call this after
+ * metadata mutations to ensure persistence survives page close.
+ * No-op when running in-memory.
+ */
+export async function checkpoint(): Promise<void> {
+	if (storageMode !== 'opfs') return;
+	try {
+		const connection = await getConnection();
+		await connection.query('CHECKPOINT');
+	} catch (error) {
+		console.warn('[DuckDB] Checkpoint failed:', error);
+	}
+}

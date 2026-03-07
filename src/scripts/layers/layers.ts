@@ -179,8 +179,8 @@ export function addDefaultLayers(
 	const ids = getLayerIds(datasetId);
 
 	addFillLayer(map, ids.fill, sourceId, color, style.fillOpacity);
-	addLineLayer(map, ids.line, sourceId, color, style.lineWidth);
-	addCircleLayer(map, ids.point, sourceId, color, style.pointRadius);
+	addLineLayer(map, ids.line, sourceId, color, style.lineWidth, style.lineOpacity);
+	addCircleLayer(map, ids.point, sourceId, color, style.pointRadius, style.pointOpacity);
 
 	return [ids.fill, ids.line, ids.point];
 }

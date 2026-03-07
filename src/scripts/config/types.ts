@@ -24,6 +24,10 @@ export interface MapSettings {
 export interface StyleConfigPartial {
 	/** Fill opacity for polygons (0-1) */
 	fillOpacity?: number;
+	/** Line/edge opacity (0-1) */
+	lineOpacity?: number;
+	/** Point opacity (0-1) */
+	pointOpacity?: number;
 	/** Line width in pixels */
 	lineWidth?: number;
 	/** Point radius in pixels */

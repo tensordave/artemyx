@@ -3,6 +3,7 @@
 /* Layer panel modifiers */
 .control-panel--layers {
 	min-width: 200px;
+	max-width: calc(100vw - 56px);
 	max-height: 300px;
 	overflow-y: auto;
 }
@@ -28,13 +29,32 @@
 }
 
 .layer-item:hover {
-	background-color: rgba(51, 136, 255, 0.15);
+	background-color: rgba(51, 136, 255, 0.08);
 }
 
-/* Dataset checkbox */
-.layer-checkbox {
-	margin-right: 8px;
+/* Visibility icon button (eye / eye-slash) — scoped to override MapLibre defaults */
+.maplibregl-ctrl .layer-visibility-btn {
+	width: 24px;
+	height: 24px;
+	margin-right: 6px;
+	padding: 0;
 	cursor: pointer;
+	background-color: transparent !important;
+	border: none !important;
+	border-radius: 3px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.layer-visibility-btn svg {
+	width: 16px;
+	height: 16px;
+}
+
+.layer-visibility-btn:hover {
+	background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Dataset label */
@@ -72,13 +92,13 @@
 	flex-shrink: 0;
 }
 
-.layer-reorder-btn {
+.maplibregl-ctrl .layer-reorder-btn {
 	width: 16px;
 	height: 14px;
 	padding: 0;
 	cursor: pointer;
-	background-color: transparent;
-	border: 1px solid transparent;
+	background-color: transparent !important;
+	border: 1px solid transparent !important;
 	border-radius: 2px;
 	display: flex;
 	align-items: center;
@@ -100,21 +120,20 @@
 	cursor: default;
 }
 
-/* Brief highlight flash after reorder */
-.layer-item--moved {
-	background-color: rgba(51, 136, 255, 0.072);
-	transition: background-color 0.6s ease-out;
+/* Active highlight after reorder - stronger than :hover, clears on mousemove */
+.layer-item--active {
+	background-color: rgba(51, 136, 255, 0.2);
 }
 
-/* Kebab menu button */
-.layer-menu-btn {
+/* Kebab menu button — scoped to override MapLibre's ctrl-group button defaults */
+.maplibregl-ctrl .layer-menu-btn {
 	width: 24px;
 	height: 24px;
 	margin-right: 8px;
 	padding: 0;
 	cursor: pointer;
-	background-color: transparent;
-	border: 1px solid #555;
+	background-color: transparent !important;
+	border: 1px solid #444 !important;
 	border-radius: 3px;
 	color: #fff;
 	font-size: 16px;
@@ -124,7 +143,15 @@
 	line-height: 1;
 }
 
+.layer-menu-btn svg {
+	fill: #888 !important;
+}
+
 .layer-menu-btn:hover {
 	background-color: rgba(51, 136, 255, 0.3);
 	border-color: #3388ff;
+}
+
+.layer-menu-btn:hover svg {
+	fill: #3388ff !important;
 }

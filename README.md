@@ -1,5 +1,7 @@
 # artemyx
 
+![artemyx](docs/artemyx_screenshot_readme.png)
+
 A declarative GIS application using MapLibre GL JS with client-side data processing via DuckDB-WASM.
 
 **Live:** [artemyx.org](https://artemyx.org)
@@ -13,14 +15,16 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 ## Key Features
 
 - Interactive mapping with switchable basemaps (CARTO, Satellite)
-- Multi-dataset support with layer management UI (visibility, color, rename, delete)
+- Multi-dataset support with layer management UI (visibility, color, rename, delete, per-layer style panel)
 - YAML-driven configuration for declarative map setup and spatial operations
 - Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
 - Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays) with paginated fetching
 - Local file upload via drag-and-drop or file picker
 - CRS detection and automatic reprojection to WGS84
-- OPFS persistence - sessions survive page refresh
+- OPFS persistence - sessions survive page refresh, with viewport restore
 - Multi-geometry rendering (Point, LineString, Polygon, Multi* variants)
+- Address search via Photon geocoding (OSM data, no API key)
+- Scale bar (metric/imperial) and mouse coordinate display (decimal degrees / DMS toggle)
 - Feature inspection with property popups and hover tooltips
 - Fully client-side - no backend required
 
@@ -38,6 +42,7 @@ src/scripts/
 ├── config/            # YAML parsing, validation, operations graph
 │   ├── parser.ts      # Config loading and validation
 │   ├── types.ts       # MapConfig, DatasetConfig, OperationConfig
+│   ├── validators/    # Domain-specific validation (datasets, operations, layers, shared)
 │   ├── operations-graph.ts  # Dependency resolution, topological sort
 │   ├── executor.ts    # Spatial operation execution
 │   └── operations/    # One file per operation (buffer, intersection, union, ...)
@@ -56,7 +61,14 @@ src/scripts/
 │   ├── crs.ts         # CRS parsing and detection utilities
 │   └── paginator.ts   # Paginated GeoJSON fetching (ArcGIS, Socrata, OGC)
 ├── data-actions/      # Data loading pipeline
-│   └── load.ts        # URL fetch, validation, loader dispatch, layer creation
+│   ├── load.ts        # Barrel re-export
+│   ├── shared.ts      # Types, validation, quota check, map helpers
+│   ├── load-url.ts    # URL fetch pipeline with pagination
+│   ├── load-file.ts   # Local file loading
+│   └── load-config.ts # YAML config batch loading
+├── logger/            # Logging abstraction
+│   ├── types.ts       # Logger interface (progress, info, warn)
+│   └── browser.ts     # BrowserLogger wrapping ProgressControl
 ├── layers/            # MapLibre layer creation
 │   ├── layers.ts      # addLayerFromConfig, executeLayersFromConfig
 │   └── sources.ts     # Source management
@@ -72,10 +84,11 @@ src/scripts/
 ├── data-control.ts    # Custom control: load data from URL with advanced options (CRS, format, columns)
 ├── upload-control.ts  # Custom control: local file upload (drag-and-drop, file picker)
 ├── config-control.ts  # Custom control: view active YAML config with syntax highlighting
-├── layer-control.ts   # Custom control: layer visibility, color, rename, delete
+├── layer-control.ts   # Custom control: layer visibility, color, rename, delete, reorder
 ├── storage-control.ts # Custom control: OPFS status and session management
+├── geocoding-control.ts # Custom control: address search via Photon geocoding
 ├── basemap-control.ts # Custom control: basemap switcher
-├── scale-control.ts   # Custom control: distance scale bar with metric/imperial toggle
+├── scale-control.ts   # Custom control: scale bar, coordinate display (DD/DMS)
 ├── progress-control.ts # Custom control: status log with expandable history
 ├── basemaps.ts        # Basemap tile configurations
 └── popup.ts           # Feature popup and hover tooltip utilities
@@ -107,7 +120,7 @@ npm test            # Run tests once
 npm run test:watch  # Watch mode (re-runs on file changes)
 ```
 
-Tests use Vitest and are co-located with source files (`*.test.ts`). Currently covers operations graph module (dependency resolution, topological sort, cycle detection).
+Tests use Vitest and are co-located with source files (`*.test.ts`). Covers operations graph, format detection, CRS parsing, CSV parsing, GeoJSON normalization, unit conversion, column detection, and dataset ID utilities.
 
 ## Configuration
 
@@ -167,7 +180,5 @@ layers:
 Layers support full MapLibre paint/layout properties including expressions (`match` for categories, `interpolate` for gradients).
 
 ## Status
-
-**Current version:** v0.4.2
 
 [changelog](CHANGELOG.md) - [roadmap](ROADMAP.md)

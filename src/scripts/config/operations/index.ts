@@ -42,6 +42,8 @@ export interface OperationContext {
 export function parseStyleConfig(style?: StyleConfigPartial): StyleConfig {
 	return {
 		fillOpacity: style?.fillOpacity ?? DEFAULT_STYLE.fillOpacity,
+		lineOpacity: style?.lineOpacity ?? DEFAULT_STYLE.lineOpacity,
+		pointOpacity: style?.pointOpacity ?? DEFAULT_STYLE.pointOpacity,
 		lineWidth: style?.lineWidth ?? DEFAULT_STYLE.lineWidth,
 		pointRadius: style?.pointRadius ?? DEFAULT_STYLE.pointRadius
 	};

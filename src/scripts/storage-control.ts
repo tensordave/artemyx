@@ -1,6 +1,7 @@
 import maplibregl from 'maplibre-gl';
-import { databaseIcon } from './icons';
+import { databaseIcon, crosshairIcon, trashIcon } from './icons';
 import { getStorageMode, getFallbackReason, clearOPFS } from './db/core';
+import { clearCachedViewport, getCachedViewport } from './db/datasets';
 import type { FallbackReason } from './db/core';
 
 function formatBytes(bytes: number): string {
@@ -270,10 +271,14 @@ export class StorageControl implements maplibregl.IControl {
 	}
 
 	/**
-	 * Add "Clear Session" button with inline confirmation (same UX as layer delete).
+	 * Add "Clear Session" button with inline confirmation (same UX as layer delete),
+	 * plus a small viewport-reset button beside it.
 	 */
 	private addClearSessionButton(): void {
 		if (!this.panel) return;
+
+		const row = document.createElement('div');
+		row.className = 'storage-action-row';
 
 		const btn = document.createElement('button');
 		btn.className = 'storage-action-btn';
@@ -305,7 +310,40 @@ export class StorageControl implements maplibregl.IControl {
 			}
 		});
 
-		this.panel.appendChild(btn);
+		row.appendChild(btn);
+
+		// Viewport reset button (only shown when a saved viewport exists)
+		if (getCachedViewport()) {
+			const vpBtn = document.createElement('button');
+			vpBtn.className = 'storage-action-btn storage-action-btn--icon';
+			vpBtn.innerHTML = crosshairIcon;
+			vpBtn.title = 'Reset saved map position';
+
+			let vpConfirmPending = false;
+
+			vpBtn.addEventListener('click', () => {
+				if (!vpConfirmPending) {
+					vpConfirmPending = true;
+					vpBtn.innerHTML = trashIcon;
+					vpBtn.classList.add('storage-action-btn--confirm');
+
+					setTimeout(() => {
+						if (vpConfirmPending) {
+							vpConfirmPending = false;
+							vpBtn.innerHTML = crosshairIcon;
+							vpBtn.classList.remove('storage-action-btn--confirm');
+						}
+					}, 3000);
+				} else {
+					clearCachedViewport();
+					vpBtn.remove();
+				}
+			});
+
+			row.appendChild(vpBtn);
+		}
+
+		this.panel.appendChild(row);
 	}
 
 	/**

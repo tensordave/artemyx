@@ -1,14 +1,18 @@
 /**
- * Inline style panel for editing layer display properties.
- * Provides sliders for fill opacity, line width, and point radius
- * with live preview updates to the map.
+ * Style view builder for the layer control drill-down panel.
+ * Builds the style view content (color, opacity, width, radius)
+ * inside the layer panel element, replacing the layer list.
  */
 
 import maplibregl from 'maplibre-gl';
 import { getDatasetStyle, updateDatasetStyle, type StyleConfig } from '../db/datasets';
+import { getDistinctGeometryTypes } from '../db/features';
 import { ProgressControl } from '../progress-control';
 import { getLayersBySource, type SourceLayerInfo } from '../layers/layers';
 import { getSourceId } from '../layers/sources';
+import { arrowLeftIcon } from '../icons';
+import { isColorPickerEnabled, getDisplayColor, updateLayerColor } from './color';
+import type { Dataset } from './layer-row';
 
 /**
  * Maps StyleConfig properties to their target layer type and MapLibre paint property.
@@ -18,6 +22,8 @@ const STYLE_PROPERTY_MAP: Record<
 	{ layerType: SourceLayerInfo['type']; paintProperty: string }
 > = {
 	fillOpacity: { layerType: 'fill', paintProperty: 'fill-opacity' },
+	lineOpacity: { layerType: 'line', paintProperty: 'line-opacity' },
+	pointOpacity: { layerType: 'circle', paintProperty: 'circle-opacity' },
 	lineWidth: { layerType: 'line', paintProperty: 'line-width' },
 	pointRadius: { layerType: 'circle', paintProperty: 'circle-radius' }
 };
@@ -43,11 +49,12 @@ function getEditableProperties(
 
 	const result: Record<keyof StyleConfig, boolean> = {
 		fillOpacity: false,
+		lineOpacity: false,
+		pointOpacity: false,
 		lineWidth: false,
 		pointRadius: false
 	};
 
-	// For each property, check if there's at least one matching layer without an expression
 	for (const property of Object.keys(STYLE_PROPERTY_MAP) as (keyof StyleConfig)[]) {
 		const mapping = STYLE_PROPERTY_MAP[property];
 
@@ -58,7 +65,6 @@ function getEditableProperties(
 
 			const currentValue = layer.paint[mapping.paintProperty];
 			if (!isExpression(currentValue)) {
-				// Found at least one editable layer for this property
 				result[property] = true;
 				break;
 			}
@@ -66,6 +72,21 @@ function getEditableProperties(
 	}
 
 	return result;
+}
+
+/**
+ * Check which geometry types exist for a dataset by querying DuckDB.
+ * Returns accurate results regardless of viewport state or render timing.
+ */
+async function getGeometryPresence(
+	datasetId: string
+): Promise<{ hasFill: boolean; hasLine: boolean; hasCircle: boolean }> {
+	const types = await getDistinctGeometryTypes(datasetId);
+	return {
+		hasFill: types.has('POLYGON') || types.has('MULTIPOLYGON'),
+		hasLine: types.has('LINESTRING') || types.has('MULTILINESTRING') || types.has('POLYGON') || types.has('MULTIPOLYGON'),
+		hasCircle: types.has('POINT') || types.has('MULTIPOINT')
+	};
 }
 
 interface SliderConfig {
@@ -76,6 +97,7 @@ interface SliderConfig {
 	step: number;
 	unit: string;
 	format: (value: number) => string;
+	requiredGeometry: 'hasFill' | 'hasLine' | 'hasCircle';
 }
 
 const SLIDER_CONFIGS: SliderConfig[] = [
@@ -86,7 +108,28 @@ const SLIDER_CONFIGS: SliderConfig[] = [
 		max: 1,
 		step: 0.05,
 		unit: '',
-		format: (v) => v.toFixed(2)
+		format: (v) => v.toFixed(2),
+		requiredGeometry: 'hasFill'
+	},
+	{
+		property: 'lineOpacity',
+		label: 'Line Opacity',
+		min: 0,
+		max: 1,
+		step: 0.05,
+		unit: '',
+		format: (v) => v.toFixed(2),
+		requiredGeometry: 'hasLine'
+	},
+	{
+		property: 'pointOpacity',
+		label: 'Point Opacity',
+		min: 0,
+		max: 1,
+		step: 0.05,
+		unit: '',
+		format: (v) => v.toFixed(2),
+		requiredGeometry: 'hasCircle'
 	},
 	{
 		property: 'lineWidth',
@@ -95,7 +138,8 @@ const SLIDER_CONFIGS: SliderConfig[] = [
 		max: 10,
 		step: 0.5,
 		unit: 'px',
-		format: (v) => `${v}px`
+		format: (v) => `${v}px`,
+		requiredGeometry: 'hasLine'
 	},
 	{
 		property: 'pointRadius',
@@ -104,18 +148,10 @@ const SLIDER_CONFIGS: SliderConfig[] = [
 		max: 20,
 		step: 1,
 		unit: 'px',
-		format: (v) => `${v}px`
+		format: (v) => `${v}px`,
+		requiredGeometry: 'hasCircle'
 	}
 ];
-
-/**
- * Track currently open style panel to ensure only one is open at a time
- */
-let currentStylePanel: {
-	panel: HTMLDivElement;
-	datasetId: string;
-	cleanup: () => void;
-} | null = null;
 
 /**
  * Apply a style property to all matching layers for a dataset.
@@ -136,12 +172,10 @@ function applyStyleToMap(
 	let appliedCount = 0;
 
 	for (const layer of layers) {
-		// Only apply to matching layer type
 		if (layer.type !== mapping.layerType) {
 			continue;
 		}
 
-		// Skip if current value is an expression
 		const currentValue = layer.paint[mapping.paintProperty];
 		if (isExpression(currentValue)) {
 			console.log(
@@ -150,7 +184,6 @@ function applyStyleToMap(
 			continue;
 		}
 
-		// Apply the simple value
 		map.setPaintProperty(layer.id, mapping.paintProperty, value);
 		appliedCount++;
 	}
@@ -191,14 +224,12 @@ function createSliderRow(
 	valueDisplay.className = 'style-value';
 
 	if (disabled) {
-		// Show "Expression" badge instead of value
 		valueDisplay.textContent = 'Expression';
 		valueDisplay.classList.add('style-value-expression');
 		valueDisplay.title = 'Controlled by config expression';
 	} else {
 		valueDisplay.textContent = config.format(currentValue);
 
-		// Live update on slider input
 		slider.addEventListener('input', () => {
 			const newValue = parseFloat(slider.value);
 			valueDisplay.textContent = config.format(newValue);
@@ -214,130 +245,195 @@ function createSliderRow(
 }
 
 /**
- * Show the inline style panel for a dataset.
- * Inserts the panel after the layer row element.
+ * Create the color row for the style view.
+ * Shows a colored swatch that triggers the native color picker, plus the hex value.
  */
-export async function showStylePanel(
+function createColorRow(
 	map: maplibregl.Map,
-	datasetId: string,
-	datasetName: string,
-	rowElement: HTMLDivElement,
+	dataset: Dataset,
 	progressControl: ProgressControl,
-	onClose?: () => void
-): Promise<void> {
-	// Close any existing style panel
-	closeStylePanel();
+	onColorChanged: (newColor: string) => void
+): HTMLDivElement {
+	const row = document.createElement('div');
+	row.className = 'style-row style-color-row';
 
+	const label = document.createElement('span');
+	label.className = 'style-label';
+	label.textContent = 'Color';
+
+	const colorEnabled = isColorPickerEnabled(map, dataset.id);
+	const currentColor = getDisplayColor(map, dataset.id, dataset.color || '#3388ff');
+
+	const swatchContainer = document.createElement('div');
+	swatchContainer.className = 'style-color-swatch-container';
+
+	const swatch = document.createElement('input');
+	swatch.type = 'color';
+	swatch.className = 'style-color-swatch';
+	swatch.value = currentColor;
+	swatch.title = colorEnabled ? 'Change color' : 'Color controlled by config expression';
+
+	const hexDisplay = document.createElement('span');
+	hexDisplay.className = 'style-value';
+
+	if (!colorEnabled) {
+		row.classList.add('style-row-disabled');
+		swatch.disabled = true;
+		hexDisplay.textContent = 'Expression';
+		hexDisplay.classList.add('style-value-expression');
+		hexDisplay.title = 'Controlled by config expression';
+	} else {
+		hexDisplay.textContent = currentColor;
+
+		swatch.addEventListener('input', () => {
+			hexDisplay.textContent = swatch.value;
+		});
+
+		swatch.addEventListener('change', async () => {
+			const newColor = swatch.value;
+			hexDisplay.textContent = newColor;
+			await updateLayerColor(map, dataset.id, dataset.name, newColor, progressControl);
+			onColorChanged(newColor);
+		});
+	}
+
+	swatchContainer.appendChild(swatch);
+
+	row.appendChild(label);
+	row.appendChild(swatchContainer);
+	row.appendChild(hexDisplay);
+
+	return row;
+}
+
+/** Tracks the current style view's save function for auto-save on panel close */
+let pendingSave: (() => Promise<void>) | null = null;
+
+/** Debounce timer for auto-saving style changes to DB */
+let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Save any pending style changes (called when leaving the style view).
+ */
+export async function savePendingStyle(): Promise<void> {
+	// Cancel any pending debounce - we're saving immediately
+	if (saveDebounceTimer) {
+		clearTimeout(saveDebounceTimer);
+		saveDebounceTimer = null;
+	}
+	if (pendingSave) {
+		await pendingSave();
+		pendingSave = null;
+	}
+}
+
+/**
+ * Build the style view inside the layer panel.
+ * Replaces panel content with style controls for the given dataset.
+ */
+export async function buildStyleView(
+	map: maplibregl.Map,
+	dataset: Dataset,
+	panelElement: HTMLDivElement,
+	progressControl: ProgressControl,
+	onBack: () => void,
+	onColorChanged: (newColor: string) => void
+): Promise<void> {
 	// Get current style from database
-	const currentStyle = await getDatasetStyle(datasetId);
+	const currentStyle = await getDatasetStyle(dataset.id);
 	const workingStyle: StyleConfig = { ...currentStyle };
 
-	// Create panel element
-	const panel = document.createElement('div');
-	panel.className = 'style-panel';
+	// Clear panel
+	panelElement.innerHTML = '';
 
-	// Header with title and close button
+	// Header with back arrow and layer name
 	const header = document.createElement('div');
-	header.className = 'style-panel-header';
+	header.className = 'style-view-header';
+	header.style.borderLeftColor = dataset.color || '#3388ff';
+
+	const backBtn = document.createElement('button');
+	backBtn.type = 'button';
+	backBtn.className = 'style-view-back';
+	backBtn.innerHTML = arrowLeftIcon;
+	backBtn.title = 'Back to layers';
 
 	const title = document.createElement('span');
-	title.className = 'style-panel-title';
-	title.textContent = 'Style Settings';
+	title.className = 'style-view-title';
+	title.textContent = dataset.name;
 
-	const closeBtn = document.createElement('button');
-	closeBtn.type = 'button';
-	closeBtn.className = 'style-panel-close';
-	closeBtn.textContent = '✕';
-	closeBtn.title = 'Close';
-
+	header.appendChild(backBtn);
 	header.appendChild(title);
-	header.appendChild(closeBtn);
-	panel.appendChild(header);
+	panelElement.appendChild(header);
 
-	// Check which properties are editable (not using expressions)
-	const editableProps = getEditableProperties(map, datasetId);
+	// Content area
+	const content = document.createElement('div');
+	content.className = 'style-view-content';
 
-	// Create sliders for each property
+	// Color row
+	const colorRow = createColorRow(map, dataset, progressControl, onColorChanged);
+	content.appendChild(colorRow);
+
+	// Check which properties are editable and which geometries exist
+	const editableProps = getEditableProperties(map, dataset.id);
+	const geometryPresence = await getGeometryPresence(dataset.id);
+
+	// Debounced save: persists style to DB 500ms after the last slider change.
+	// Ensures OPFS persistence without waiting for the user to navigate away.
+	const scheduleSave = () => {
+		if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+		saveDebounceTimer = setTimeout(() => {
+			saveDebounceTimer = null;
+			pendingSave?.();
+		}, 500);
+	};
+
+	// Create sliders for each relevant property
 	SLIDER_CONFIGS.forEach((config) => {
+		// Skip controls for geometry types not present in this dataset
+		if (!geometryPresence[config.requiredGeometry]) {
+			return;
+		}
+
 		const isEditable = editableProps[config.property];
 		const sliderRow = createSliderRow(
 			config,
 			currentStyle[config.property],
 			(newValue) => {
-				// Update working style
 				workingStyle[config.property] = newValue;
-				// Live update map
-				applyStyleToMap(map, datasetId, config.property, newValue);
+				applyStyleToMap(map, dataset.id, config.property, newValue);
+				scheduleSave();
 			},
-			!isEditable // disabled if not editable
+			!isEditable
 		);
-		panel.appendChild(sliderRow);
+		content.appendChild(sliderRow);
 	});
 
-	// Save and cleanup function
-	const saveAndClose = async () => {
-		// Check if style actually changed
+	panelElement.appendChild(content);
+
+	// Set up pending save for auto-save on leave
+	pendingSave = async () => {
 		const hasChanges =
 			workingStyle.fillOpacity !== currentStyle.fillOpacity ||
+			workingStyle.lineOpacity !== currentStyle.lineOpacity ||
+			workingStyle.pointOpacity !== currentStyle.pointOpacity ||
 			workingStyle.lineWidth !== currentStyle.lineWidth ||
 			workingStyle.pointRadius !== currentStyle.pointRadius;
 
 		if (hasChanges) {
-			progressControl.updateProgress(datasetName, 'processing', 'Saving style');
-			const success = await updateDatasetStyle(datasetId, workingStyle);
+			progressControl.updateProgress(dataset.name, 'processing', 'Saving style');
+			const success = await updateDatasetStyle(dataset.id, workingStyle);
 			if (success) {
-				progressControl.updateProgress(datasetName, 'success', 'Style saved');
+				progressControl.updateProgress(dataset.name, 'success', 'Style saved');
 				progressControl.scheduleIdle(2000);
 			} else {
-				progressControl.updateProgress(datasetName, 'error', 'Failed to save style');
+				progressControl.updateProgress(dataset.name, 'error', 'Failed to save style');
 			}
 		}
-
-		// Remove panel from DOM
-		panel.remove();
-		currentStylePanel = null;
-
-		if (onClose) {
-			onClose();
-		}
 	};
 
-	// Close button handler
-	closeBtn.addEventListener('click', (e) => {
+	// Back button handler
+	backBtn.addEventListener('click', (e) => {
 		e.stopPropagation();
-		saveAndClose();
+		onBack();
 	});
-
-	// Prevent clicks inside panel from bubbling to row
-	panel.addEventListener('click', (e) => {
-		e.stopPropagation();
-	});
-
-	// Insert panel after the row element
-	rowElement.insertAdjacentElement('afterend', panel);
-
-	// Track current panel
-	currentStylePanel = {
-		panel,
-		datasetId,
-		cleanup: saveAndClose
-	};
-}
-
-/**
- * Close the currently open style panel (if any)
- */
-export function closeStylePanel(): void {
-	if (currentStylePanel) {
-		currentStylePanel.cleanup();
-	}
-}
-
-/**
- * Check if a style panel is currently open for a specific dataset
- */
-export function isStylePanelOpen(datasetId?: string): boolean {
-	if (!currentStylePanel) return false;
-	if (datasetId === undefined) return true;
-	return currentStylePanel.datasetId === datasetId;
 }

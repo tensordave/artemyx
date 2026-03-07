@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.5.0 - 2026-03-07
+
+### Drill-down Style Panel
+
+- **Style view drill-down** (`layer-control.ts`, `layer-actions/style.ts`): clicking a layer row transitions the panel from the layer list to that layer's style controls; back arrow returns to the list; panel tracks `currentView` state (`'list' | 'style'`) and auto-saves pending style changes on any transition (back, panel close, switching to another layer)
+- **Color picker in style view** (`layer-actions/style.ts`): color swatch is a native `<input type="color">` element styled as a 24px circle via pseudo-element rules (`::-webkit-color-swatch`, `::-moz-color-swatch`); eliminates the previous hidden-input + programmatic `.click()` pattern that failed on iOS Safari; live preview updates the hex display during picking; on change, updates all non-expression layers via `updateLayerColor()` and refreshes the style view header accent color
+- **Geometry-aware controls via DuckDB** (`layer-actions/style.ts`, `db/features.ts`): `getGeometryPresence()` now queries DuckDB for `SELECT DISTINCT ST_GeometryType(geometry)` per dataset instead of checking MapLibre layer types (which always returned true due to three-layer default rendering); style panel now shows only relevant controls - point-only datasets omit fill/line sliders, polygon datasets include line controls for outlines, line-only datasets omit fill/point sliders; works reliably regardless of viewport state or OPFS restore timing
+- **Line and point opacity controls** (`datasets.ts`, `types.ts`, `style.ts`, `layers.ts`, `operations/index.ts`, `validators/shared.ts`): added `lineOpacity` and `pointOpacity` to `StyleConfig` (default 0.6), `StyleConfigPartial`, and config validation; style panel shows dedicated opacity sliders for line and point layers alongside fill opacity; `addDefaultLayers()` now passes stored opacity values instead of hardcoded 0.6; backwards-compatible with existing stored styles via `??` fallback
+- **Visibility icon** (`layer-actions/layer-row.ts`, `layers.css`): checkbox replaced with Phosphor eye/eye-slash icon button; click toggles visibility without opening the style view; mutable `isVisible` state tracks toggle across clicks
+- **Debounced style persistence** (`layer-actions/style.ts`): slider changes now debounce-save to DuckDB 500ms after the last adjustment, instead of deferring all writes until the user navigates away from the style view; prevents style loss if the page is closed or refreshed while the style panel is open; `savePendingStyle()` cancels the debounce timer and saves immediately on view transitions
+- **OPFS checkpoint for metadata writes** (`db/core.ts`, `db/datasets.ts`): added `checkpoint()` helper that runs `CHECKPOINT` to flush the DuckDB WAL to the OPFS database file (no-op when in-memory); called after `updateDatasetColor`, `updateDatasetStyle`, `updateDatasetName`, `updateDatasetVisible`, and `deleteDataset`; fixes inconsistent OPFS persistence where small UPDATE statements would sit in the WAL unflushed and be lost on page close, while large operations like `loadGeoJSON` auto-checkpointed reliably
+- **Simplified context menu** (`layer-control.ts`, `layer-actions/context-menu-items.ts`): color picker and style items removed (both moved into the style view); menu now contains only rename and delete; `createColorPickerItem` and `createStyleItem` exports removed along with unused `gearIcon`/`paletteIcon` imports
+
+### Mobile Style Panel
+
+- **Panel overflow fix** (`layers.css`): added `max-width: calc(100vw - 56px)` to `.control-panel--layers` so the panel stays within the viewport on narrow screens (40px left offset + 16px right margin)
+- **Compact style controls on mobile** (`style-panel.css`): `@media (max-width: 767px)` reduces `.style-label` to 56px/10px, `.style-value` to 40px/10px, and `.style-row` gap to 6px; gives sliders more room on screens as narrow as 375px
+
+### Viewport Persistence
+
+- **Saved map position on OPFS-enabled maps** (`map.ts`, `db/datasets.ts`): debounced `moveend` listener (1s) saves the map center and zoom to `localStorage` on every pan/zoom; restored synchronously before map creation on next page load so the map initializes at the saved position with no visible jump or delay; only active on OPFS-enabled maps (`/app`) - demo and example pages always use config defaults
+- **Viewport reset button** (`storage-control.ts`, `storage.css`): small crosshair icon button inline with "Clear Session" in the storage panel; shown only when a saved viewport exists; two-click confirmation (crosshair swaps to red trash icon, auto-reverts after 3s); clears the saved position so the next refresh returns to config defaults
+- **New icon: Crosshair** (`icons/crosshair.ts`): Phosphor Crosshair (Regular) for viewport reset
+
+### Misc
+
+- **Apple touch icon link** (`app.astro`, `index.astro`, `test.astro`, `ExampleLayout.astro`): added `<link rel="apple-touch-icon">` to all page heads so Safari finds the existing `apple-touch-icon.png` directly instead of requesting the missing `apple-touch-icon-precomposed.png`
+
+### Reorder Highlight Fix
+
+- **Active highlight on moved row** (`layer-control.ts`, `layers.css`): after reordering a layer with the arrow buttons, a persistent `layer-item--active` highlight marks the moved row at its new position; clears on the next `mousemove` event so normal hover takes over once the user re-orients
+- **Reduced hover opacity** (`layers.css`): layer row hover background lowered from 15% to 8% opacity; creates a clear visual hierarchy between passive hover (8%) and active reorder highlight (20%)
+
+### Layer Control Button Styling
+
+- **MapLibre button override fix** (`layers.css`): all layer panel buttons (visibility, menu, reorder) scoped with `.maplibregl-ctrl` selector and `!important` on `background-color` and `border` to override MapLibre's `.maplibregl-ctrl-group button` defaults and `button + button { border-top: 1px solid #ddd }` sibling rule
+- **Menu button icon color** (`layers.css`): SVG fill overridden from inline `#3388ff` to `#888` at rest, `#3388ff` on hover; border softened from `#555` to `#444`
+
+### New Icons
+
+- **ArrowLeft** (`icons/arrow-left.ts`): Phosphor ArrowLeft (Regular) for style view back navigation; exported from `icons/index.ts`
+
 ## v0.4.4 - 2026-03-06
 
 ### Examples - Socrata Pagination

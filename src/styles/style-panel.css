@@ -1,48 +1,53 @@
-/* Inline Style Panel Styles */
+/* Style View (drill-down panel inside layer control) */
 
-.style-panel {
-	background-color: #1a1a1a;
-	border-top: 1px solid #444;
-	margin: 5px -10px -10px -10px;
-	padding: 10px;
-	border-radius: 0 0 4px 4px;
-}
-
-.style-panel-header {
+/* Header with back arrow and layer name */
+.style-view-header {
 	display: flex;
-	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 12px;
+	gap: 6px;
+	padding: 4px 4px 8px;
+	margin-bottom: 8px;
+	border-bottom: 1px solid #333;
+	border-left: 4px solid #3388ff;
+	padding-left: 6px;
 }
 
-.style-panel-title {
-	color: #888;
-	font-size: 11px;
-	font-weight: 500;
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-}
-
-.style-panel-close {
+.style-view-back {
 	background: transparent;
 	border: none;
-	color: #666;
-	font-size: 16px;
 	cursor: pointer;
-	padding: 0;
-	width: 20px;
-	height: 20px;
+	padding: 2px;
+	border-radius: 3px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border-radius: 2px;
+	flex-shrink: 0;
 }
 
-.style-panel-close:hover {
-	color: #fff;
+.style-view-back svg {
+	width: 16px;
+	height: 16px;
+}
+
+.style-view-back:hover {
 	background-color: rgba(255, 255, 255, 0.1);
 }
 
+.style-view-title {
+	color: #fff;
+	font-size: 12px;
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Content area for style controls */
+.style-view-content {
+	padding: 2px 4px;
+}
+
+/* Shared style row (used by sliders and color) */
 .style-row {
 	display: flex;
 	align-items: center;
@@ -61,6 +66,7 @@
 	flex-shrink: 0;
 }
 
+/* Slider input */
 .style-slider {
 	flex: 1;
 	height: 4px;
@@ -99,12 +105,14 @@
 	background: #4a9eff;
 }
 
+/* Value display (right-aligned, monospace) */
 .style-value {
 	color: #fff;
 	font-size: 11px;
-	width: 36px;
+	width: 56px;
 	text-align: right;
 	font-family: 'Monaco', 'Menlo', monospace;
+	flex-shrink: 0;
 }
 
 /* Disabled slider row (expression-controlled) */
@@ -131,4 +139,65 @@
 	font-size: 10px;
 	width: auto;
 	font-family: inherit;
+}
+
+/* Color swatch */
+.style-color-swatch-container {
+	flex: 1;
+	display: flex;
+	align-items: center;
+}
+
+.style-color-swatch {
+	width: 24px;
+	height: 24px;
+	border-radius: 50% !important;
+	border: 2px solid #555;
+	cursor: pointer;
+	padding: 0;
+	flex-shrink: 0;
+	-webkit-appearance: none;
+	appearance: none;
+	outline: none;
+}
+
+.style-color-swatch:hover:not(:disabled) {
+	border-color: #888;
+}
+
+.style-color-swatch:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+/* Native color input swatch styling */
+.style-color-swatch::-webkit-color-swatch-wrapper {
+	padding: 0;
+}
+
+.style-color-swatch::-webkit-color-swatch {
+	border: none;
+	border-radius: 50%;
+}
+
+.style-color-swatch::-moz-color-swatch {
+	border: none;
+	border-radius: 50%;
+}
+
+/* Mobile: shrink fixed-width elements for narrow screens */
+@media (max-width: 767px) {
+	.style-label {
+		width: 56px;
+		font-size: 10px;
+	}
+
+	.style-value {
+		width: 40px;
+		font-size: 10px;
+	}
+
+	.style-row {
+		gap: 6px;
+	}
 }

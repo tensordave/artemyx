@@ -19,6 +19,8 @@ export function parseDatasetStyle(styleJson: string | null | undefined): StyleCo
 		const parsed = JSON.parse(styleJson);
 		return {
 			fillOpacity: parsed.fillOpacity ?? DEFAULT_STYLE.fillOpacity,
+			lineOpacity: parsed.lineOpacity ?? DEFAULT_STYLE.lineOpacity,
+			pointOpacity: parsed.pointOpacity ?? DEFAULT_STYLE.pointOpacity,
 			lineWidth: parsed.lineWidth ?? DEFAULT_STYLE.lineWidth,
 			pointRadius: parsed.pointRadius ?? DEFAULT_STYLE.pointRadius
 		};

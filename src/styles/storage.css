@@ -42,6 +42,15 @@
 	margin: 10px 0;
 }
 
+.storage-action-row {
+	display: flex;
+	gap: 6px;
+}
+
+.storage-action-row .storage-action-btn {
+	flex: 1;
+}
+
 .maplibregl-ctrl .storage-action-btn {
 	width: 100%;
 	padding: 8px;
@@ -78,6 +87,26 @@
 
 .maplibregl-ctrl .storage-action-btn--retry:hover {
 	background-color: #d97706;
+}
+
+.maplibregl-ctrl .storage-action-btn--icon {
+	width: 34px;
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+}
+
+.maplibregl-ctrl .storage-action-btn--icon svg {
+	width: 16px;
+	height: 16px;
+	fill: #ccc;
+}
+
+.maplibregl-ctrl .storage-action-btn--icon:hover svg,
+.maplibregl-ctrl .storage-action-btn--icon.storage-action-btn--confirm svg {
+	fill: #fff;
 }
 
 .maplibregl-ctrl .storage-action-btn:disabled {

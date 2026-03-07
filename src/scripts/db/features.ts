@@ -83,3 +83,25 @@ export async function getFeaturesAsGeoJSON(datasetId?: string): Promise<any> {
 		return { type: 'FeatureCollection', features: [] };
 	}
 }
+
+/**
+ * Get distinct geometry types for a dataset.
+ * Returns type strings like 'POINT', 'LINESTRING', 'POLYGON',
+ * 'MULTIPOINT', 'MULTILINESTRING', 'MULTIPOLYGON'.
+ */
+export async function getDistinctGeometryTypes(datasetId: string): Promise<Set<string>> {
+	const connection = await getConnection();
+	const stmt = await connection.prepare(`
+		SELECT DISTINCT ST_GeometryType(geometry) as geom_type
+		FROM features
+		WHERE dataset_id = ? AND geometry IS NOT NULL
+	`);
+	const result = await stmt.query(datasetId);
+	await stmt.close();
+
+	const types = new Set<string>();
+	for (const row of result.toArray()) {
+		if (row.geom_type) types.add(row.geom_type as string);
+	}
+	return types;
+}

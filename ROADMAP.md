@@ -5,23 +5,15 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.5.0 - Style Panel
-
-Goal: replace the current split between the color button and numeric style inputs with a unified, layer-aware style panel. Style panel will be its own control (separate from LayerControl) using Phosphor palette icon, top-left. This keeps LayerControl focused on visibility, ordering, and deletion, while the style panel handles all appearance concerns.
-
-- **Unified style panel** - Single control surface per layer; color picker and style inputs side by side, not separate controls
-- **Opacity control** - Per-layer opacity slider in the style panel, separate from color; applies to the appropriate paint property by geometry type (fill-opacity, line-opacity, circle-opacity)
-- **Layer-type awareness** - Show only relevant controls based on geometry type (fill opacity for polygons, line width for lines, point radius for points); fix style panel overlap with the layer row below
-- **Mobile UX - colour picker** - on some browsers, colour controls don't trigger at all, making them unusable. Should have a fallback or design a robust colour picker implementation
-- **DB mutation error feedback** - Surface failures from color, style, and visibility DB updates in the progress control; currently callers don't check return values, leaving the UI appearing to succeed when the DB write failed
-
 ### v0.5.1 - Labels
 
 - **Labels** - Per-layer label configuration in the style panel; select an attribute for `text-field`, adjust font size, halo, and placement; renders as MapLibre `symbol` layer type alongside the data layer
 
-### v0.5.2 - Legend
+### v0.5.2 - Legend and Polish
 
 - **Legend** - Auto-generated legend panel derived from active layer styles; shows color swatches for flat colors, ramp previews for interpolate expressions, and category swatches for match expressions; toggleable overlay or docked panel
+- **Progress history panel overflow** - On non-full-width maps (landing page, examples), the expanded history panel extends beyond the map container on mobile, hiding the minimize button; constrain panel width to the map container bounds
+- **Landing page controls update** - Update the "Using the app" controls grid on `index.astro` to reflect v0.5.0 changes (style panel drill-down, visibility icon) and any new descriptions; keep in sync going forward
 
 ### v0.6.0 - Large Data Infrastructure
 
@@ -32,12 +24,29 @@ Goal: replace the current split between the color button and numeric style input
 - **Operation compute/render split** - Refactor each operation file in `config/operations/` to separate SQL execution (pure, returns GeoJSON) from MapLibre rendering (source/layer creation, popup handlers); executor.ts delegates rendering as a post-step; pure execution functions become the shared core for the v0.9.x CLI
 - **Loader Response decoupling** - Refactor loader signatures from `load(response: Response)` to `load(data: string | object | ArrayBuffer)`; callers (data-actions) handle Response unwrapping; makes loaders usable from Node.js without polyfilling browser Response
 
-### v0.6.1 - Export and Sharing
+### v0.6.1 - Config Editor
 
-- **Export** - Export datasets as GeoJSON, CSV, or Parquet
+Goal: evolve ConfigControl from a read-only viewer into a full config editor. Import, edit, run, and export configs from a single panel - the same codeblock icon, same position, but with modes instead of separate controls.
+
+- **Edit mode** - Toggle from Shiki-highlighted read-only view to a monospace textarea; "Run" button parses YAML via existing `config/parser.ts`, tears down current state (datasets, sources, layers), and re-runs the full pipeline; inline validation errors for invalid YAML or config; update landing page controls grid to reflect new config editor capabilities (edit, import, export vs view-only)
+- **Import** - Paste or upload a `.yaml` file to replace the current config; equivalent to editing + running but from an external source
+- **Export data** - Export datasets as GeoJSON, CSV, or Parquet
 - **Export config** - Generate reproducible YAML from current session state; exported config uses the full author schema (datasets, operations, layers); this is the same config the CLI consumes
 - **Export viewer config** - Generate a viewer-only YAML from current session: datasets pointing to exported files + layer definitions; no operations or outputs (data is pre-baked); pairs with CLI's `--viewer-config` output for the same purpose
+- **Clean teardown** - New function to remove all datasets, sources, and layers from DuckDB and MapLibre; required by edit/import to reset state before re-running a config
 - **External PMTiles loading** - Register the `pmtiles://` protocol handler on map init; allow `pmtiles://` URLs in `DatasetConfig` as a tiled vector source; enables loading externally hosted PMTiles files (open data portals, self-hosted, GitHub Pages); bridges to in-browser PMTiles generation in v0.7.0
+
+### v0.6.2 - Config Generation
+
+- **Generate config from session** - "Generate" button in the config editor toolbar; reads current map state (datasets, styles, operations, layers) and serializes to YAML; populates the editor textarea so the user can review, tweak, and re-run; file-uploaded datasets emit a placeholder comment since they have no URL to reference; reads paint properties back from MapLibre via `getPaintProperty()` for manually adjusted styles
+- **Preserve local datasets on re-run** - When the config pipeline tears down and re-runs, file-uploaded datasets (no URL) are kept in DuckDB untouched; teardown skips them, and the pipeline treats them as already-loaded (same `datasetExists()` check used for OPFS restore); the placeholder comment in generated YAML is cosmetic only and does not affect the running session
+
+### v0.6.3 - Operations Builder
+
+Goal: form-based UI for running spatial operations without writing YAML. Dedicated control (top-right, alongside DataControl and ConfigControl) with a Phosphor icon.
+
+- **Operation form** - Dropdown for operation type; input dropdown(s) populated from loaded datasets (one for unary ops, two for binary); type-specific parameter fields (distance + unit for buffer, mode for intersection, etc.); output name text input; "Run" button executes via existing operation pipeline; add to landing page controls grid
+- **Generated YAML preview** - Show the equivalent YAML snippet below the form as a learning aid; users see the config syntax for what they just built visually
 
 ### v0.7.0 - In-browser PMTiles Generation
 
@@ -48,11 +57,7 @@ Goal: generate PMTiles archives directly in the browser from any DuckDB-backed d
 - **OPFS PMTiles cache** - Generated `.pmtiles` files persisted in OPFS alongside the DuckDB database; restored on session reload without regeneration; invalidated when source dataset changes; `StorageControl` panel updated to surface PMTiles cache size alongside DB size
 - **MapLibre vector source wiring** - Tiled datasets use a MapLibre `vector` source pointing to the OPFS `pmtiles://` path instead of a `geojson` source; layer config requires a `source-layer` matching the declared `layerName`
 
-### v0.7.1 - YAML Snippet Runner
-
-- **YAML snippet runner** - In-browser panel for pasting a single operation block in standard config YAML syntax; executes against loaded datasets; output appears as a new auto-styled layer; no new syntax - same format as `map-config.yaml`; pairs with Export Config for an interactive-to-reproducible workflow. Use Phosphor terminal-window icon. Top-right, as a data/operations tool alongside DataControl and ConfigControl.
-
-### v0.7.2 - Accessibility and Shortcuts
+### v0.7.1 - Accessibility and Shortcuts
 
 - **Keyboard shortcuts** - L (layer control), P (progress), Esc (close), Delete (remove feature), WASD for panning map, R/F to zoom in and out
 - **ARIA labels** - Accessibility improvements for `layer-control.ts`
@@ -187,9 +192,13 @@ Items worth building eventually but not yet assigned to a version:
 - **Smarter URL label extraction** - Progress control currently shows raw URLs in loading messages; extract human-readable dataset names from well-known portal URL patterns (Socrata `/resource/<4x4>`, ArcGIS REST `/FeatureServer/0/query`, OGC `/collections/<id>/items`); fall back to hostname or full URL for unrecognized patterns
 - **Scale bar unit config field** - `map.unit: metric | imperial` in YAML config to set the default scale bar unit for a given map; useful for configs targeting a specific regional audience; defaults to metric when omitted
 - **Persist scale bar unit preference** - store the user's last-selected metric/imperial toggle choice in `localStorage`; restored on next session; overrides config default but can itself be overridden by explicit `map.unit` in config
-- **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc. 
+- **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc.
+- **DB mutation error feedback** - Surface failures from color, style, and visibility DB updates in the progress control; currently callers don't check return values, leaving the UI appearing to succeed when the DB write failed (hard to test - DB mutations have been rock-solid in practice)
 
 ## Completed
+
+### v0.5.0 - Style Panel
+- Drill-down style panel (color, opacity, width, radius) with layer-type-aware controls via DuckDB geometry queries, visibility eye icon, reorder highlight fix, debounced OPFS metadata persistence with WAL checkpoint, mobile colour picker fix and panel overflow, viewport persistence to localStorage
 
 ### v0.4.4 - Housekeeping
 - CSS partial split, paint/layout style-spec validation, parser and load.ts module splits, config injection shared utility, unit test expansion (156 tests), example pagination, Logger interface decoupling pipeline code from ProgressControl

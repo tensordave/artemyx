@@ -3,7 +3,7 @@
  * Handles DOM structure and event wiring for individual dataset rows.
  */
 
-import { dotsThreeVerticalIcon, arrowUpIcon, arrowDownIcon } from '../icons';
+import { dotsThreeVerticalIcon, arrowUpIcon, arrowDownIcon, eyeIcon, eyeSlashIcon } from '../icons';
 
 export interface Dataset {
 	id: string;
@@ -15,6 +15,7 @@ export interface Dataset {
 
 export interface LayerRowCallbacks {
 	onToggleVisibility: (datasetId: string, visible: boolean) => void;
+	onRowClick: (dataset: Dataset) => void;
 	onMenuClick: (dataset: Dataset, menuButton: HTMLButtonElement) => void;
 	onMoveUp?: () => void;
 	onMoveDown?: () => void;
@@ -31,12 +32,15 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 	// Dynamic border color based on dataset color
 	itemDiv.style.borderLeftColor = dataset.color || '#3388ff';
 
-	// Checkbox for visibility toggle
-	const checkbox = document.createElement('input');
-	checkbox.type = 'checkbox';
-	checkbox.className = 'layer-checkbox';
 	// DuckDB-WASM Arrow returns booleans as 0/1, so use truthiness check
-	checkbox.checked = !!dataset.visible;
+	let isVisible = !!dataset.visible;
+
+	// Visibility icon button (eye / eye-slash)
+	const visibilityBtn = document.createElement('button');
+	visibilityBtn.type = 'button';
+	visibilityBtn.className = 'layer-visibility-btn';
+	visibilityBtn.innerHTML = isVisible ? eyeIcon : eyeSlashIcon;
+	visibilityBtn.title = isVisible ? 'Hide layer' : 'Show layer';
 
 	// Menu button (⋮) for context menu
 	const menuButton = document.createElement('button');
@@ -51,20 +55,21 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 	label.textContent = `${dataset.name} (${dataset.feature_count.toLocaleString()})`;
 
 	// Visibility toggle handler
-	const handleToggleVisibility = () => {
-		callbacks.onToggleVisibility(dataset.id, checkbox.checked);
-	};
+	visibilityBtn.addEventListener('click', (e) => {
+		e.stopPropagation();
+		isVisible = !isVisible;
+		visibilityBtn.innerHTML = isVisible ? eyeIcon : eyeSlashIcon;
+		visibilityBtn.title = isVisible ? 'Hide layer' : 'Show layer';
+		callbacks.onToggleVisibility(dataset.id, isVisible);
+	});
 
-	checkbox.addEventListener('change', handleToggleVisibility);
-
-	// Row click toggles checkbox (except when clicking interactive elements)
+	// Row click opens style view (except when clicking interactive elements)
 	itemDiv.addEventListener('click', (e) => {
 		const target = e.target as HTMLElement;
-		if (target === checkbox || target === menuButton || target.closest('.layer-reorder')) {
+		if (target.closest('.layer-visibility-btn') || target.closest('.layer-menu-btn') || target.closest('.layer-reorder')) {
 			return;
 		}
-		checkbox.checked = !checkbox.checked;
-		handleToggleVisibility();
+		callbacks.onRowClick(dataset);
 	});
 
 	// Menu button opens context menu
@@ -109,7 +114,7 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 	reorderGroup.appendChild(downBtn);
 
 	// Assemble row
-	itemDiv.appendChild(checkbox);
+	itemDiv.appendChild(visibilityBtn);
 	itemDiv.appendChild(menuButton);
 	itemDiv.appendChild(label);
 	itemDiv.appendChild(reorderGroup);
@@ -185,7 +190,7 @@ export function startRenameEdit(
 		exitEditMode(false);
 	});
 
-	// Prevent row click from toggling checkbox while editing
+	// Prevent row click from opening style view while editing
 	input.addEventListener('click', (e) => {
 		e.stopPropagation();
 	});

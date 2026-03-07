@@ -21,7 +21,7 @@ import { BrowserLogger } from './logger';
 import { databaseIcon } from './icons';
 import { getDatasets, getFeaturesAsGeoJSON } from './db';
 import { addOperationResultToMap } from './config/operations/buffer';
-import { DEFAULT_STYLE, setLayerOrders } from './db/datasets';
+import { DEFAULT_STYLE, setLayerOrders, saveViewport, getCachedViewport } from './db/datasets';
 import type { MapConfig, MapSettings } from './config/types';
 
 // Catch uncaught OOM and other fatal errors so the UI doesn't silently stall
@@ -69,6 +69,16 @@ try {
 	console.warn('Failed to load config, using defaults:', error);
 	configError = error instanceof Error ? error.message : 'Failed to load config';
 	mapSettings = getDefaultMapSettings();
+}
+
+// Restore saved viewport from localStorage (synchronous, no DB wait).
+// Only on OPFS-enabled maps — demo/example pages always use config defaults.
+if (useOPFS) {
+	const cached = getCachedViewport();
+	if (cached) {
+		mapSettings.center = cached.center;
+		mapSettings.zoom = cached.zoom;
+	}
 }
 
 // Get basemap configuration (from config or default)
@@ -377,6 +387,18 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 	// No config datasets — pipeline won't run, so schedule idle here
 	// (handles /app with OPFS data but no config, where "Processing session..." would otherwise stick)
 	progressControl.scheduleIdle(3000);
+}
+
+// Persist viewport on OPFS-enabled maps (debounced to avoid excessive writes)
+if (useOPFS) {
+	let moveTimer: ReturnType<typeof setTimeout> | null = null;
+	map.on('moveend', () => {
+		if (moveTimer) clearTimeout(moveTimer);
+		moveTimer = setTimeout(() => {
+			const center = map.getCenter();
+			saveViewport([center.lng, center.lat], map.getZoom());
+		}, 1000);
+	});
 }
 
 export { map, layerToggleControl, progressControl };
