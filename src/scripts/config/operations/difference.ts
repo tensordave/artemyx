@@ -25,7 +25,7 @@ export async function executeDifference(
 	op: BinaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as DifferenceParams | undefined;
 
 	// Validate inputs
@@ -46,7 +46,7 @@ export async function executeDifference(
 	const style = parseStyleConfig(op.style);
 
 	const modeLabel = mode === 'exclude' ? 'excluding' : 'subtracting';
-	progressControl.updateProgress(displayName, 'processing', `Differencing ${inputA} minus ${inputB} (${modeLabel})...`);
+	logger.progress(displayName, 'processing', `Differencing ${inputA} minus ${inputB} (${modeLabel})...`);
 
 	const connection = await getConnection();
 
@@ -130,13 +130,13 @@ export async function executeDifference(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		console.log(`[Difference] Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+		logger.info('Difference', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
 	}
 
 	if (featureCount === 0) {
 		// Not necessarily an error — could be a valid "nothing left" result
-		console.log(`[Difference] Warning: ${inputA} - ${inputB} produced no features`);
-		progressControl.updateProgress(displayName, 'success', `No features remaining after difference`);
+		logger.warn('Difference', `${inputA} - ${inputB} produced no features`);
+		logger.progress(displayName, 'success', `No features remaining after difference`);
 		// Still register empty dataset for consistency
 	}
 
@@ -165,9 +165,9 @@ export async function executeDifference(
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	progressControl.updateProgress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
+	logger.progress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
 
-	console.log(`[Difference] Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Difference', `Complete: ${outputId} with ${featureCount} features`);
 
 	return true;
 }

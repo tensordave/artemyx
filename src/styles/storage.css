@@ -1,0 +1,87 @@
+/* Storage Control Styles */
+
+.storage-panel {
+	min-width: 200px;
+	padding: 12px;
+}
+
+.storage-badge {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.storage-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.storage-label {
+	color: #fff;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.storage-detail {
+	color: #888;
+	font-size: 11px;
+	line-height: 1.5;
+	margin-bottom: 4px;
+}
+
+.storage-detail--error {
+	color: #f59e0b;
+}
+
+.storage-divider {
+	height: 1px;
+	background-color: #444;
+	margin: 10px 0;
+}
+
+.maplibregl-ctrl .storage-action-btn {
+	width: 100%;
+	padding: 8px;
+	background-color: #3a3a3a;
+	color: #ccc;
+	border: 1px solid #555;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 12px;
+	font-family: inherit;
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.maplibregl-ctrl .storage-action-btn:hover {
+	background-color: #4a4a4a;
+	color: #fff;
+}
+
+.maplibregl-ctrl .storage-action-btn--confirm {
+	background-color: #d32f2f;
+	border-color: #b71c1c;
+	color: #fff;
+}
+
+.maplibregl-ctrl .storage-action-btn--confirm:hover {
+	background-color: #e53935;
+}
+
+.maplibregl-ctrl .storage-action-btn--retry {
+	background-color: #b45309;
+	border-color: #92400e;
+	color: #fff;
+}
+
+.maplibregl-ctrl .storage-action-btn--retry:hover {
+	background-color: #d97706;
+}
+
+.maplibregl-ctrl .storage-action-btn:disabled {
+	background-color: #555;
+	cursor: not-allowed;
+	color: #888;
+}

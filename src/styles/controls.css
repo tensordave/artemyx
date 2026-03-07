@@ -1,0 +1,98 @@
+/* Shared control primitives: button, panel, input, submit */
+
+/* Control container (used by controls that need relative positioning) */
+.control-container {
+	position: relative;
+}
+
+/* Control toggle button (used by GeoJSON, Layer controls) */
+/* Scoped to .maplibregl-ctrl to override MapLibre's default button styles */
+.maplibregl-ctrl .control-btn {
+	background-color: rgba(30, 30, 30, 0.85) !important;
+	color: #fff !important;
+	border: 1px solid #3a3a3a !important;
+	border-radius: 3px;
+	cursor: pointer;
+	width: 29px;
+	height: 29px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 16px;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+}
+
+.maplibregl-ctrl .control-btn:hover {
+	background-color: rgba(51, 136, 255, 0.3) !important;
+}
+
+/* Control dropdown panel */
+.control-panel {
+	display: none;
+	position: absolute;
+	top: 0;
+	padding: 10px;
+	background-color: rgba(30, 30, 30, 0.85);
+	border: 1px solid #3a3a3a;
+	border-radius: 3px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+}
+
+.control-panel--open {
+	display: block;
+}
+
+.control-panel--left {
+	left: 40px;
+}
+
+.control-panel--right {
+	right: 40px;
+}
+
+/* Control text input */
+.control-input {
+	width: 250px;
+	padding: 8px;
+	margin-bottom: 8px;
+	display: block;
+	background-color: #1a1a1a;
+	color: #fff;
+	border: 1px solid #555;
+	border-radius: 3px;
+}
+
+.control-input::placeholder {
+	color: #888;
+}
+
+.control-input:focus {
+	outline: none;
+	border-color: #3388ff;
+}
+
+/* Control submit/action button */
+/* Scoped to .maplibregl-ctrl to override MapLibre's default button styles */
+.maplibregl-ctrl .control-submit {
+	width: 100%;
+	padding: 8px;
+	background-color: #3388ff;
+	color: #fff;
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	font-weight: bold;
+}
+
+.maplibregl-ctrl .control-submit:hover {
+	background-color: #2277ee;
+}
+
+.maplibregl-ctrl .control-submit:disabled {
+	background-color: #555;
+	cursor: not-allowed;
+}

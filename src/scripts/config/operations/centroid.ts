@@ -27,7 +27,7 @@ export async function executeCentroid(
 	op: UnaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
 
 	const outputId = op.output;
 	const displayName = op.name || outputId;
@@ -35,7 +35,7 @@ export async function executeCentroid(
 	const color = op.color ?? DEFAULT_COLOR;
 	const style = parseStyleConfig(op.style);
 
-	progressControl.updateProgress(displayName, 'processing', `Computing centroids of ${inputId}...`);
+	logger.progress(displayName, 'processing', `Computing centroids of ${inputId}...`);
 
 	const connection = await getConnection();
 
@@ -72,8 +72,8 @@ export async function executeCentroid(
 	const featureCount = Number(countResult.toArray()[0].count);
 
 	if (featureCount === 0) {
-		console.log(`[Centroid] Warning: ${inputId} produced no centroid features`);
-		progressControl.updateProgress(displayName, 'success', `No features found`);
+		logger.warn('Centroid', `${inputId} produced no centroid features`);
+		logger.progress(displayName, 'success', `No features found`);
 	}
 
 	// Register dataset metadata
@@ -101,9 +101,9 @@ export async function executeCentroid(
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	progressControl.updateProgress(displayName, 'success', `${featureCount} centroid(s)`);
+	logger.progress(displayName, 'success', `${featureCount} centroid(s)`);
 
-	console.log(`[Centroid] Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Centroid', `Complete: ${outputId} with ${featureCount} features`);
 
 	return true;
 }

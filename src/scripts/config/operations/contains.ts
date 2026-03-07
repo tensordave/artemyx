@@ -32,7 +32,7 @@ export async function executeContains(
 	op: BinaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as ContainsParams | undefined;
 
 	// Validate inputs
@@ -53,7 +53,7 @@ export async function executeContains(
 	const style = parseStyleConfig(op.style);
 
 	const modeLabel = mode === 'filter' ? 'A contains B → keep A' : 'A contains B → keep B';
-	progressControl.updateProgress(displayName, 'processing', `Contains ${inputA} / ${inputB} (${modeLabel})...`);
+	logger.progress(displayName, 'processing', `Contains ${inputA} / ${inputB} (${modeLabel})...`);
 
 	const connection = await getConnection();
 
@@ -128,12 +128,12 @@ export async function executeContains(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		console.log(`[Contains] Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+		logger.info('Contains', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
 	}
 
 	if (featureCount === 0) {
-		console.log(`[Contains] Warning: ${inputA} contains ${inputB} produced no features`);
-		progressControl.updateProgress(displayName, 'success', `No features found (${mode})`);
+		logger.warn('Contains', `${inputA} contains ${inputB} produced no features`);
+		logger.progress(displayName, 'success', `No features found (${mode})`);
 	}
 
 	// Register dataset metadata
@@ -161,9 +161,9 @@ export async function executeContains(
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	progressControl.updateProgress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
+	logger.progress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
 
-	console.log(`[Contains] Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Contains', `Complete: ${outputId} with ${featureCount} features`);
 
 	return true;
 }

@@ -37,7 +37,7 @@ export async function executeAttribute(
 	op: UnaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as AttributeParams | undefined;
 
 	if (!params) {
@@ -66,7 +66,7 @@ export async function executeAttribute(
 		filterLabel = `${property} ${operator} ${typeof value === 'string' ? `'${value}'` : value}`;
 	}
 
-	progressControl.updateProgress(displayName, 'processing', `Filtering ${inputId} (${filterLabel})...`);
+	logger.progress(displayName, 'processing', `Filtering ${inputId} (${filterLabel})...`);
 
 	const connection = await getConnection();
 
@@ -104,8 +104,8 @@ export async function executeAttribute(
 	const featureCount = Number(countResult.toArray()[0].count);
 
 	if (featureCount === 0) {
-		console.log(`[Attribute] Warning: ${inputId} filter produced no features (${filterLabel})`);
-		progressControl.updateProgress(displayName, 'success', `No features matched filter`);
+		logger.warn('Attribute', `${inputId} filter produced no features (${filterLabel})`);
+		logger.progress(displayName, 'success', `No features matched filter`);
 	}
 
 	// Register dataset metadata
@@ -133,9 +133,9 @@ export async function executeAttribute(
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	progressControl.updateProgress(displayName, 'success', `${featureCount} feature(s) (${filterLabel})`);
+	logger.progress(displayName, 'success', `${featureCount} feature(s) (${filterLabel})`);
 
-	console.log(`[Attribute] Complete: ${outputId} with ${featureCount} features (${filterLabel})`);
+	logger.info('Attribute', `Complete: ${outputId} with ${featureCount} features (${filterLabel})`);
 
 	return true;
 }

@@ -11,7 +11,7 @@
 
 import type maplibregl from 'maplibre-gl';
 import type { LayerToggleControl } from '../../layer-control';
-import type { ProgressControl } from '../../progress-control';
+import type { Logger } from '../../logger';
 import type { LayerConfig, StyleConfigPartial } from '../types';
 import type { StyleConfig } from '../../db/datasets';
 import { DEFAULT_STYLE } from '../../db/datasets';
@@ -19,7 +19,7 @@ import { DEFAULT_STYLE } from '../../db/datasets';
 /** Context passed to all operation executors */
 export interface OperationContext {
 	map: maplibregl.Map;
-	progressControl: ProgressControl;
+	logger: Logger;
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
 	/**

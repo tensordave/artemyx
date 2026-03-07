@@ -1,0 +1,134 @@
+/* ==========================================================================
+   Landing Page
+   ========================================================================== */
+
+/* Allow the landing page to scroll; unset the 100vh/flex constraint */
+body.landing {
+	height: auto;
+	min-height: 100vh;
+	overflow-y: auto;
+	display: block;
+}
+
+/* Shared section layout --------------------------------------------------- */
+.demo-section,
+.about-section,
+.cta-section {
+	padding: 1rem 2rem 3rem;
+	max-width: 1100px;
+	margin: 0 auto;
+}
+
+.section-heading {
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: #fff;
+	margin: 0 0 0.5rem;
+}
+
+.section-sub {
+	font-size: 0.875rem;
+	color: #888;
+	margin: 0 0 1.5rem;
+	line-height: 1.6;
+}
+
+/* Demo map: full-width, tall ----------------------------------------------- */
+.demo-caption {
+	font-size: 0.8rem;
+	color: #666;
+	margin: 0.75rem 0 0;
+	line-height: 1.5;
+}
+
+body.landing #map {
+	height: 65vh;
+	min-height: 400px;
+	flex: none;
+	border-radius: 6px;
+}
+
+/* Features grid ----------------------------------------------------------- */
+.features-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 1rem;
+	margin-top: 1.5rem;
+}
+
+.feature-card {
+	background: #1a1a1a;
+	border: 1px solid #2a2a2a;
+	border-radius: 6px;
+	padding: 1.25rem 1.5rem;
+}
+
+.feature-card-title {
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: #fff;
+	margin-bottom: 0.5rem;
+}
+
+.feature-card-body {
+	font-size: 0.8125rem;
+	color: #888;
+	line-height: 1.6;
+	margin: 0;
+}
+
+/* Controls guide ---------------------------------------------------------- */
+.controls-grid {
+	grid-template-columns: repeat(3, 1fr);
+}
+
+.control-card-icon {
+	width: 20px;
+	height: 20px;
+	margin-bottom: 0.5rem;
+	display: flex;
+	align-items: center;
+}
+
+@media (max-width: 640px) {
+	.controls-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+/* CTA section ------------------------------------------------------------- */
+.cta-section {
+	text-align: center;
+	padding-top: 2rem;
+	padding-bottom: 5rem;
+}
+
+.cta-heading {
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: #fff;
+	margin: 0 0 0.5rem;
+}
+
+.cta-sub {
+	font-size: 0.875rem;
+	color: #888;
+	margin: 0 0 1.75rem;
+}
+
+/* Shared CTA button */
+.cta-btn {
+	display: inline-block;
+	background: #3388ff;
+	color: #fff;
+	font-size: 0.875rem;
+	font-weight: 500;
+	padding: 0.6rem 1.5rem;
+	border-radius: 4px;
+	text-decoration: none;
+	transition: background 0.15s ease;
+}
+
+.cta-btn:hover {
+	background: #2277ee;
+}

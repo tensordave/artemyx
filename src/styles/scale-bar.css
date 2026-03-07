@@ -1,0 +1,85 @@
+/* Scale Bar Control + Mouse Coordinates */
+
+.scale-bar-control {
+	display: flex;
+	flex-direction: column;
+	padding: 3px 6px;
+	background-color: rgba(30, 30, 30, 0.85);
+	border: 1px solid #3a3a3a;
+	border-radius: 3px;
+}
+
+.scale-bar-row {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.scale-bar {
+	border: 1.5px solid #999;
+	border-top: none;
+	height: 5px;
+	min-width: 10px;
+	flex-shrink: 0;
+}
+
+.scale-bar-label {
+	font-size: 10px;
+	color: #aaa;
+	font-family: system-ui, -apple-system, sans-serif;
+	white-space: nowrap;
+}
+
+.maplibregl-ctrl .scale-unit-btn {
+	background: transparent !important;
+	color: #555 !important;
+	border: 1px solid #444 !important;
+	border-radius: 2px;
+	padding: 0px 3px;
+	cursor: pointer;
+	font-size: 9px;
+	font-family: inherit;
+	line-height: 1.4;
+	flex-shrink: 0;
+}
+
+.maplibregl-ctrl .scale-unit-btn:hover {
+	color: #ccc !important;
+	border-color: #888 !important;
+}
+
+.coord-row {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	border-top: 1px solid #3a3a3a;
+	padding-top: 3px;
+	margin-top: 3px;
+}
+
+.coord-label {
+	font-size: 10px;
+	color: #aaa;
+	font-family: system-ui, -apple-system, sans-serif;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.maplibregl-ctrl .coord-format-btn {
+	background: transparent !important;
+	color: #555 !important;
+	border: 1px solid #444 !important;
+	border-radius: 2px;
+	padding: 0px 3px;
+	cursor: pointer;
+	font-size: 9px;
+	font-family: inherit;
+	line-height: 1.4;
+	flex-shrink: 0;
+	margin-left: auto;
+}
+
+.maplibregl-ctrl .coord-format-btn:hover {
+	color: #ccc !important;
+	border-color: #888 !important;
+}

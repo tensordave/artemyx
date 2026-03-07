@@ -3,20 +3,7 @@
 This document tracks planned features, implementation phases, and the development backlog.
 Completed work is listed at the bottom. For full detail on each release, see [CHANGELOG.md](CHANGELOG.md).
 
-**Release strategy:** This public repo tracks semver releases only - commits correspond to changelog entries.
-
 ## Roadmap
-
-### v0.4.4 - Housekeeping
-
-- **Parser refactor** - Review and simplify `parser.ts`; extract `loadConfig()` fetch call behind an async loader function so the parser itself is fetch-agnostic (prep for CLI which loads configs from disk)
-- **Paint/layout validation** - Per-type validation of `paint`/`layout` properties at config load time
-- **CSS refactor** - Reorganize `global.css` into logical styling groups
-- **Load.ts Refactor** - Split out loading functions into separate scripts
-- **Unit test expansion** - Coverage for `db.ts` (dataset ID generation, bulk insert, query performance); establish testing patterns alongside new feature work going forward
-- **Map page config injection refactor** - Build-time Shiki highlighting for config YAML is currently duplicated across all Astro map pages (app, index, test, examples); extract into a shared utility function or layout-level helper to reduce per-page boilerplate
-- **Update example pages with pagination** - where applicable, update some of the example configs to auto-paginate
-- **Logger interface** - Abstract progress reporting behind a `Logger` interface (`info`, `warn`, `progress`) that operations and executor call instead of `ProgressControl` directly; browser implementation wraps `ProgressControl`, CLI will use console output; keeps the seam clean for the v0.9.x split
 
 ### v0.5.0 - Style Panel
 
@@ -203,6 +190,9 @@ Items worth building eventually but not yet assigned to a version:
 - **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc. 
 
 ## Completed
+
+### v0.4.4 - Housekeeping
+- CSS partial split, paint/layout style-spec validation, parser and load.ts module splits, config injection shared utility, unit test expansion (156 tests), example pagination, Logger interface decoupling pipeline code from ProgressControl
 
 ### v0.4.3 - Map Interactivity
 - Geocoding search, dataset layer reordering, explicit layer order fix, mouse coordinate display, control styling overhaul, progress control init logging with database icon glow animation

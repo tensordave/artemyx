@@ -41,7 +41,7 @@ layers:
     tooltip: LOCATION
     type: circle
     paint:
-      circle-radius: 5
+      circle-radius: 3
       circle-color: "#22c55e"
       circle-stroke-color: "#14532d"
       circle-stroke-width: 1.5

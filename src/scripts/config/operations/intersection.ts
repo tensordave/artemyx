@@ -25,7 +25,7 @@ export async function executeIntersection(
 	op: BinaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as IntersectionParams | undefined;
 
 	// Validate inputs
@@ -46,7 +46,7 @@ export async function executeIntersection(
 	const style = parseStyleConfig(op.style);
 
 	const modeLabel = mode === 'filter' ? 'filtering' : 'clipping';
-	progressControl.updateProgress(displayName, 'processing', `Intersecting ${inputA} with ${inputB} (${modeLabel})...`);
+	logger.progress(displayName, 'processing', `Intersecting ${inputA} with ${inputB} (${modeLabel})...`);
 
 	const connection = await getConnection();
 
@@ -128,13 +128,13 @@ export async function executeIntersection(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		console.log(`[Intersection] Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+		logger.info('Intersection', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
 	}
 
 	if (featureCount === 0) {
 		// Not necessarily an error - could be valid "no intersection" result
-		console.log(`[Intersection] Warning: ${inputA} ∩ ${inputB} produced no features`);
-		progressControl.updateProgress(displayName, 'success', `No intersecting features found`);
+		logger.warn('Intersection', `${inputA} ∩ ${inputB} produced no features`);
+		logger.progress(displayName, 'success', `No intersecting features found`);
 		// Still register empty dataset for consistency
 	}
 
@@ -163,9 +163,9 @@ export async function executeIntersection(
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	progressControl.updateProgress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
+	logger.progress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
 
-	console.log(`[Intersection] Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Intersection', `Complete: ${outputId} with ${featureCount} features`);
 
 	return true;
 }

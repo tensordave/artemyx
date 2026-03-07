@@ -25,7 +25,7 @@ datasets:
     color: "#fb923c"
 
   - id: bus_stops
-    url: "https://data.edmonton.ca/resource/4vt2-8zrq.geojson?$limit=7000&$offset=0"
+    url: "https://data.edmonton.ca/resource/4vt2-8zrq.geojson"
     name: Edmonton Bus Stops
     color: "#38bdf8"
 

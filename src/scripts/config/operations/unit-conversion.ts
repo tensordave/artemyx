@@ -13,6 +13,7 @@
  */
 
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import type { Logger } from '../../logger';
 
 /** Supported distance units */
 export type DistanceUnit = 'meters' | 'km' | 'feet' | 'miles';
@@ -100,7 +101,8 @@ export function getUtmEpsg(lat: number, lng: number): string | null {
  */
 export async function getProjectedCrs(
 	conn: AsyncDuckDBConnection,
-	datasetId: string
+	datasetId: string,
+	logger?: Logger
 ): Promise<ProjectedCrs> {
 	const stmt = await conn.prepare(`
 		SELECT
@@ -118,10 +120,18 @@ export async function getProjectedCrs(
 
 	const epsg = getUtmEpsg(lat, lng);
 	if (!epsg) {
-		console.warn(`[CRS] Dataset ${datasetId} centroid at ${lat.toFixed(2)}°N is outside UTM coverage, using degree approximation`);
+		if (logger) {
+			logger.warn('CRS', `Dataset ${datasetId} centroid at ${lat.toFixed(2)}°N is outside UTM coverage, using degree approximation`);
+		} else {
+			console.warn(`[CRS] Dataset ${datasetId} centroid at ${lat.toFixed(2)}°N is outside UTM coverage, using degree approximation`);
+		}
 		return { epsg: null, fallback: true, latitude: lat };
 	}
 
-	console.log(`[CRS] Dataset ${datasetId} centroid at ${lat.toFixed(2)}°N, ${lng.toFixed(2)}°E → ${epsg}`);
+	if (logger) {
+		logger.info('CRS', `Dataset ${datasetId} centroid at ${lat.toFixed(2)}°N, ${lng.toFixed(2)}°E → ${epsg}`);
+	} else {
+		console.log(`[CRS] Dataset ${datasetId} centroid at ${lat.toFixed(2)}°N, ${lng.toFixed(2)}°E → ${epsg}`);
+	}
 	return { epsg, fallback: false, latitude: lat };
 }

@@ -1,0 +1,141 @@
+/* Header bar, logo, nav, hamburger, mobile sidebar */
+
+header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 44px;
+	padding: 0 1.25rem;
+	background: #0f0f0f;
+	border-bottom: 1px solid #2a2a2a;
+	flex-shrink: 0;
+}
+
+.header-logo {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	text-decoration: none;
+	color: #fff;
+}
+
+.header-logo-icon {
+	width: 24px;
+	height: 24px;
+}
+
+.header-logo-name {
+	font-size: 1rem;
+	font-weight: 500;
+	letter-spacing: -0.02em;
+}
+
+.header-nav {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+}
+
+.header-nav-link {
+	font-size: 0.8125rem;
+	color: #888;
+	text-decoration: none;
+	transition: color 0.15s ease;
+}
+
+.header-nav-link:hover {
+	color: #fff;
+}
+
+/* Header hamburger (mobile only) ------------------------------------------ */
+
+.header-hamburger {
+	display: none;
+	background: transparent;
+	border: none;
+	color: #888;
+	font-size: 1.25rem;
+	cursor: pointer;
+	width: 36px;
+	height: 36px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+}
+
+.header-hamburger:hover {
+	color: #fff;
+	background: rgba(255, 255, 255, 0.1);
+}
+
+/* Header sidebar (mobile nav for non-examples pages) ---------------------- */
+
+.header-sidebar {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	bottom: 0;
+	width: 260px;
+	z-index: 40;
+	background: #0f0f0f;
+	border-right: 1px solid #2a2a2a;
+	flex-direction: column;
+	padding: 3rem 1.25rem 1.25rem;
+	gap: 0.25rem;
+	transform: translateX(-100%);
+	transition: transform 0.3s ease;
+}
+
+.header-sidebar--open {
+	display: flex;
+	transform: translateX(0);
+}
+
+.header-sidebar-close {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	background: transparent;
+	border: none;
+	color: #888;
+	font-size: 20px;
+	cursor: pointer;
+	width: 28px;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+}
+
+.header-sidebar-close:hover {
+	color: #fff;
+	background: rgba(255, 255, 255, 0.1);
+}
+
+.header-sidebar-link {
+	font-size: 0.875rem;
+	color: #888;
+	text-decoration: none;
+	padding: 0.5rem 0;
+	transition: color 0.15s ease;
+}
+
+.header-sidebar-link:hover {
+	color: #fff;
+}
+
+@media (max-width: 768px) {
+	.header-nav {
+		display: none;
+	}
+
+	.header-hamburger {
+		display: flex;
+	}
+
+	.header-sidebar {
+		display: flex;
+	}
+}

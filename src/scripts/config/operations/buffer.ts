@@ -55,7 +55,7 @@ export async function executeBuffer(
 	op: UnaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as BufferParams | undefined;
 
 	// Validate params
@@ -73,14 +73,14 @@ export async function executeBuffer(
 	const color = op.color ?? DEFAULT_COLOR;
 	const style = parseStyleConfig(op.style);
 
-	progressControl.updateProgress(displayName, 'processing', `Buffering ${inputId} by ${params.distance}${units === 'meters' ? 'm' : ' ' + units}...`);
+	logger.progress(displayName, 'processing', `Buffering ${inputId} by ${params.distance}${units === 'meters' ? 'm' : ' ' + units}...`);
 
 	const connection = await getConnection();
 
 	// Derive projected CRS for geodetically accurate buffering
-	const crs = await getProjectedCrs(connection, inputId);
+	const crs = await getProjectedCrs(connection, inputId, logger);
 
-	console.log(`[Buffer] ${params.distance} ${units} (${distanceMeters}m), quadSegs=${quadSegs}, crs=${crs.epsg ?? 'degree-fallback'}`);
+	logger.info('Buffer', `${params.distance} ${units} (${distanceMeters}m), quadSegs=${quadSegs}, crs=${crs.epsg ?? 'degree-fallback'}`);
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -190,7 +190,7 @@ export async function executeBuffer(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		console.log(`[Buffer] Result: ${featureCount} features, type=${debugRow.geom_type}, geojson length=${debugRow.geojson?.length || 0}`);
+		logger.info('Buffer', `Result: ${featureCount} features, type=${debugRow.geom_type}, geojson length=${debugRow.geojson?.length || 0}`);
 	}
 
 	if (featureCount === 0) {
@@ -227,9 +227,9 @@ export async function executeBuffer(
 	layerToggleControl.refreshPanel();
 
 	const dissolveNote = dissolve ? ' (dissolved)' : '';
-	progressControl.updateProgress(displayName, 'success', `Created ${featureCount} feature(s)${dissolveNote}`);
+	logger.progress(displayName, 'success', `Created ${featureCount} feature(s)${dissolveNote}`);
 
-	console.log(`[Buffer] Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Buffer', `Complete: ${outputId} with ${featureCount} features`);
 
 	return true;
 }

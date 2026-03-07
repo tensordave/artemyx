@@ -1,0 +1,107 @@
+/* MapLibre GL overrides: popups, tooltips, attribution, control groups */
+
+/* Dark mode popup styling */
+.maplibregl-popup-content {
+	background: #2c2c2c !important;
+	color: #fff !important;
+	border-radius: 4px !important;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+	padding: 12px !important;
+}
+
+.maplibregl-popup-tip {
+	border-top-color: #2c2c2c !important;
+}
+
+.maplibregl-popup-close-button {
+	color: #aaa !important;
+	font-size: 20px !important;
+	padding: 4px 8px !important;
+}
+
+.maplibregl-popup-close-button:hover {
+	background: rgba(255, 255, 255, 0.1) !important;
+	color: #fff !important;
+}
+
+/* Ensure anchor/pointer styles match */
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+	border-bottom-color: #2c2c2c !important;
+}
+
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+	border-top-color: #2c2c2c !important;
+}
+
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+	border-right-color: #2c2c2c !important;
+}
+
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+	border-left-color: #2c2c2c !important;
+}
+
+/* Attribution above scale bar: MapLibre uses floats by default; switch to
+   flex column-reverse so attribution (order: 1) renders above the scale bar. */
+.maplibregl-ctrl-bottom-right {
+	display: flex !important;
+	flex-direction: column-reverse !important;
+	align-items: flex-end !important;
+}
+
+.maplibregl-ctrl-bottom-right > .maplibregl-ctrl-attrib {
+	order: 1 !important;
+}
+
+/* Attribution control - force dark theme regardless of system color scheme.
+   MapLibre v3+ respects prefers-color-scheme which clashes with our always-dark UI. */
+.maplibregl-ctrl-attrib {
+	background-color: rgba(44, 44, 44, 0.85) !important;
+}
+
+.maplibregl-ctrl-attrib a {
+	color: #aaa !important;
+}
+
+.maplibregl-ctrl-attrib a:hover {
+	color: #fff !important;
+}
+
+.maplibregl-ctrl-attrib-inner {
+	color: #888 !important;
+}
+
+/* Hover Tooltip Styles */
+.hover-tooltip .maplibregl-popup-content {
+	background: rgba(20, 20, 20, 0.92) !important;
+	padding: 6px 10px !important;
+	font-size: 12px !important;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+	pointer-events: none !important;
+	max-width: 260px !important;
+}
+
+.hover-tooltip .maplibregl-popup-tip {
+	display: none !important;
+}
+
+.hover-tooltip-label {
+	display: block;
+	color: #fff;
+	font-size: 12px;
+	line-height: 1.3;
+}
+
+.hover-tooltip-field {
+	display: block;
+	color: #aaa;
+	font-size: 11px;
+	line-height: 1.4;
+	margin-top: 2px;
+}
+
+/* Strip the opaque group wrapper so individual buttons show through */
+.maplibregl-ctrl-group {
+	background: transparent !important;
+	box-shadow: none !important;
+}

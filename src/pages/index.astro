@@ -1,15 +1,12 @@
 ---
 import Header from '../components/Header.astro';
-import { codeToHtml } from 'shiki';
-import fs from 'node:fs';
-import path from 'node:path';
+import { highlightConfigYaml } from '../utils/highlight-config';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../styles/global.css';
 import { cloudArrowDownIcon, codeBlockIcon, stackIcon, databaseIcon, mapTrifoldIcon, circleIcon } from '../scripts/icons';
 
 const configFile = 'demo-config.yaml';
-const configYaml = fs.readFileSync(path.join(process.cwd(), 'public', configFile), 'utf-8');
-const highlightedYaml = await codeToHtml(configYaml, { lang: 'yaml', theme: 'github-dark' });
+const highlightedYaml = await highlightConfigYaml(configFile);
 ---
 
 <html lang="en">

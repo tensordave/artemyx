@@ -29,7 +29,7 @@ export async function executeDistance(
 	op: BinaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as DistanceParams | undefined;
 
 	// Validate inputs
@@ -57,12 +57,12 @@ export async function executeDistance(
 	const suffix = unitSuffix(units);
 
 	const modeLabel = mode === 'filter' ? `filtering within ${maxDistance} ${units}` : 'annotating nearest distance';
-	progressControl.updateProgress(displayName, 'processing', `Distance: ${inputA} → ${inputB} (${modeLabel})...`);
+	logger.progress(displayName, 'processing', `Distance: ${inputA} → ${inputB} (${modeLabel})...`);
 
 	const connection = await getConnection();
 
 	// Derive projected CRS for geodetically accurate distance calculations
-	const crs = await getProjectedCrs(connection, inputA);
+	const crs = await getProjectedCrs(connection, inputA, logger);
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -79,7 +79,7 @@ export async function executeDistance(
 		if (crs.fallback) {
 			// Polar fallback: degree approximation
 			const distanceDegrees = metersToDegreesAtLatitude(maxDistMeters, crs.latitude);
-			console.log(`[Distance] Filter (fallback): ${maxDistance} ${units} (${maxDistMeters}m) → ${distanceDegrees.toFixed(6)}° at lat ${crs.latitude.toFixed(2)}°`);
+			logger.info('Distance', `Filter (fallback): ${maxDistance} ${units} (${maxDistMeters}m) → ${distanceDegrees.toFixed(6)}° at lat ${crs.latitude.toFixed(2)}°`);
 
 			const insertFiltered = await connection.prepare(`
 				INSERT INTO features (dataset_id, source_url, geometry, properties)
@@ -101,7 +101,7 @@ export async function executeDistance(
 		} else {
 			// Projected CRS: ST_DWithin in meters
 			// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
-			console.log(`[Distance] Filter: ${maxDistance} ${units} (${maxDistMeters}m), crs=${crs.epsg}`);
+			logger.info('Distance', `Filter: ${maxDistance} ${units} (${maxDistMeters}m), crs=${crs.epsg}`);
 
 			const insertFiltered = await connection.prepare(`
 				INSERT INTO features (dataset_id, source_url, geometry, properties)
@@ -133,7 +133,7 @@ export async function executeDistance(
 			// Polar fallback: degree approximation with scale factor
 			const metersPerDegree = degreesToMetersAtLatitude(1, crs.latitude);
 			const unitsPerDegree = fromMeters(metersPerDegree, units);
-			console.log(`[Distance] Annotate (fallback): scale factor ${unitsPerDegree.toFixed(4)} ${units}/° at lat ${crs.latitude.toFixed(2)}° (property: ${propName})`);
+			logger.info('Distance', `Annotate (fallback): scale factor ${unitsPerDegree.toFixed(4)} ${units}/° at lat ${crs.latitude.toFixed(2)}° (property: ${propName})`);
 
 			const havingClause = maxDistance !== undefined
 				? `HAVING min_dist_deg <= ${metersToDegreesAtLatitude(toMeters(maxDistance, units), crs.latitude)}`
@@ -170,7 +170,7 @@ export async function executeDistance(
 			// Projected CRS: ST_Distance in meters, convert to output unit
 			// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
 			const unitDivisor = toMeters(1, units); // meters per output unit
-			console.log(`[Distance] Annotate: crs=${crs.epsg}, output unit=${units} (property: ${propName})`);
+			logger.info('Distance', `Annotate: crs=${crs.epsg}, output unit=${units} (property: ${propName})`);
 
 			const havingClause = maxDistance !== undefined
 				? `HAVING min_dist_m <= ${toMeters(maxDistance, units)}`
@@ -229,12 +229,12 @@ export async function executeDistance(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		console.log(`[Distance] Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+		logger.info('Distance', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
 	}
 
 	if (featureCount === 0) {
-		console.log(`[Distance] Warning: ${inputA} → ${inputB} produced no features`);
-		progressControl.updateProgress(displayName, 'success', `No features within distance`);
+		logger.warn('Distance', `${inputA} → ${inputB} produced no features`);
+		logger.progress(displayName, 'success', `No features within distance`);
 	}
 
 	// Register dataset metadata
@@ -263,9 +263,9 @@ export async function executeDistance(
 	layerToggleControl.refreshPanel();
 
 	const distNote = maxDistance !== undefined ? ` (≤${maxDistance} ${units})` : '';
-	progressControl.updateProgress(displayName, 'success', `${featureCount} feature(s) (${mode}${distNote})`);
+	logger.progress(displayName, 'success', `${featureCount} feature(s) (${mode}${distNote})`);
 
-	console.log(`[Distance] Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Distance', `Complete: ${outputId} with ${featureCount} features`);
 
 	return true;
 }

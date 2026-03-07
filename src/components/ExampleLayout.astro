@@ -1,15 +1,16 @@
 ---
 import { examples, groups, type Example } from '../scripts/examples/registry';
 import Header from './Header.astro';
+import { highlightConfigYaml } from '../utils/highlight-config';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../styles/global.css';
 
 interface Props {
 	activeExample: Example;
-	highlightedYaml: string;
 }
 
-const { activeExample, highlightedYaml } = Astro.props;
+const { activeExample } = Astro.props;
+const highlightedYaml = await highlightConfigYaml(activeExample.configPath);
 ---
 
 <html lang="en">

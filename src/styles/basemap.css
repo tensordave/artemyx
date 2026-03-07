@@ -1,0 +1,35 @@
+/* Basemap Control Styles */
+
+.basemap-panel {
+	min-width: 140px;
+	padding: 4px 0;
+}
+
+.maplibregl-ctrl .basemap-option {
+	display: block !important;
+	width: 100% !important;
+	height: auto !important;
+	box-sizing: border-box !important;
+	padding: 8px 12px !important;
+	background: none !important;
+	border: none !important;
+	color: #ccc !important;
+	font-size: 12px !important;
+	font-family: inherit !important;
+	text-align: left !important;
+	cursor: pointer !important;
+	white-space: nowrap !important;
+}
+
+.maplibregl-ctrl .basemap-option:hover {
+	background-color: #3a3a3a !important;
+	color: #fff !important;
+}
+
+.maplibregl-ctrl .basemap-option--active {
+	color: #3388ff !important;
+}
+
+.maplibregl-ctrl .basemap-option--active:hover {
+	color: #3388ff !important;
+}

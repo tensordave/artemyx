@@ -53,7 +53,7 @@ layers:
     tooltip: longname
     type: circle
     paint:
-      circle-radius: 7
+      circle-radius: 5
       circle-color:
         - match
         - ["get", "legend"]

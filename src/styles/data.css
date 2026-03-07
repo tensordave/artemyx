@@ -1,0 +1,153 @@
+/* Data Control: upload drop zone, advanced options */
+
+/* Upload Control - drop zone panel */
+
+.upload-drop-zone {
+	width: 200px;
+	padding: 14px 12px;
+	border: 1px dashed #555;
+	border-radius: 4px;
+	background-color: #1a1a1a;
+	text-align: center;
+	transition: border-color 0.15s, background-color 0.15s;
+}
+
+.upload-drop-zone--active {
+	border-color: #3388ff;
+	background-color: rgba(51, 136, 255, 0.08);
+}
+
+.upload-drop-label {
+	margin: 0 0 10px;
+	font-size: 12px;
+	color: #aaa;
+	line-height: 1.5;
+}
+
+.maplibregl-ctrl .upload-browse-btn {
+	width: 100% !important;
+	height: auto !important;
+	padding: 8px !important;
+	background-color: #3388ff !important;
+	color: #fff !important;
+	border: none !important;
+	border-radius: 4px !important;
+	font-size: 12px !important;
+	font-weight: bold !important;
+	cursor: pointer !important;
+	display: block !important;
+	box-sizing: border-box !important;
+}
+
+.maplibregl-ctrl .upload-browse-btn:hover {
+	background-color: #2277ee !important;
+}
+
+/* Advanced Options (shared by DataControl and UploadControl) */
+
+.advanced-options-wrapper {
+	margin-top: 8px;
+	border-top: 1px solid #444;
+	padding-top: 6px;
+}
+
+.maplibregl-ctrl .advanced-options-toggle {
+	display: flex !important;
+	align-items: center !important;
+	gap: 4px !important;
+	width: 100% !important;
+	height: auto !important;
+	padding: 4px 2px !important;
+	background: none !important;
+	border: none !important;
+	color: #aaa !important;
+	font-size: 11px !important;
+	cursor: pointer !important;
+}
+
+.maplibregl-ctrl .advanced-options-toggle:hover {
+	color: #ddd !important;
+	background: none !important;
+}
+
+.maplibregl-ctrl .advanced-options-toggle svg {
+	width: 14px;
+	height: 14px;
+	fill: #aaa;
+	transition: transform 0.15s;
+}
+
+.maplibregl-ctrl .advanced-options-toggle:hover svg {
+	fill: #ddd;
+}
+
+.advanced-options-toggle--open svg {
+	transform: rotate(90deg);
+}
+
+.advanced-options {
+	display: none;
+	flex-direction: column;
+	gap: 6px;
+	padding-top: 6px;
+}
+
+.advanced-options--open {
+	display: flex;
+}
+
+.advanced-options-field {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.advanced-options-label {
+	font-size: 10px;
+	color: #888;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.advanced-options-select,
+.advanced-options-input {
+	width: 100%;
+	padding: 5px 6px;
+	background-color: #1a1a1a;
+	color: #fff;
+	border: 1px solid #555;
+	border-radius: 3px;
+	font-size: 12px;
+	box-sizing: border-box;
+}
+
+.advanced-options-select:focus,
+.advanced-options-input:focus {
+	outline: none;
+	border-color: #3388ff;
+}
+
+.advanced-options-input:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+.advanced-options-input--invalid {
+	border-color: #ef4444;
+}
+
+.advanced-options-hint {
+	font-size: 10px;
+	color: #ef4444;
+	min-height: 14px;
+}
+
+.advanced-options-columns {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+}
+
+.advanced-options-columns .advanced-options-field:last-child {
+	grid-column: 1 / -1;
+}

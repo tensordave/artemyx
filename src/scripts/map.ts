@@ -17,6 +17,7 @@ import { executeLayersFromConfig, resyncLayerOrder } from './layers';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from './popup';
 import { toggleLayerVisibility } from './layer-actions/visibility';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog } from './db/core';
+import { BrowserLogger } from './logger';
 import { databaseIcon } from './icons';
 import { getDatasets, getFeaturesAsGeoJSON } from './db';
 import { addOperationResultToMap } from './config/operations/buffer';
@@ -114,15 +115,16 @@ layerToggleControl.setOnPanelOpen(() => { basemapControl.closePanel(); geocoding
 basemapControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); geocodingControl.closePanel(); });
 geocodingControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); basemapControl.closePanel(); });
 _progressControlRef = progressControl;
+const logger = new BrowserLogger(progressControl);
 const dataControl = new DataControl({
 	map,
-	progressControl,
+	logger,
 	layerToggleControl,
 	loadedDatasets
 });
 const uploadControl = new UploadControl({
 	map,
-	progressControl,
+	logger,
 	layerToggleControl,
 	loadedDatasets
 });
@@ -251,7 +253,7 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 	console.log(`Loading ${mapConfig.datasets.length} dataset(s) from config...`);
 	loadDatasetsFromConfig(mapConfig.datasets, {
 		map,
-		progressControl,
+		logger,
 		layerToggleControl,
 		loadedDatasets,
 		layers: mapConfig.layers,
@@ -280,7 +282,7 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 			// Execute operations in order
 			const opResult = await executeOperations(plan, {
 				map,
-				progressControl,
+				logger,
 				layerToggleControl,
 				loadedDatasets,
 				layers: mapConfig.layers

@@ -7,7 +7,7 @@
 
 import type maplibregl from 'maplibre-gl';
 import type { LayerToggleControl } from '../layer-control';
-import type { ProgressControl } from '../progress-control';
+import type { Logger } from '../logger';
 import type { ExecutionPlan } from './operations-graph';
 import type { OperationConfig, LayerConfig } from './types';
 import { isUnaryOperation, isBinaryOperation } from './types';
@@ -19,10 +19,10 @@ import { addOperationResultToMap } from './operations/buffer';
 import { parseStyleConfig } from './operations';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../popup';
 
-/** Context needed for operation execution (re-export for backwards compatibility) */
+/** Context needed for operation execution */
 export interface ExecutionContext {
 	map: maplibregl.Map;
-	progressControl: ProgressControl;
+	logger: Logger;
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
 	layers?: LayerConfig[];
@@ -123,8 +123,8 @@ export async function executeOperations(
 		return result;
 	}
 
-	const { progressControl } = context;
-	progressControl.updateProgress('operations', 'processing', `Executing ${plan.order.length} operation(s)...`);
+	const { logger } = context;
+	logger.progress('operations', 'processing', `Executing ${plan.order.length} operation(s)...`);
 
 	const { map, layerToggleControl, loadedDatasets, layers } = context;
 
@@ -157,7 +157,7 @@ export async function executeOperations(
 					}
 
 					layerToggleControl.refreshPanel();
-					progressControl.updateProgress(op.name || op.output, 'success', `Restored from session (${geoJsonData.features.length} features)`);
+					logger.progress(op.name || op.output, 'success', `Restored from session (${geoJsonData.features.length} features)`);
 					result.executed++;
 					continue;
 				}
@@ -169,7 +169,7 @@ export async function executeOperations(
 			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 			result.errors.push(`${op.output}: ${errorMsg}`);
 			result.failed++;
-			progressControl.updateProgress(op.name || op.output, 'error', errorMsg);
+			logger.progress(op.name || op.output, 'error', errorMsg);
 			// Continue with other operations (don't fail fast)
 		}
 	}
@@ -179,7 +179,7 @@ export async function executeOperations(
 	const summaryParts: string[] = [];
 	if (result.executed > 0) summaryParts.push(`${result.executed} executed`);
 	if (result.failed > 0) summaryParts.push(`${result.failed} failed`);
-	progressControl.updateProgress('operations', status, summaryParts.join(', '));
+	logger.progress('operations', status, summaryParts.join(', '));
 
 	return result;
 }

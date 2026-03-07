@@ -12,7 +12,7 @@ map:
 
 datasets:
   - id: bike_routes
-    url: "https://data.sfgov.org/resource/ta46-stby.geojson?$limit=3000&$offset=0"
+    url: "https://data.sfgov.org/resource/ta46-stby.geojson"
     name: SF Bike Routes
     color: "#22c55e"
 

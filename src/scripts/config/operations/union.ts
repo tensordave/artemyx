@@ -28,7 +28,7 @@ export async function executeUnion(
 	op: BinaryOperation,
 	context: OperationContext
 ): Promise<boolean> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = context;
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
 	const params = op.params as UnionParams | undefined;
 
 	// Validate inputs
@@ -50,7 +50,7 @@ export async function executeUnion(
 	const inputList = op.inputs.join(', ');
 
 	const modeLabel = mode === 'merge' ? 'merging' : 'dissolving';
-	progressControl.updateProgress(displayName, 'processing', `Union ${inputList} (${modeLabel})...`);
+	logger.progress(displayName, 'processing', `Union ${inputList} (${modeLabel})...`);
 
 	const connection = await getConnection();
 
@@ -121,12 +121,12 @@ export async function executeUnion(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		console.log(`[Union] Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+		logger.info('Union', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
 	}
 
 	if (featureCount === 0) {
-		console.log(`[Union] Warning: union of ${inputList} produced no features`);
-		progressControl.updateProgress(displayName, 'success', `No features produced`);
+		logger.warn('Union', `union of ${inputList} produced no features`);
+		logger.progress(displayName, 'success', `No features produced`);
 	}
 
 	// Register dataset metadata
@@ -154,9 +154,9 @@ export async function executeUnion(
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	progressControl.updateProgress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
+	logger.progress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
 
-	console.log(`[Union] Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Union', `Complete: ${outputId} with ${featureCount} features`);
 
 	return true;
 }

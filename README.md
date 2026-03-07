@@ -6,7 +6,6 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 
 ## Overview
 
-This project demonstrates:
 - **Mapping:** MapLibre GL JS with WebGL-based rendering for smooth panning/zooming
 - **Data Storage:** DuckDB-WASM with spatial extension for in-browser SQL queries
 - **Data Loading:** Fetch GeoJSON, CSV, GeoParquet, and JSON arrays from public API endpoints or local files, with paginated fetching and CRS auto-detection

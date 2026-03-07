@@ -12,12 +12,12 @@ map:
 
 datasets:
   - id: parks
-    url: "https://data.winnipeg.ca/resource/tx3d-pfxq.geojson?$limit=2000&$offset=0"
+    url: "https://data.winnipeg.ca/resource/tx3d-pfxq.geojson"
     name: Winnipeg Parks and Open Spaces
     color: "#22c55e"
 
   - id: cycling_network
-    url: "https://data.winnipeg.ca/resource/kjd9-dvf5.geojson?$limit=10000&$offset=0"
+    url: "https://data.winnipeg.ca/resource/kjd9-dvf5.geojson"
     name: Winnipeg Cycling Network
     color: "#f59e0b"
 

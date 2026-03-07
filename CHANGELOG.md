@@ -1,6 +1,52 @@
 # Changelog
 
-Format follows [Semantic Versioning](https://semver.org/).
+## v0.4.4 - 2026-03-06
+
+### Examples - Socrata Pagination
+
+- **Removed manual `$limit`/`$offset` params** from 5 Socrata dataset URLs across 4 example configs (`distance-annotate`, `multi-step`, `intersection`, `contains`); datasets now load via automatic Socrata pagination in `paginator.ts` instead of single oversized requests
+
+### Unit Test Expansion
+
+- **7 new test files** (142 tests, 156 total): coverage for pure functions across the data loading pipeline, format detection, CRS handling, and spatial math - all mockless (no DuckDB, MapLibre, or DOM dependencies)
+- **Format detection** (`loaders/detect.test.ts`): 6-level priority chain (config override, Content-Disposition, URL extension, path segment keywords, Content-Type, default fallback), `detectFormatFromFile` for local File objects
+- **Dataset ID and name** (`db/utils.test.ts`): `generateDatasetId` determinism, hex output, edge cases (empty, unicode, long URLs); `extractDatasetName` path parsing, extension stripping, hostname fallback
+- **CSV parsing** (`loaders/csv.test.ts`): delimiter auto-detection (comma, semicolon, tab, pipe with quote-awareness); `parseCSV` quote handling, escaped quotes, multi-line quoted fields, CRLF/LF, missing values, empty input
+- **GeoJSON normalization** (`loaders/geojson.test.ts`): all 5 input shapes (FeatureCollection, Feature, raw geometry, Feature array, invalid); `extractGeoJsonCrs` legacy crs member parsing
+- **CRS detection** (`loaders/crs.test.ts`): `parseCrsAuthority` (URN, OGC CRS84, bare authority, PROJJSON), `isWgs84` equivalence set, `hasProjectedCoordinates` range check, `resolveSourceCrs` priority chain
+- **Unit conversion** (`config/operations/unit-conversion.test.ts`): `toMeters`/`fromMeters` roundtrip consistency, degree/meter approximations at latitude, `getUtmEpsg` zone derivation and polar edge cases
+- **Column detection** (`loaders/columns.test.ts`): explicit overrides, alias auto-detection (case-insensitive), priority ordering, partial-match error hints
+
+### Load.ts Refactor
+
+- **Module split** (`data-actions/`): split 806-line `load.ts` into four focused modules - `shared.ts` (types, validation, quota check, map helpers), `load-url.ts` (URL fetch pipeline with pagination), `load-file.ts` (local file loading), `load-config.ts` (YAML config batch loading); `load.ts` retained as a barrel re-export so all existing import paths continue to work unchanged
+
+### Paint/Layout Validation
+
+- **Style spec validation** (`config/parser.ts`): layer `paint` and `layout` properties are validated against the MapLibre style spec at config load time using `@maplibre/maplibre-gl-style-spec`'s `validateStyleMin()`; catches unknown property names (typos, wrong-type properties), incorrect value types, and malformed expressions; issues logged as `[config]` console warnings - invalid properties do not block config loading
+
+### Parser Refactor
+
+- **`parseConfig()` export** (`config/parser.ts`): new pure function that accepts a YAML string and returns a validated `MapConfig`; no `fetch` or I/O - usable from any environment (browser, Node.js CLI); `loadConfig()` is now a thin browser wrapper that fetches the file and delegates to `parseConfig()`
+- **Validator module split** (`config/validators/`): extracted 882-line monolith into four domain-specific validator modules - `shared.ts` (hex color, style, CRS), `datasets.ts` (dataset structure and field validation), `operations.ts` (operation structure, buffer/distance/attribute param validation), `layers.ts` (layer structure, MapLibre style-spec validation, source reference checks); `parser.ts` slimmed to ~170 lines retaining constants, the `validateConfig()` orchestrator, and the public API; all constants exported for validator consumption; no interface changes - all validators remain pure functions returning `string[]` errors
+
+### Config Injection Refactor
+
+- **Shared highlighting utility** (`utils/highlight-config.ts`): `highlightConfigYaml(publicPath)` reads a YAML file from `public/` and returns Shiki-highlighted HTML; replaces duplicated `codeToHtml` + `fs.readFileSync` + `path.join` boilerplate across all 5 map pages
+- **ExampleLayout self-highlighting** (`components/ExampleLayout.astro`): calls `highlightConfigYaml()` internally using `activeExample.configPath`; `highlightedYaml` prop removed from the interface; both example pages (`index.astro`, `[slug].astro`) simplified to a single layout call with no shiki/fs/path imports
+- **Main page cleanup** (`app.astro`, `test.astro`, `index.astro`): 3 imports + 2 lines replaced with a single `highlightConfigYaml()` call per page
+
+### Logger Interface
+
+- **`Logger` interface** (`logger/types.ts`): abstract `progress(status, message)`, `info(message)`, and `warn(message)` methods decouple pipeline code from browser UI; `ProgressStatus` type re-exported from the logger module
+- **`BrowserLogger`** (`logger/browser.ts`): wraps `ProgressControl` for in-browser use; `progress()` delegates to `updateProgress()`, `info()` and `warn()` delegate to `console.info` / `console.warn`
+- **Pipeline migration** (17 files): all 8 operation files, `executor.ts`, `unit-conversion.ts`, `shared.ts`, `load-url.ts`, `load-file.ts`, `load-config.ts`, `data-control.ts`, `upload-control.ts`, and `map.ts` now accept or pass a `Logger` instead of `ProgressControl`; `map.ts` creates the `BrowserLogger` instance and passes it into the pipeline while keeping direct `ProgressControl` access for its own UI concerns (icon glow, idle scheduling)
+
+### CSS Refactor
+
+- **Partial file split** (`styles/`): 1945-line `global.css` monolith split into 17 partial files organized by control or page section - `base.css`, `header.css`, `maplibre.css`, `controls.css`, `progress.css`, `layers.css`, `context-menu.css`, `style-panel.css`, `data.css`, `config-viewer.css`, `basemap.css`, `scale-bar.css`, `storage.css`, `geocoding.css`, `landing.css`, `examples.css`, `dialog.css`; `global.css` retained as a barrel file with `@import` statements; existing import sites unchanged
+- **Error dialog inline style extraction** (`ui/error-dialog.ts`): `showErrorDialog()` and `showConfirmDialog()` refactored from ~62 inline `style.*` assignments to use the existing `.dialog-*` CSS classes, matching the pattern already used by `showCrsPromptDialog()`
+- **Control container class** (`controls.css`): new `.control-container` class replaces the `position: relative` inline style repeated across six map controls (`layer-control.ts`, `data-control.ts`, `upload-control.ts`, `geocoding-control.ts`, `storage-control.ts`, `basemap-control.ts`)
 
 ## v0.4.3 - 2026-03-06
 
@@ -633,3 +679,7 @@ Initial release: declarative GIS with spatial operations running entirely in-bro
 ### UI
 - Progress control with expandable history
 - Styled error dialogs
+
+---
+
+Format follows [Semantic Versioning](https://semver.org/).

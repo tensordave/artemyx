@@ -49,7 +49,7 @@ export class GeocodingControl implements IControl {
 
 		this.container = document.createElement('div');
 		this.container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
-		this.container.style.position = 'relative';
+		this.container.classList.add('control-container');
 
 		this.button = document.createElement('button');
 		this.button.type = 'button';

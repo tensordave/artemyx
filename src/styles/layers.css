@@ -1,0 +1,130 @@
+/* Layer Control Styles */
+
+/* Layer panel modifiers */
+.control-panel--layers {
+	min-width: 200px;
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+/* Empty state message */
+.layer-empty {
+	color: #999;
+	font-size: 12px;
+	padding: 5px;
+}
+
+/* Dataset row item */
+.layer-item {
+	display: flex;
+	align-items: center;
+	padding: 3px;
+	padding-left: 8px;
+	margin-bottom: 2px;
+	cursor: pointer;
+	border-radius: 3px;
+	/* Note: border-left color is set dynamically via inline style (dataset.color) */
+	border-left: 4px solid #3388ff;
+}
+
+.layer-item:hover {
+	background-color: rgba(51, 136, 255, 0.15);
+}
+
+/* Dataset checkbox */
+.layer-checkbox {
+	margin-right: 8px;
+	cursor: pointer;
+}
+
+/* Dataset label */
+.layer-label {
+	color: #fff;
+	font-size: 12px;
+	cursor: pointer;
+	flex: 1;
+}
+
+/* Inline rename input (replaces label during edit) */
+.layer-rename-input {
+	flex: 1;
+	font-size: 12px;
+	color: #fff;
+	background-color: #1a1a1a;
+	border: 1px solid #3388ff;
+	border-radius: 2px;
+	padding: 2px 4px;
+	margin: -3px 0;
+	outline: none;
+	font-family: inherit;
+}
+
+.layer-rename-input::selection {
+	background-color: rgba(51, 136, 255, 0.4);
+}
+
+/* Reorder buttons (inline up/down arrows) */
+.layer-reorder {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	margin-left: 4px;
+	flex-shrink: 0;
+}
+
+.layer-reorder-btn {
+	width: 16px;
+	height: 14px;
+	padding: 0;
+	cursor: pointer;
+	background-color: transparent;
+	border: 1px solid transparent;
+	border-radius: 2px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.layer-reorder-btn svg {
+	width: 10px;
+	height: 10px;
+}
+
+.layer-reorder-btn:not(:disabled):hover {
+	background-color: rgba(51, 136, 255, 0.3);
+	border-color: #3388ff;
+}
+
+.layer-reorder-btn:disabled {
+	opacity: 0.2;
+	cursor: default;
+}
+
+/* Brief highlight flash after reorder */
+.layer-item--moved {
+	background-color: rgba(51, 136, 255, 0.072);
+	transition: background-color 0.6s ease-out;
+}
+
+/* Kebab menu button */
+.layer-menu-btn {
+	width: 24px;
+	height: 24px;
+	margin-right: 8px;
+	padding: 0;
+	cursor: pointer;
+	background-color: transparent;
+	border: 1px solid #555;
+	border-radius: 3px;
+	color: #fff;
+	font-size: 16px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 1;
+}
+
+.layer-menu-btn:hover {
+	background-color: rgba(51, 136, 255, 0.3);
+	border-color: #3388ff;
+}

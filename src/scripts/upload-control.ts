@@ -2,12 +2,12 @@ import maplibregl from 'maplibre-gl';
 import { loadDataFromFile } from './data-actions/load';
 import { fileArrowUpIcon } from './icons';
 import type { LayerToggleControl } from './layer-control';
-import type { ProgressControl } from './progress-control';
+import type { Logger } from './logger';
 import { buildAdvancedOptions, type AdvancedOptionsHandle } from './ui/advanced-options';
 
 interface UploadControlOptions {
 	map: maplibregl.Map;
-	progressControl: ProgressControl;
+	logger: Logger;
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
 }
@@ -22,7 +22,7 @@ export class UploadControl implements maplibregl.IControl {
 	private advancedOptions: AdvancedOptionsHandle | undefined;
 
 	private map: maplibregl.Map;
-	private progressControl: ProgressControl;
+	private logger: Logger;
 	private layerToggleControl: LayerToggleControl;
 	private loadedDatasets: Set<string>;
 
@@ -41,7 +41,7 @@ export class UploadControl implements maplibregl.IControl {
 
 	constructor(options: UploadControlOptions) {
 		this.map = options.map;
-		this.progressControl = options.progressControl;
+		this.logger = options.logger;
 		this.layerToggleControl = options.layerToggleControl;
 		this.loadedDatasets = options.loadedDatasets;
 
@@ -80,7 +80,7 @@ export class UploadControl implements maplibregl.IControl {
 	onAdd(_map: maplibregl.Map) {
 		this.container = document.createElement('div');
 		this.container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
-		this.container.style.position = 'relative';
+		this.container.classList.add('control-container');
 
 		// Toggle button
 		this.button = document.createElement('button');
@@ -190,7 +190,7 @@ export class UploadControl implements maplibregl.IControl {
 
 		const success = await loadDataFromFile(file, {
 			map: this.map,
-			progressControl: this.progressControl,
+			logger: this.logger,
 			layerToggleControl: this.layerToggleControl,
 			loadedDatasets: this.loadedDatasets,
 			format: opts.format,

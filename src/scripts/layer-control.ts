@@ -35,7 +35,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 		this.map = map;
 		this.container = document.createElement('div');
 		this.container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
-		this.container.style.position = 'relative';
+		this.container.classList.add('control-container');
 
 		// Toggle button
 		this.button = document.createElement('button');
