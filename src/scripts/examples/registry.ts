@@ -64,6 +64,14 @@ export const examples: Example[] = [
 		description: 'Denver park polygons reduced to centroid points.',
 		configPath: '/examples/configs/centroid.yaml',
 	},
+	// --- Labels ---
+	{
+		slug: 'labels',
+		name: 'Labels',
+		group: 'Labels',
+		description: 'Calgary communities and LRT stations with text labels - style.labelField for simple labels, type: symbol for full MapLibre expression control.',
+		configPath: '/examples/configs/labels.yaml',
+	},
 	// --- Expression Styling ---
 	{
 		slug: 'interpolate-styling',

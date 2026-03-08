@@ -1,0 +1,76 @@
+# Artemyx Example - Labels
+# Calgary communities and LRT stations with text labels.
+# Demonstrates two labeling approaches:
+#   1. style.labelField on datasets (simple, auto-configured)
+#   2. type: symbol in layers (full MapLibre expression control)
+
+map:
+  center: [-114.0719, 51.0447]  # Calgary, AB
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  # Communities labeled via style.labelField (simple approach)
+  - id: communities
+    url: "https://data.calgary.ca/resource/surr-xmvs.geojson?$limit=500"
+    name: Calgary Communities
+    color: "#94a3b8"
+    style:
+      labelField: name
+      labelSize: 11
+      labelColor: "#e2e8f0"
+      labelHaloColor: "#0f172a"
+      labelHaloWidth: 1
+      labelMinzoom: 12
+
+  # LRT stations - labels configured via explicit symbol layer below
+  - id: lrt_stations
+    url: "https://data.calgary.ca/resource/2axz-xm4q.geojson"
+    name: LRT Stations
+    color: "#60a5fa"
+
+layers:
+  # Community polygons as muted fills
+  - id: communities-fill
+    source: communities
+    type: fill
+    paint:
+      fill-color: "#475569"
+      fill-opacity: 0.15
+
+  - id: communities-outline
+    source: communities
+    type: line
+    paint:
+      line-color: "#64748b"
+      line-width: 0.5
+      line-opacity: 0.6
+
+  # LRT stations as circles
+  - id: lrt-circles
+    source: lrt_stations
+    tooltip: stationnam
+    type: circle
+    paint:
+      circle-radius: 5
+      circle-color: "#60a5fa"
+      circle-stroke-color: "#1e3a5f"
+      circle-stroke-width: 1.5
+
+  # LRT station labels via explicit symbol layer (advanced approach)
+  # Full control over placement, font, and styling via MapLibre expressions
+  - id: lrt-labels
+    source: lrt_stations
+    type: symbol
+    layout:
+      text-field: ["get", "stationnam"]
+      text-size: 12
+      text-font: ["Open Sans Regular"]
+      text-offset: [0, 1.2]
+      text-anchor: top
+      text-allow-overlap: false
+      text-padding: 4
+    paint:
+      text-color: "#93c5fd"
+      text-halo-color: "#0f172a"
+      text-halo-width: 1.5

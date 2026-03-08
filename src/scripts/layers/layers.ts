@@ -7,6 +7,7 @@ import type maplibregl from 'maplibre-gl';
 import type { StyleConfig } from '../db/datasets';
 import type { LayerConfig } from '../config/types';
 import { getSourceId } from './sources';
+import { getDistinctGeometryTypes } from '../db/features';
 
 /**
  * Layer info returned by getLayersBySource.
@@ -182,7 +183,15 @@ export function addDefaultLayers(
 	addLineLayer(map, ids.line, sourceId, color, style.lineWidth, style.lineOpacity);
 	addCircleLayer(map, ids.point, sourceId, color, style.pointRadius, style.pointOpacity);
 
-	return [ids.fill, ids.line, ids.point];
+	// Apply zoom range if configured (non-default values)
+	const layerIds = [ids.fill, ids.line, ids.point];
+	if (style.minzoom > 0 || style.maxzoom < 24) {
+		for (const id of layerIds) {
+			map.setLayerZoomRange(id, style.minzoom, style.maxzoom);
+		}
+	}
+
+	return layerIds;
 }
 
 /**
@@ -304,4 +313,140 @@ export function executeLayersFromConfig(
 	}
 
 	return result;
+}
+
+// ── Label layer management ──────────────────────────────────────────
+
+/**
+ * Get the label layer ID for a dataset.
+ */
+export function getLabelLayerId(datasetId: string): string {
+	return `dataset-${datasetId}-label`;
+}
+
+/**
+ * Determine symbol placement based on dataset geometry types.
+ * LineString datasets get 'line-center', everything else gets 'point'.
+ */
+function getSymbolPlacement(geometryTypes: Set<string>): 'point' | 'line-center' {
+	const hasLines = geometryTypes.has('LINESTRING') || geometryTypes.has('MULTILINESTRING');
+	const hasPolygons = geometryTypes.has('POLYGON') || geometryTypes.has('MULTIPOLYGON');
+	const hasPoints = geometryTypes.has('POINT') || geometryTypes.has('MULTIPOINT');
+
+	// Use line-center only when lines are the dominant geometry (no polygons or points)
+	if (hasLines && !hasPolygons && !hasPoints) {
+		return 'line-center';
+	}
+	return 'point';
+}
+
+/**
+ * Add a label (symbol) layer for a dataset.
+ * Uses the same source as the data layers.
+ */
+export function addLabelLayer(
+	map: maplibregl.Map,
+	datasetId: string,
+	style: StyleConfig,
+	geometryTypes: Set<string>
+): void {
+	const labelLayerId = getLabelLayerId(datasetId);
+	const sourceId = getSourceId(datasetId);
+
+	if (!style.labelField || !map.getSource(sourceId)) return;
+
+	// Remove existing label layer if present
+	if (map.getLayer(labelLayerId)) {
+		map.removeLayer(labelLayerId);
+	}
+
+	const placement = getSymbolPlacement(geometryTypes);
+
+	const layerSpec: Record<string, unknown> = {
+		id: labelLayerId,
+		type: 'symbol',
+		source: sourceId,
+		layout: {
+			'text-field': ['get', style.labelField],
+			'text-size': style.labelSize,
+			'text-font': ['Open Sans Regular'],
+			'text-allow-overlap': false,
+			'text-padding': 2,
+			'text-max-width': 10,
+			'symbol-placement': placement
+		},
+		paint: {
+			'text-color': style.labelColor,
+			'text-halo-color': style.labelHaloColor,
+			'text-halo-width': style.labelHaloWidth
+		}
+	};
+
+	if (style.labelMinzoom > 0) layerSpec.minzoom = style.labelMinzoom;
+	if (style.labelMaxzoom < 24) layerSpec.maxzoom = style.labelMaxzoom;
+
+	map.addLayer(layerSpec as maplibregl.LayerSpecification);
+}
+
+/**
+ * Remove the label layer for a dataset if it exists.
+ */
+export function removeLabelLayer(map: maplibregl.Map, datasetId: string): void {
+	const labelLayerId = getLabelLayerId(datasetId);
+	if (map.getLayer(labelLayerId)) {
+		map.removeLayer(labelLayerId);
+	}
+}
+
+/**
+ * Update a single property on the label layer.
+ * @param kind - 'paint' or 'layout'
+ */
+export function updateLabelProperty(
+	map: maplibregl.Map,
+	datasetId: string,
+	kind: 'paint' | 'layout',
+	property: string,
+	value: unknown
+): void {
+	const labelLayerId = getLabelLayerId(datasetId);
+	if (!map.getLayer(labelLayerId)) return;
+
+	if (kind === 'paint') {
+		map.setPaintProperty(labelLayerId, property, value);
+	} else {
+		map.setLayoutProperty(labelLayerId, property, value);
+	}
+}
+
+/**
+ * Restore a label layer for a dataset if its style has a labelField configured.
+ * Called during session restore and config pipeline.
+ */
+export async function restoreLabelIfConfigured(
+	map: maplibregl.Map,
+	datasetId: string,
+	style: StyleConfig
+): Promise<void> {
+	if (!style.labelField) return;
+
+	const geometryTypes = await getDistinctGeometryTypes(datasetId);
+	addLabelLayer(map, datasetId, style, geometryTypes);
+}
+
+/**
+ * Apply a zoom range to all layers (fill, line, circle, label) for a dataset.
+ * Uses MapLibre's setLayerZoomRange for runtime updates.
+ */
+export function applyZoomRange(
+	map: maplibregl.Map,
+	datasetId: string,
+	minzoom: number,
+	maxzoom: number
+): void {
+	const sourceId = getSourceId(datasetId);
+	const layers = getLayersBySource(map, sourceId);
+	for (const layer of layers) {
+		map.setLayerZoomRange(layer.id, minzoom, maxzoom);
+	}
 }

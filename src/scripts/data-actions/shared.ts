@@ -22,7 +22,16 @@ export function parseDatasetStyle(styleJson: string | null | undefined): StyleCo
 			lineOpacity: parsed.lineOpacity ?? DEFAULT_STYLE.lineOpacity,
 			pointOpacity: parsed.pointOpacity ?? DEFAULT_STYLE.pointOpacity,
 			lineWidth: parsed.lineWidth ?? DEFAULT_STYLE.lineWidth,
-			pointRadius: parsed.pointRadius ?? DEFAULT_STYLE.pointRadius
+			pointRadius: parsed.pointRadius ?? DEFAULT_STYLE.pointRadius,
+			labelField: parsed.labelField ?? DEFAULT_STYLE.labelField,
+			labelSize: parsed.labelSize ?? DEFAULT_STYLE.labelSize,
+			labelColor: parsed.labelColor ?? DEFAULT_STYLE.labelColor,
+			labelHaloColor: parsed.labelHaloColor ?? DEFAULT_STYLE.labelHaloColor,
+			labelHaloWidth: parsed.labelHaloWidth ?? DEFAULT_STYLE.labelHaloWidth,
+		labelMinzoom: parsed.labelMinzoom ?? DEFAULT_STYLE.labelMinzoom,
+		labelMaxzoom: parsed.labelMaxzoom ?? DEFAULT_STYLE.labelMaxzoom,
+		minzoom: parsed.minzoom ?? DEFAULT_STYLE.minzoom,
+		maxzoom: parsed.maxzoom ?? DEFAULT_STYLE.maxzoom
 		};
 	} catch {
 		return { ...DEFAULT_STYLE };

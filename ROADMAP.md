@@ -5,15 +5,14 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.5.1 - Labels
-
-- **Labels** - Per-layer label configuration in the style panel; select an attribute for `text-field`, adjust font size, halo, and placement; renders as MapLibre `symbol` layer type alongside the data layer
-
 ### v0.5.2 - Legend and Polish
 
 - **Legend** - Auto-generated legend panel derived from active layer styles; shows color swatches for flat colors, ramp previews for interpolate expressions, and category swatches for match expressions; toggleable overlay or docked panel
 - **Progress history panel overflow** - On non-full-width maps (landing page, examples), the expanded history panel extends beyond the map container on mobile, hiding the minimize button; constrain panel width to the map container bounds
 - **Landing page controls update** - Update the "Using the app" controls grid on `index.astro` to reflect v0.5.0 changes (style panel drill-down, visibility icon) and any new descriptions; keep in sync going forward
+- **Text Entry fix on Mobile** - On mobile, to facilitate text entry, browser zooms into the text fields. Zooming out is almost impossible since that zooms the map; users need to either refresh or pinch and zoom on the header if it's visible. 
+- **Refactors** - styles.ts and layers.ts need to be broken down into smaller components. 
+- **Label config GUI fix** - Labels configs in the Style editor need a fix to properly pull the label field from the config file. 
 
 ### v0.6.0 - Large Data Infrastructure
 
@@ -196,6 +195,9 @@ Items worth building eventually but not yet assigned to a version:
 - **DB mutation error feedback** - Surface failures from color, style, and visibility DB updates in the progress control; currently callers don't check return values, leaving the UI appearing to succeed when the DB write failed (hard to test - DB mutations have been rock-solid in practice)
 
 ## Completed
+
+### v0.5.1 - Labels and Zoom Controls
+- Per-layer label configuration in the style panel and YAML configs (`labelField`, `labelSize`, `labelColor`, `labelHaloColor`, `labelHaloWidth`); auto-detected symbol placement (point vs line-center); independent zoom ranges for geometry (`minzoom`/`maxzoom`) and labels (`labelMinzoom`/`labelMaxzoom`) with interactive sliders and YAML support; labels example (Calgary) and centroid example (Denver) updated
 
 ### v0.5.0 - Style Panel
 - Drill-down style panel (color, opacity, width, radius) with layer-type-aware controls via DuckDB geometry queries, visibility eye icon, reorder highlight fix, debounced OPFS metadata persistence with WAL checkpoint, mobile colour picker fix and panel overflow, viewport persistence to localStorage

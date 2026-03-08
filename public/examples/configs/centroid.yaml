@@ -18,6 +18,13 @@ operations:
     input: parks
     output: park_centroids
     name: Park Centroids
+    style:
+      labelField: LOCATION
+      labelSize: 11
+      labelColor: "#ffffff"
+      labelHaloColor: "#1a1a1a"
+      labelHaloWidth: 1
+      labelMinzoom: 15
 
 layers:
   # Park polygons as muted fill for context

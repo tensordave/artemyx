@@ -85,6 +85,33 @@ export async function getFeaturesAsGeoJSON(datasetId?: string): Promise<any> {
 }
 
 /**
+ * Get distinct property keys for a dataset.
+ * Queries one representative feature row and extracts keys from its properties JSON.
+ * Filters out internal keys (prefixed with '_').
+ */
+export async function getPropertyKeys(datasetId: string): Promise<string[]> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare(
+			'SELECT properties FROM features WHERE dataset_id = ? AND properties IS NOT NULL LIMIT 1'
+		);
+		const result = await stmt.query(datasetId);
+		await stmt.close();
+
+		const rows = result.toArray();
+		if (rows.length === 0 || !rows[0].properties) return [];
+
+		const parsed = typeof rows[0].properties === 'string'
+			? JSON.parse(rows[0].properties)
+			: rows[0].properties;
+		return Object.keys(parsed).filter(k => !k.startsWith('_'));
+	} catch (error) {
+		console.error('Failed to get property keys:', error);
+		return [];
+	}
+}
+
+/**
  * Get distinct geometry types for a dataset.
  * Returns type strings like 'POINT', 'LINESTRING', 'POLYGON',
  * 'MULTIPOINT', 'MULTILINESTRING', 'MULTIPOLYGON'.

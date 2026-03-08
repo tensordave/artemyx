@@ -13,7 +13,7 @@ import { loadConfig, getDefaultMapSettings } from './config/parser';
 import { loadDatasetsFromConfig } from './data-actions/load';
 import { createExecutionPlan } from './config/operations-graph';
 import { executeOperations } from './config/executor';
-import { executeLayersFromConfig, resyncLayerOrder } from './layers';
+import { executeLayersFromConfig, resyncLayerOrder, restoreLabelIfConfigured } from './layers';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from './popup';
 import { toggleLayerVisibility } from './layer-actions/visibility';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog } from './db/core';
@@ -89,6 +89,7 @@ const map = new maplibregl.Map({
 	container: 'map',
 	style: {
 		version: 8,
+		glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
 		sources: {
 			basemap: basemap.source
 		},
@@ -194,6 +195,9 @@ async function restoreManualDatasets(): Promise<void> {
 
 			const layerIds = addOperationResultToMap(map, dataset.id, color, style, geoJsonData);
 			loadedDatasets.add(dataset.id);
+
+			// Restore labels if configured in saved style
+			await restoreLabelIfConfigured(map, dataset.id, style);
 
 			// Apply stored visibility state (layers are created visible by default)
 			// DuckDB-WASM Arrow returns booleans as 0/1, so use falsy check
@@ -361,11 +365,17 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 			}
 		}
 
-		// Apply stored visibility state for all datasets
+		// Apply stored visibility state and restore labels for all datasets
 		// Must happen after executeLayersFromConfig() so layers actually exist
 		try {
 			const allDatasets = await getDatasets();
 			for (const ds of allDatasets) {
+				// Restore labels if configured in saved style
+				if (ds.style) {
+					const parsedStyle = JSON.parse(ds.style);
+					await restoreLabelIfConfigured(map, ds.id, { ...DEFAULT_STYLE, ...parsedStyle });
+				}
+
 				if (!ds.visible) {
 					toggleLayerVisibility(map, ds.id, false);
 				}

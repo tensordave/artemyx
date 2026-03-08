@@ -14,6 +14,15 @@ export interface StyleConfig {
 	pointOpacity: number;
 	lineWidth: number;
 	pointRadius: number;
+	labelField: string | null;
+	labelSize: number;
+	labelColor: string;
+	labelHaloColor: string;
+	labelHaloWidth: number;
+	labelMinzoom: number;
+	labelMaxzoom: number;
+	minzoom: number;
+	maxzoom: number;
 }
 
 /**
@@ -24,7 +33,16 @@ export const DEFAULT_STYLE: StyleConfig = {
 	lineOpacity: 0.6,
 	pointOpacity: 0.6,
 	lineWidth: 2,
-	pointRadius: 6
+	pointRadius: 6,
+	labelField: null,
+	labelSize: 12,
+	labelColor: '#ffffff',
+	labelHaloColor: '#000000',
+	labelHaloWidth: 1,
+	labelMinzoom: 0,
+	labelMaxzoom: 24,
+	minzoom: 0,
+	maxzoom: 24
 };
 
 /** Default color for new datasets */
@@ -452,7 +470,16 @@ export async function getDatasetStyle(datasetId: string): Promise<StyleConfig> {
 			lineOpacity: parsed.lineOpacity ?? DEFAULT_STYLE.lineOpacity,
 			pointOpacity: parsed.pointOpacity ?? DEFAULT_STYLE.pointOpacity,
 			lineWidth: parsed.lineWidth ?? DEFAULT_STYLE.lineWidth,
-			pointRadius: parsed.pointRadius ?? DEFAULT_STYLE.pointRadius
+			pointRadius: parsed.pointRadius ?? DEFAULT_STYLE.pointRadius,
+			labelField: parsed.labelField ?? DEFAULT_STYLE.labelField,
+			labelSize: parsed.labelSize ?? DEFAULT_STYLE.labelSize,
+			labelColor: parsed.labelColor ?? DEFAULT_STYLE.labelColor,
+			labelHaloColor: parsed.labelHaloColor ?? DEFAULT_STYLE.labelHaloColor,
+			labelHaloWidth: parsed.labelHaloWidth ?? DEFAULT_STYLE.labelHaloWidth,
+		labelMinzoom: parsed.labelMinzoom ?? DEFAULT_STYLE.labelMinzoom,
+		labelMaxzoom: parsed.labelMaxzoom ?? DEFAULT_STYLE.labelMaxzoom,
+		minzoom: parsed.minzoom ?? DEFAULT_STYLE.minzoom,
+		maxzoom: parsed.maxzoom ?? DEFAULT_STYLE.maxzoom
 		};
 	} catch (error) {
 		console.error('Failed to get dataset style:', error);

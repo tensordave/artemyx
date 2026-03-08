@@ -45,7 +45,16 @@ export function parseStyleConfig(style?: StyleConfigPartial): StyleConfig {
 		lineOpacity: style?.lineOpacity ?? DEFAULT_STYLE.lineOpacity,
 		pointOpacity: style?.pointOpacity ?? DEFAULT_STYLE.pointOpacity,
 		lineWidth: style?.lineWidth ?? DEFAULT_STYLE.lineWidth,
-		pointRadius: style?.pointRadius ?? DEFAULT_STYLE.pointRadius
+		pointRadius: style?.pointRadius ?? DEFAULT_STYLE.pointRadius,
+		labelField: style?.labelField ?? DEFAULT_STYLE.labelField,
+		labelSize: style?.labelSize ?? DEFAULT_STYLE.labelSize,
+		labelColor: style?.labelColor ?? DEFAULT_STYLE.labelColor,
+		labelHaloColor: style?.labelHaloColor ?? DEFAULT_STYLE.labelHaloColor,
+		labelHaloWidth: style?.labelHaloWidth ?? DEFAULT_STYLE.labelHaloWidth,
+		labelMinzoom: style?.labelMinzoom ?? DEFAULT_STYLE.labelMinzoom,
+		labelMaxzoom: style?.labelMaxzoom ?? DEFAULT_STYLE.labelMaxzoom,
+		minzoom: style?.minzoom ?? DEFAULT_STYLE.minzoom,
+		maxzoom: style?.maxzoom ?? DEFAULT_STYLE.maxzoom
 	};
 }
 

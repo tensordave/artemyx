@@ -16,7 +16,12 @@ export {
 	addDefaultLayers,
 	addLayerFromConfig,
 	executeLayersFromConfig,
-	resyncLayerOrder
+	resyncLayerOrder,
+	getLabelLayerId,
+	addLabelLayer,
+	removeLabelLayer,
+	updateLabelProperty,
+	restoreLabelIfConfigured
 } from './layers';
 
 export type { LayerExecutionResult } from './layers';

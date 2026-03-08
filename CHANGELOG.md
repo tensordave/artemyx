@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.5.1 - 2026-03-07
+
+### Zoom Level Controls
+
+- **Geometry zoom range** (`config/types.ts`, `db/datasets.ts`, `layers/layers.ts`): added `minzoom` and `maxzoom` (0-24) to `StyleConfigPartial` and `StyleConfig`; default layers (fill, line, circle) apply the zoom range via `map.setLayerZoomRange()` when non-default values are set; configurable in YAML via `style.minzoom`/`style.maxzoom` on datasets and operations
+- **Label zoom range** (`config/types.ts`, `db/datasets.ts`, `layers/layers.ts`): added `labelMinzoom` and `labelMaxzoom` (0-24) as separate fields from geometry zoom; label layers (`type: symbol`) use these independently so labels can be hidden at low zoom while geometry remains visible; configurable in YAML via `style.labelMinzoom`/`style.labelMaxzoom`
+- **Zoom controls in style panel** (`layer-actions/style.ts`): new "Visibility" section with Min Zoom and Max Zoom sliders (0-24, step 1) for geometry layers; label zoom sliders (Min Zoom, Max Zoom) added to the Labels sub-controls section; both pairs enforce mutual clamping so min cannot exceed max; changes apply immediately via `applyZoomRange()` and `map.setLayerZoomRange()` with debounced persistence
+- **Runtime zoom update helper** (`layers/layers.ts`): new `applyZoomRange(map, datasetId, minzoom, maxzoom)` finds all layers for a dataset via `getLayersBySource()` and calls `setLayerZoomRange()` on each; used by the style panel for live updates
+- **Zoom validation** (`config/validators/shared.ts`): `validateStyle()` extended with checks for `minzoom`, `maxzoom`, `labelMinzoom`, and `labelMaxzoom` - must be numbers in 0-24 range, min must not exceed max within each pair
+- **Example configs updated**: Calgary labels example uses `labelMinzoom: 12` for community name labels; Denver centroid example uses `labelMinzoom: 13` for park name labels
+
+### Labels
+
+- **Per-layer label configuration** (`layer-actions/style.ts`, `layers/layers.ts`): new "Labels" section in the style panel drill-down with an attribute dropdown populated from dataset property keys via `getPropertyKeys()`; selecting a field creates a MapLibre `symbol` layer (`dataset-{id}-label`) on the same source as the data layers; setting "None" removes the label layer; sub-controls (size, color, halo color, halo width) appear conditionally when a field is selected and update the label layer live via `updateLabelProperty()`
+- **Label style controls**: font size slider (8-24px), text color picker (default white), halo color picker (default black), halo width slider (0-3px); all use the existing debounced auto-save mechanism to persist to DuckDB
+- **Auto-detected label placement** (`layers/layers.ts`): `getSymbolPlacement()` queries dataset geometry types - LineString-only datasets get `symbol-placement: 'line-center'` for labels along the line path; Point and Polygon datasets get `'point'` placement (MapLibre auto-labels at polygon centroids)
+- **Label persistence and restore** (`map.ts`, `layers/layers.ts`): `restoreLabelIfConfigured()` recreates label layers during OPFS session restore and config pipeline execution; label state (`labelField`, `labelSize`, `labelColor`, `labelHaloColor`, `labelHaloWidth`) stored in the existing `style` JSON column with `??` fallback defaults for backward compatibility - no schema version bump needed
+- **Glyphs support** (`map.ts`): added `glyphs` URL (OpenMapTiles font CDN) to the map style object, enabling MapLibre symbol layers with text rendering across all map pages
+- **Property key discovery** (`db/features.ts`): new `getPropertyKeys(datasetId)` queries one representative feature row and extracts property names, filtering internal keys prefixed with `_`; re-exported from `db.ts` facade
+- **StyleConfig extension** (`db/datasets.ts`, `config/types.ts`): added `labelField` (string | null), `labelSize`, `labelColor`, `labelHaloColor`, `labelHaloWidth` to `StyleConfig` and `StyleConfigPartial`; propagated to `parseStyleConfig()` in operations and `parseDatasetStyle()` in data-actions
+- **Label controls CSS** (`style-panel.css`): section divider (`.style-section-divider`), dark-themed dropdown (`.style-select`), and conditional controls wrapper (`.style-label-controls`)
+
+### Label Configurations
+
+- **YAML label config** (`config/types.ts`, `db/datasets.ts`): `style.labelField`, `labelSize`, `labelColor`, `labelHaloColor`, `labelHaloWidth` on `DatasetConfig` and `OperationBase` configure labels declaratively; merged into `StyleConfig` via existing `{ ...DEFAULT_STYLE, ...options?.style }` pattern in `loadGeoJSON()`; label layers created automatically by `restoreLabelIfConfigured()` in the post-pipeline sweep
+- **Label style validation** (`config/validators/shared.ts`): `validateStyle()` extended with checks for all five label fields - `labelField` must be a non-empty string or null, `labelSize` must be positive, `labelColor` and `labelHaloColor` must be valid hex colors, `labelHaloWidth` must be non-negative
+- **Labels example** (`public/examples/configs/labels.yaml`, `scripts/examples/registry.ts`): Calgary communities with `style.labelField` (simple auto-configured polygon labels) alongside LRT stations with an explicit `type: symbol` layer (full MapLibre expression control with text-offset, text-anchor, text-padding); new "Labels" example group in the registry
+- **Centroid example labels** (`public/examples/configs/centroid.yaml`): Denver park centroids now display `LOCATION` labels via `style.labelField` on the operation output
+
 ## v0.5.0 - 2026-03-07
 
 ### Drill-down Style Panel

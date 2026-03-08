@@ -13,7 +13,7 @@ export type { FallbackReason } from './db/core';
 export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, datasetExists, updateDatasetColor, updateDatasetName, updateDatasetVisible, deleteDataset, swapLayerOrder } from './db/datasets';
 
 // Feature query operations
-export { getFeaturesAsGeoJSON } from './db/features';
+export { getFeaturesAsGeoJSON, getPropertyKeys } from './db/features';
 
 // Utility functions (exported for potential external use)
 export { generateDatasetId, extractDatasetName } from './db/utils';

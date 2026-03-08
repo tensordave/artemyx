@@ -32,6 +32,24 @@ export interface StyleConfigPartial {
 	lineWidth?: number;
 	/** Point radius in pixels */
 	pointRadius?: number;
+	/** Property name to use for labels (null = no labels) */
+	labelField?: string | null;
+	/** Label font size in pixels */
+	labelSize?: number;
+	/** Label text color */
+	labelColor?: string;
+	/** Label halo/outline color */
+	labelHaloColor?: string;
+	/** Label halo width in pixels */
+	labelHaloWidth?: number;
+	/** Minimum zoom level where labels are visible (0-24) */
+	labelMinzoom?: number;
+	/** Maximum zoom level where labels are visible (0-24) */
+	labelMaxzoom?: number;
+	/** Minimum zoom level where dataset geometry layers are visible (0-24) */
+	minzoom?: number;
+	/** Maximum zoom level where dataset geometry layers are visible (0-24) */
+	maxzoom?: number;
 }
 
 /** Dataset configuration for loading GeoJSON from URL */
