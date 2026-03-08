@@ -6,7 +6,7 @@
  */
 
 import type maplibregl from 'maplibre-gl';
-import type { LayerToggleControl } from '../layer-control';
+import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
 import type { ExecutionPlan } from './operations-graph';
 import type { OperationConfig, LayerConfig } from './types';
@@ -17,7 +17,7 @@ import { datasetExists, getDatasets } from '../db/datasets';
 import { getFeaturesAsGeoJSON } from '../db/features';
 import { addOperationResultToMap } from './operations/buffer';
 import { parseStyleConfig } from './operations';
-import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../popup';
+import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../controls/popup';
 
 /** Context needed for operation execution */
 export interface ExecutionContext {

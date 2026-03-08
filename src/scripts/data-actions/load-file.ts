@@ -1,5 +1,5 @@
 import { loadGeoJSON, getFeaturesAsGeoJSON, getDatasets } from '../db';
-import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../popup';
+import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../controls/popup';
 import { showErrorDialog } from '../ui/error-dialog';
 import { detectFormatFromFile, dispatch as loaderDispatch } from '../loaders';
 import type { LoaderOptions } from '../loaders';

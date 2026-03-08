@@ -24,7 +24,7 @@ operations:
       labelColor: "#ffffff"
       labelHaloColor: "#1a1a1a"
       labelHaloWidth: 1
-      labelMinzoom: 15
+      labelMinzoom: 12
 
 layers:
   # Park polygons as muted fill for context

@@ -15,7 +15,8 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 ## Key Features
 
 - Interactive mapping with switchable basemaps (CARTO, Satellite)
-- Multi-dataset support with layer management UI (visibility, color, rename, delete, per-layer style panel)
+- Multi-dataset support with layer management UI (visibility, color, rename, delete, per-layer style panel with labels)
+- Auto-generated legend from active layer styles (color swatches, gradient ramps, category entries)
 - YAML-driven configuration for declarative map setup and spatial operations
 - Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
 - Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays) with paginated fetching
@@ -73,25 +74,27 @@ src/scripts/
 │   ├── layers.ts      # addLayerFromConfig, executeLayersFromConfig
 │   └── sources.ts     # Source management
 ├── layer-actions/     # Layer control UI handlers
-│   ├── color.ts, style.ts, visibility.ts, delete.ts  # Action handlers
+│   ├── color.ts, style.ts, labels.ts, visibility.ts, delete.ts  # Action handlers
 │   ├── context-menu.ts, context-menu-items.ts         # Context menu
 │   └── layer-row.ts   # Row DOM, inline rename
+├── controls/          # MapLibre custom map controls
+│   ├── data-control.ts       # Load data from URL with advanced options (CRS, format, columns)
+│   ├── upload-control.ts     # Local file upload (drag-and-drop, file picker)
+│   ├── config-control.ts     # View active YAML config with syntax highlighting
+│   ├── layer-control.ts      # Layer visibility, color, rename, delete, reorder
+│   ├── legend-control.ts     # Auto-generated legend from active layer styles
+│   ├── storage-control.ts    # OPFS status and session management
+│   ├── geocoding-control.ts  # Address search via Photon geocoding
+│   ├── basemap-control.ts    # Basemap switcher
+│   ├── scale-control.ts      # Scale bar, coordinate display (DD/DMS)
+│   ├── progress-control.ts   # Status log with expandable history
+│   └── popup.ts              # Feature popup and hover tooltip utilities
 ├── ui/                # Reusable UI components
 │   ├── error-dialog.ts
 │   └── advanced-options.ts  # DataControl advanced options panel
 ├── icons/             # Phosphor SVG icon strings
 ├── map.ts             # MapLibre init + config loading (entry point)
-├── data-control.ts    # Custom control: load data from URL with advanced options (CRS, format, columns)
-├── upload-control.ts  # Custom control: local file upload (drag-and-drop, file picker)
-├── config-control.ts  # Custom control: view active YAML config with syntax highlighting
-├── layer-control.ts   # Custom control: layer visibility, color, rename, delete, reorder
-├── storage-control.ts # Custom control: OPFS status and session management
-├── geocoding-control.ts # Custom control: address search via Photon geocoding
-├── basemap-control.ts # Custom control: basemap switcher
-├── scale-control.ts   # Custom control: scale bar, coordinate display (DD/DMS)
-├── progress-control.ts # Custom control: status log with expandable history
-├── basemaps.ts        # Basemap tile configurations
-└── popup.ts           # Feature popup and hover tooltip utilities
+└── basemaps.ts        # Basemap tile configurations
 ```
 
 Data flows through: **YAML config** -> **DuckDB-WASM** (storage + spatial ops) -> **MapLibre** (rendering)

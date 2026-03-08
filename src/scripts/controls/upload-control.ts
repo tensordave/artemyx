@@ -1,9 +1,9 @@
 import maplibregl from 'maplibre-gl';
-import { loadDataFromFile } from './data-actions/load';
-import { fileArrowUpIcon } from './icons';
+import { loadDataFromFile } from '../data-actions/load';
+import { fileArrowUpIcon } from '../icons';
 import type { LayerToggleControl } from './layer-control';
-import type { Logger } from './logger';
-import { buildAdvancedOptions, type AdvancedOptionsHandle } from './ui/advanced-options';
+import type { Logger } from '../logger';
+import { buildAdvancedOptions, type AdvancedOptionsHandle } from '../ui/advanced-options';
 
 interface UploadControlOptions {
 	map: maplibregl.Map;

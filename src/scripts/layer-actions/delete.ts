@@ -1,8 +1,8 @@
 import maplibregl from 'maplibre-gl';
 import { deleteDataset as deleteDatasetFromDB } from '../db';
 import { getLayersBySource, getSourceId } from '../layers';
-import { removeFeatureHandlers } from '../popup';
-import { ProgressControl } from '../progress-control';
+import { removeFeatureHandlers } from '../controls/popup';
+import { ProgressControl } from '../controls/progress-control';
 import { showErrorDialog } from '../ui/error-dialog';
 
 /**

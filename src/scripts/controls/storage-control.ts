@@ -1,8 +1,8 @@
 import maplibregl from 'maplibre-gl';
-import { databaseIcon, crosshairIcon, trashIcon } from './icons';
-import { getStorageMode, getFallbackReason, clearOPFS } from './db/core';
-import { clearCachedViewport, getCachedViewport } from './db/datasets';
-import type { FallbackReason } from './db/core';
+import { databaseIcon, crosshairIcon, trashIcon } from '../icons';
+import { getStorageMode, getFallbackReason, clearOPFS } from '../db/core';
+import { clearCachedViewport, getCachedViewport } from '../db/datasets';
+import type { FallbackReason } from '../db/core';
 
 function formatBytes(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;

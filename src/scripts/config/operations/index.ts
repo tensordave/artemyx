@@ -10,7 +10,7 @@
  */
 
 import type maplibregl from 'maplibre-gl';
-import type { LayerToggleControl } from '../../layer-control';
+import type { LayerToggleControl } from '../../controls/layer-control';
 import type { Logger } from '../../logger';
 import type { LayerConfig, StyleConfigPartial } from '../types';
 import type { StyleConfig } from '../../db/datasets';

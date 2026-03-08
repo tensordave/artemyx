@@ -1,6 +1,6 @@
 import maplibregl from 'maplibre-gl';
 import { updateDatasetColor } from '../db';
-import { ProgressControl } from '../progress-control';
+import { ProgressControl } from '../controls/progress-control';
 import { getLayersBySource, type SourceLayerInfo } from '../layers/layers';
 import { getSourceId } from '../layers/sources';
 

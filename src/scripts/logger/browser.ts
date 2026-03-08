@@ -1,4 +1,4 @@
-import type { ProgressControl } from '../progress-control';
+import type { ProgressControl } from '../controls/progress-control';
 import type { Logger, ProgressStatus } from './types';
 
 export class BrowserLogger implements Logger {

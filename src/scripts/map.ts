@@ -1,20 +1,15 @@
 import maplibregl from 'maplibre-gl';
-import { LayerToggleControl } from './layer-control';
-import { ProgressControl } from './progress-control';
-import { DataControl } from './data-control';
-import { UploadControl } from './upload-control';
-import { StorageControl } from './storage-control';
-import { BasemapControl } from './basemap-control';
-import { GeocodingControl } from './geocoding-control';
-import { ScaleBarControl } from './scale-control';
-import { ConfigControl } from './config-control';
+import {
+	LayerToggleControl, ProgressControl, DataControl, UploadControl,
+	StorageControl, BasemapControl, GeocodingControl, ScaleBarControl,
+	ConfigControl, LegendControl, attachFeatureClickHandlers, attachFeatureHoverHandlers,
+} from './controls';
 import { getBasemap, getDefaultBasemap } from './basemaps';
 import { loadConfig, getDefaultMapSettings } from './config/parser';
 import { loadDatasetsFromConfig } from './data-actions/load';
 import { createExecutionPlan } from './config/operations-graph';
 import { executeOperations } from './config/executor';
 import { executeLayersFromConfig, resyncLayerOrder, restoreLabelIfConfigured } from './layers';
-import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from './popup';
 import { toggleLayerVisibility } from './layer-actions/visibility';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog } from './db/core';
 import { BrowserLogger } from './logger';
@@ -97,23 +92,20 @@ const map = new maplibregl.Map({
 	},
 	center: mapSettings.center,
 	zoom: mapSettings.zoom,
-	attributionControl: {
-		compact: true,
-		customAttribution: '<a href="https://artemyx.org">Artemyx</a>'
-	}
+	attributionControl: false
+});
+
+// Attribution in bottom-right, below scale bar (added after scale bar below)
+const attributionControl = new maplibregl.AttributionControl({
+	compact: true,
+	customAttribution: '<a href="https://artemyx.org">Artemyx</a>'
 });
 
 // Attribution starts expanded by default (compact: true still opens on init).
-// On wide layouts, auto-collapse after a few seconds. On narrow/mobile, collapse immediately.
+// Collapse immediately on load so it shows as a small "i" button.
 map.once('load', () => {
 	const btn = document.querySelector<HTMLButtonElement>('.maplibregl-ctrl-attrib-button');
-	if (!btn) return;
-	const isNarrow = map.getContainer().clientWidth <= 640;
-	if (isNarrow) {
-		btn.click();
-	} else {
-		setTimeout(() => btn.click(), 2000);
-	}
+	if (btn) btn.click();
 });
 
 // Add controls to the map
@@ -154,7 +146,9 @@ map.addControl(storageControl, 'top-right');
 map.addControl(layerToggleControl, 'top-left');
 map.addControl(basemapControl, 'top-left');
 map.addControl(geocodingControl, 'top-left');
+map.addControl(new LegendControl(), 'bottom-right');
 map.addControl(new ScaleBarControl(), 'bottom-right');
+map.addControl(attributionControl, 'bottom-right');
 map.addControl(progressControl, 'bottom-left');
 
 // Surface any config error now that the progress control is in the DOM

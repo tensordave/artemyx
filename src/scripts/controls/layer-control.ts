@@ -1,14 +1,14 @@
 import maplibregl from 'maplibre-gl';
-import { getDatasets, updateDatasetName, updateDatasetVisible, swapLayerOrder } from './db';
-import { stackIcon } from './icons';
-import { progressControl } from './map';
-import { toggleLayerVisibility } from './layer-actions/visibility';
-import { showDeleteConfirmation, deleteDatasetWithLayers } from './layer-actions/delete';
-import { createContextMenu, type ContextMenuHandle } from './layer-actions/context-menu';
-import { createRenameItem, createDeleteItem, createMenuDivider } from './layer-actions/context-menu-items';
-import { buildStyleView, savePendingStyle } from './layer-actions/style';
-import { createLayerRow, startRenameEdit, type Dataset } from './layer-actions/layer-row';
-import { resyncLayerOrder } from './layers';
+import { getDatasets, updateDatasetName, updateDatasetVisible, swapLayerOrder } from '../db';
+import { stackIcon } from '../icons';
+import { progressControl } from '../map';
+import { toggleLayerVisibility } from '../layer-actions/visibility';
+import { showDeleteConfirmation, deleteDatasetWithLayers } from '../layer-actions/delete';
+import { createContextMenu, type ContextMenuHandle } from '../layer-actions/context-menu';
+import { createRenameItem, createDeleteItem, createMenuDivider } from '../layer-actions/context-menu-items';
+import { buildStyleView, savePendingStyle } from '../layer-actions/style';
+import { createLayerRow, startRenameEdit, type Dataset } from '../layer-actions/layer-row';
+import { resyncLayerOrder } from '../layers';
 
 /**
  * Custom control for toggling layer visibility

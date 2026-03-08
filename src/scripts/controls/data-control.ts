@@ -1,9 +1,9 @@
 import maplibregl from 'maplibre-gl';
-import { loadDataFromUrl } from './data-actions/load';
-import { cloudArrowDownIcon } from './icons';
+import { loadDataFromUrl } from '../data-actions/load';
+import { cloudArrowDownIcon } from '../icons';
 import type { LayerToggleControl } from './layer-control';
-import type { Logger } from './logger';
-import { buildAdvancedOptions, type AdvancedOptionsHandle } from './ui/advanced-options';
+import type { Logger } from '../logger';
+import { buildAdvancedOptions, type AdvancedOptionsHandle } from '../ui/advanced-options';
 
 interface DataControlOptions {
 	map: maplibregl.Map;

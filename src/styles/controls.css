@@ -96,3 +96,14 @@
 	background-color: #555;
 	cursor: not-allowed;
 }
+
+/* Prevent iOS Safari auto-zoom on input focus (triggers at font-size < 16px) */
+@media screen and (max-width: 767px) {
+	.control-input,
+	.advanced-options-input,
+	.advanced-options-select,
+	.layer-rename-input,
+	.style-select {
+		font-size: 16px !important;
+	}
+}

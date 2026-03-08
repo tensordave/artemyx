@@ -1,5 +1,5 @@
 import type { Map, IControl } from 'maplibre-gl';
-import { codeBlockIcon } from './icons';
+import { codeBlockIcon } from '../icons';
 
 /**
  * Custom MapLibre control for viewing the active YAML config.

@@ -4,7 +4,7 @@ import { DEFAULT_STYLE, type StyleConfig } from '../db/datasets';
 import { getSourceId, addSource, removeDefaultLayers, addDefaultLayers } from '../layers';
 import { showErrorDialog, showConfirmDialog } from '../ui/error-dialog';
 import type { ConfigFormat } from '../loaders';
-import type { LayerToggleControl } from '../layer-control';
+import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
 import type { LoadGeoJSONOptions as DBLoadOptions } from '../db/datasets';
 

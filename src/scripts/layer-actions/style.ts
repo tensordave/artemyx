@@ -6,9 +6,10 @@
 
 import maplibregl from 'maplibre-gl';
 import { getDatasetStyle, updateDatasetStyle, type StyleConfig } from '../db/datasets';
-import { getDistinctGeometryTypes, getPropertyKeys } from '../db/features';
-import { ProgressControl } from '../progress-control';
-import { getLayersBySource, addLabelLayer, removeLabelLayer, updateLabelProperty, applyZoomRange, getLabelLayerId, type SourceLayerInfo } from '../layers/layers';
+import { getDistinctGeometryTypes } from '../db/features';
+import { ProgressControl } from '../controls/progress-control';
+import { getLayersBySource, applyZoomRange, type SourceLayerInfo } from '../layers/layers';
+import { buildLabelSection } from './labels';
 import { getSourceId } from '../layers/sources';
 import { arrowLeftIcon } from '../icons';
 import { isColorPickerEnabled, getDisplayColor, updateLayerColor } from './color';
@@ -198,7 +199,7 @@ function applyStyleToMap(
  * Create a slider row element
  * @param disabled - If true, slider is disabled and shows "Expression" badge
  */
-function createSliderRow(
+export function createSliderRow(
 	config: SliderConfig,
 	currentValue: number,
 	onChange: (value: number) => void,
@@ -302,51 +303,6 @@ function createColorRow(
 
 	swatchContainer.appendChild(swatch);
 
-	row.appendChild(label);
-	row.appendChild(swatchContainer);
-	row.appendChild(hexDisplay);
-
-	return row;
-}
-
-/**
- * Create a simple color row for label properties (no expression awareness needed).
- */
-function createLabelColorRow(
-	labelText: string,
-	currentColor: string,
-	onChange: (newColor: string) => void
-): HTMLDivElement {
-	const row = document.createElement('div');
-	row.className = 'style-row style-color-row';
-
-	const label = document.createElement('span');
-	label.className = 'style-label';
-	label.textContent = labelText;
-
-	const swatchContainer = document.createElement('div');
-	swatchContainer.className = 'style-color-swatch-container';
-
-	const swatch = document.createElement('input');
-	swatch.type = 'color';
-	swatch.className = 'style-color-swatch';
-	swatch.value = currentColor;
-
-	const hexDisplay = document.createElement('span');
-	hexDisplay.className = 'style-value';
-	hexDisplay.textContent = currentColor;
-
-	swatch.addEventListener('input', () => {
-		hexDisplay.textContent = swatch.value;
-	});
-
-	swatch.addEventListener('change', () => {
-		const newColor = swatch.value;
-		hexDisplay.textContent = newColor;
-		onChange(newColor);
-	});
-
-	swatchContainer.appendChild(swatch);
 	row.appendChild(label);
 	row.appendChild(swatchContainer);
 	row.appendChild(hexDisplay);
@@ -503,153 +459,9 @@ export async function buildStyleView(
 
 	// ── Labels section ──────────────────────────────────────────────
 
-	// Get geometry types for placement auto-detection
 	const geometryTypes = await getDistinctGeometryTypes(dataset.id);
-
-	// Section divider
-	const divider = document.createElement('div');
-	divider.className = 'style-section-divider';
-	divider.textContent = 'Labels';
-	content.appendChild(divider);
-
-	// Attribute dropdown
-	const fieldRow = document.createElement('div');
-	fieldRow.className = 'style-row';
-
-	const fieldLabel = document.createElement('span');
-	fieldLabel.className = 'style-label';
-	fieldLabel.textContent = 'Field';
-
-	const fieldSelect = document.createElement('select');
-	fieldSelect.className = 'style-select';
-
-	const noneOption = document.createElement('option');
-	noneOption.value = '';
-	noneOption.textContent = 'None';
-	fieldSelect.appendChild(noneOption);
-
-	const propertyKeys = await getPropertyKeys(dataset.id);
-	for (const key of propertyKeys) {
-		const option = document.createElement('option');
-		option.value = key;
-		option.textContent = key;
-		if (key === currentStyle.labelField) {
-			option.selected = true;
-		}
-		fieldSelect.appendChild(option);
-	}
-
-	fieldRow.appendChild(fieldLabel);
-	fieldRow.appendChild(fieldSelect);
-	content.appendChild(fieldRow);
-
-	// Label sub-controls container (shown only when a field is selected)
-	const labelControls = document.createElement('div');
-	labelControls.className = 'style-label-controls';
-	if (!currentStyle.labelField) {
-		labelControls.style.display = 'none';
-	}
-
-	// Label size slider
-	const sizeRow = createSliderRow(
-		{ property: 'pointRadius', label: 'Size', min: 8, max: 24, step: 1, unit: 'px', format: (v) => `${v}px`, requiredGeometry: 'hasFill' },
-		currentStyle.labelSize,
-		(newValue) => {
-			workingStyle.labelSize = newValue;
-			updateLabelProperty(map, dataset.id, 'layout', 'text-size', newValue);
-			scheduleSave();
-		}
-	);
-	labelControls.appendChild(sizeRow);
-
-	// Label color
-	const labelColorRow = createLabelColorRow('Color', currentStyle.labelColor, (newColor) => {
-		workingStyle.labelColor = newColor;
-		updateLabelProperty(map, dataset.id, 'paint', 'text-color', newColor);
-		scheduleSave();
-	});
-	labelControls.appendChild(labelColorRow);
-
-	// Halo color
-	const haloColorRow = createLabelColorRow('Halo', currentStyle.labelHaloColor, (newColor) => {
-		workingStyle.labelHaloColor = newColor;
-		updateLabelProperty(map, dataset.id, 'paint', 'text-halo-color', newColor);
-		scheduleSave();
-	});
-	labelControls.appendChild(haloColorRow);
-
-	// Halo width slider
-	const haloWidthRow = createSliderRow(
-		{ property: 'pointRadius', label: 'Halo Width', min: 0, max: 3, step: 0.5, unit: 'px', format: (v) => `${v}px`, requiredGeometry: 'hasFill' },
-		currentStyle.labelHaloWidth,
-		(newValue) => {
-			workingStyle.labelHaloWidth = newValue;
-			updateLabelProperty(map, dataset.id, 'paint', 'text-halo-width', newValue);
-			scheduleSave();
-		}
-	);
-	labelControls.appendChild(haloWidthRow);
-
-	// Label min zoom slider
-	const labelMinZoomRow = createSliderRow(
-		{ property: 'pointRadius', label: 'Min Zoom', min: 0, max: 24, step: 1, unit: '', format: (v) => `${v}`, requiredGeometry: 'hasFill' },
-		currentStyle.labelMinzoom,
-		(newValue) => {
-			workingStyle.labelMinzoom = newValue;
-			if (newValue > workingStyle.labelMaxzoom) {
-				workingStyle.labelMaxzoom = newValue;
-				labelMaxZoomSlider.value = String(newValue);
-				labelMaxZoomDisplay.textContent = `${newValue}`;
-			}
-			const labelId = getLabelLayerId(dataset.id);
-			if (map.getLayer(labelId)) {
-				map.setLayerZoomRange(labelId, workingStyle.labelMinzoom, workingStyle.labelMaxzoom);
-			}
-			scheduleSave();
-		}
-	);
-	labelControls.appendChild(labelMinZoomRow);
-	const labelMinZoomSlider = labelMinZoomRow.querySelector('input') as HTMLInputElement;
-	const labelMinZoomDisplay = labelMinZoomRow.querySelector('.style-value') as HTMLSpanElement;
-
-	// Label max zoom slider
-	const labelMaxZoomRow = createSliderRow(
-		{ property: 'pointRadius', label: 'Max Zoom', min: 0, max: 24, step: 1, unit: '', format: (v) => `${v}`, requiredGeometry: 'hasFill' },
-		currentStyle.labelMaxzoom,
-		(newValue) => {
-			workingStyle.labelMaxzoom = newValue;
-			if (newValue < workingStyle.labelMinzoom) {
-				workingStyle.labelMinzoom = newValue;
-				labelMinZoomSlider.value = String(newValue);
-				labelMinZoomDisplay.textContent = `${newValue}`;
-			}
-			const labelId = getLabelLayerId(dataset.id);
-			if (map.getLayer(labelId)) {
-				map.setLayerZoomRange(labelId, workingStyle.labelMinzoom, workingStyle.labelMaxzoom);
-			}
-			scheduleSave();
-		}
-	);
-	labelControls.appendChild(labelMaxZoomRow);
-	const labelMaxZoomSlider = labelMaxZoomRow.querySelector('input') as HTMLInputElement;
-	const labelMaxZoomDisplay = labelMaxZoomRow.querySelector('.style-value') as HTMLSpanElement;
-
-	content.appendChild(labelControls);
-
-	// Dropdown change handler
-	fieldSelect.addEventListener('change', () => {
-		const selected = fieldSelect.value || null;
-		workingStyle.labelField = selected;
-
-		if (selected) {
-			addLabelLayer(map, dataset.id, workingStyle, geometryTypes);
-			labelControls.style.display = '';
-		} else {
-			removeLabelLayer(map, dataset.id);
-			labelControls.style.display = 'none';
-		}
-		scheduleSave();
-	});
+	const labelFragment = await buildLabelSection(map, dataset, workingStyle, currentStyle, geometryTypes, scheduleSave);
+	content.appendChild(labelFragment);
 
 	panelElement.appendChild(content);
 

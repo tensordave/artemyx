@@ -1,7 +1,7 @@
 import { loadGeoJSON, appendFeatures, updateFeatureCount, getFeaturesAsGeoJSON, getDatasets } from '../db';
 import type { LoadGeoJSONOptions as DBLoadOptions } from '../db/datasets';
 import { getSourceId, updateSourceData } from '../layers';
-import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../popup';
+import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../controls/popup';
 import { showErrorDialog } from '../ui/error-dialog';
 import { detectFormat, normalizeGeoJSON, tryLoadJsonArray, dispatch as loaderDispatch } from '../loaders';
 import type { LoaderOptions } from '../loaders';

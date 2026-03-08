@@ -3,7 +3,7 @@ import Header from '../components/Header.astro';
 import { highlightConfigYaml } from '../utils/highlight-config';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../styles/global.css';
-import { cloudArrowDownIcon, codeBlockIcon, stackIcon, databaseIcon, mapTrifoldIcon, circleIcon } from '../scripts/icons';
+import { cloudArrowDownIcon, fileArrowUpIcon, codeBlockIcon, stackIcon, databaseIcon, mapTrifoldIcon, magnifyingGlassIcon, listIcon, circleIcon } from '../scripts/icons';
 
 const configFile = 'demo-config.yaml';
 const highlightedYaml = await highlightConfigYaml(configFile);
@@ -46,7 +46,12 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={cloudArrowDownIcon} />
 					<div class="feature-card-title">Load data</div>
-					<p class="feature-card-body">Paste any GeoJSON, CSV, or GeoParquet URL to add a layer to the map.</p>
+					<p class="feature-card-body">Paste any GeoJSON, CSV, or GeoParquet URL to add a layer to the map. Advanced options for CRS, format, and column overrides.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={fileArrowUpIcon} />
+					<div class="feature-card-title">Upload file</div>
+					<p class="feature-card-body">Drag and drop or pick a local file to load it directly onto the map.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={codeBlockIcon} />
@@ -56,12 +61,22 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={stackIcon} />
 					<div class="feature-card-title">Layers</div>
-					<p class="feature-card-body">Toggle layer visibility, change colors, rename, or delete datasets.</p>
+					<p class="feature-card-body">Toggle visibility, reorder, rename, delete, and style layers. Drill into a style panel for color, opacity, width, labels, and zoom ranges.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={databaseIcon} />
 					<div class="feature-card-title">Storage</div>
 					<p class="feature-card-body">Session persistence status - datasets survive page refresh via browser storage.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={magnifyingGlassIcon} />
+					<div class="feature-card-title">Search</div>
+					<p class="feature-card-body">Address search powered by Photon geocoding. Find any location using OpenStreetMap data.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={listIcon} />
+					<div class="feature-card-title">Legend</div>
+					<p class="feature-card-body">Auto-generated legend derived from layer styles. Shows color swatches, gradient ramps, and category breakdowns.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={mapTrifoldIcon} />

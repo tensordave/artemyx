@@ -1,5 +1,5 @@
 import type { Map as MaplibreMap, IControl } from 'maplibre-gl';
-import { circleIcon, circleNotchIcon, cloudArrowDownIcon, databaseIcon, trashIcon } from './icons';
+import { circleIcon, circleNotchIcon, cloudArrowDownIcon, databaseIcon, trashIcon } from '../icons';
 
 interface ProgressState {
   operation: string;

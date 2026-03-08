@@ -1,5 +1,5 @@
 import type { Map, IControl } from 'maplibre-gl';
-import { magnifyingGlassIcon } from './icons';
+import { magnifyingGlassIcon } from '../icons';
 
 const PHOTON_API = 'https://photon.komoot.io/api/';
 const DEBOUNCE_MS = 400;

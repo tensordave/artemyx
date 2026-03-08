@@ -32,6 +32,9 @@ export { crosshairIcon } from './crosshair';               // reset viewport
 // Geocoding
 export { magnifyingGlassIcon } from './magnifying-glass'; // geocoding search button
 
+// Legend
+export { listIcon } from './list';
+
 // Roadmap: future features
 export { downloadSimpleIcon } from './download-simple';    // export datasets
 export { codeBlockIcon } from './code-block';                         // YAML snippet runner

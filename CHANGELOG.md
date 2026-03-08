@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.5.2 - In Progress
+
+### Legend
+
+- **Auto-generated legend panel** (`legend-control.ts`, `legend.css`): new `LegendControl` implementing MapLibre `IControl`; positioned as a bottom-right overlay above the scale bar; derives entries automatically from active layer paint properties by scanning `map.getStyle().layers` for sources prefixed with `dataset-`; supports three entry types: solid color swatches (square for fill, short line for line, circle for point), CSS `linear-gradient` ramp previews for `interpolate` expressions with min/max value labels, and category rows with per-value swatches plus "Other" fallback for `match` expressions; skips hidden layers (`visibility: 'none'`), symbol layers, and heatmap layers
+- **Reactive updates** (`legend-control.ts`): subscribes to MapLibre's `styledata` event with 200ms debounce to rebuild legend entries when layers are added, removed, or restyled; exposes `refresh()` for external callers; deduplicates solid entries when fill/line/circle layers for the same source all share the same color
+- **Dataset name resolution** (`legend-control.ts`): resolves human-readable labels by querying `getDatasets()` from `db/datasets.ts`; falls back to dataset ID for config-defined layers without a database entry
+- **Expand/collapse toggle** (`legend-control.ts`, `legend.css`): header bar with Phosphor List icon, "Legend" label, and chevron; click toggles between expanded (scrollable content) and collapsed (header only) states; chevron rotates 180° via CSS transition; state persisted to `localStorage` under `artemyx-legend-expanded`; defaults to expanded on desktop (viewport > 640px) and collapsed on mobile
+- **Legend styling** (`legend.css`): dark theme matching existing controls (`rgba(30, 30, 30, 0.85)` background, `#3a3a3a` border, backdrop blur); `max-height: 40vh` (30vh on mobile) with scrollable overflow; thin custom scrollbar; `min-width: 140px` (120px on mobile), `max-width: 220px`; reduced mobile padding on header and content for a more compact footprint
+- **New icon: List** (`icons/list.ts`, `icons/index.ts`): Phosphor List (Regular) for legend header
+
+### Bug Fixes
+
+- **Mobile hamburger icon** (`Header.astro`): replaced Unicode `&#9776;` HTML entity with inline Phosphor List SVG icon; the text character rendered as a (?) on some platforms (e.g. iOS simulator); SVG renders identically everywhere using `fill="currentColor"` to inherit existing color/hover styles
+- **Label config GUI detection** (`layer-actions/labels.ts`): style panel label field dropdown now detects labels defined via config `layers` section (`type: symbol` with `text-field: ["get", "fieldName"]`), not just `style.labelField` on datasets; new `detectConfigLabelField()` scans MapLibre for symbol layers on the dataset's source (excluding the default `dataset-{id}-label` layer) and extracts the field name from simple `["get", "..."]` expressions; sub-controls (size, color, halo, zoom range) target the detected config layer ID directly via `setLabelProp()` helper for live visual updates; fixes LRT Stations in the Calgary labels example showing "None" while Communities correctly showed "name"
+- **Mobile text entry zoom fix** (`controls.css`): added mobile media query (`max-width: 767px`) setting `font-size: 16px` on all text inputs and selects within map controls (`.control-input`, `.advanced-options-input`, `.advanced-options-select`, `.layer-rename-input`, `.style-select`); prevents iOS Safari's automatic page zoom on input focus (triggered by `font-size < 16px`), which previously trapped users in a zoomed state because pinch-to-zoom-out was captured by MapLibre's gesture handlers instead of the browser
+- **Progress panel overflow on nested maps** (`progress.css`): replaced viewport-based width constraints (`100vw`) with container-relative (`100%`) so the expanded history panel stays within the map bounds when the map is embedded in a narrower container (e.g. landing page demo)
+
+### Refactors
+
+- **Map controls consolidation** (`scripts/controls/`): moved all 10 control files (`basemap-control.ts`, `config-control.ts`, `data-control.ts`, `geocoding-control.ts`, `layer-control.ts`, `legend-control.ts`, `progress-control.ts`, `scale-control.ts`, `storage-control.ts`, `upload-control.ts`) and `popup.ts` from `scripts/` root into a dedicated `scripts/controls/` directory; added barrel `index.ts` re-export; updated import paths across 13 consuming files (`map.ts`, `logger/browser.ts`, `layer-actions/`, `config/executor.ts`, `config/operations/index.ts`, `data-actions/`); `map.ts` imports all controls via the barrel in a single statement
+- **Style panel split** (`layer-actions/style.ts`, `layer-actions/labels.ts`): extracted label controls (field dropdown, size, color, halo, zoom range sliders) into a new `labels.ts` module with `buildLabelSection()`; `style.ts` retains geometry controls (color, opacity, width, radius, zoom range), save/debounce logic, and the `buildStyleView()` orchestrator; `createSliderRow()` exported for reuse across both modules
+- **Legend Map type alias** (`legend-control.ts`): renamed MapLibre `Map` import to `MaplibreMap` to avoid shadowing the global `Map` constructor; fixes type errors when using `new Map<K, V>()` for internal data structures
+
+### Landing Page
+
+- **Controls grid update** (`index.astro`): expanded the "Using the app" grid from 6 to 9 cards; added Upload file (`fileArrowUpIcon`), Search (`magnifyingGlassIcon`), and Legend (`listIcon`) controls; updated Load data description to mention advanced options (CRS, format, column overrides); updated Layers description to reflect v0.5.x features (style panel drill-down, labels, zoom ranges, reorder)
+
+### Attribution
+
+- **Attribution moved to bottom-right** (`map.ts`): switched from inline `attributionControl` constructor option (default bottom-right position) to explicit `new maplibregl.AttributionControl()` added after the scale bar, stacking below it; keeps bottom-right corner tidy with legend → scale bar → attribution ordering
+- **Always-collapsed attribution** (`map.ts`): removed the viewport-width-dependent collapse logic (delayed collapse on desktop, immediate on mobile); attribution now collapses immediately on map load via a single `btn.click()` in the `load` handler; users can expand via the small `ⓘ` button
+
 ## v0.5.1 - 2026-03-07
 
 ### Zoom Level Controls

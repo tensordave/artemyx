@@ -1,7 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import { getFeaturesAsGeoJSON, getDatasets, datasetExists } from '../db';
 import type { LoadGeoJSONOptions as DBLoadOptions } from '../db/datasets';
-import type { LayerToggleControl } from '../layer-control';
+import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
 import type { DatasetConfig, LayerConfig } from '../config/types';
 import { parseDatasetStyle, addDatasetToMap, fitMapToFeatures } from './shared';

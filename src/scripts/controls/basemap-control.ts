@@ -1,6 +1,6 @@
 import type { Map, IControl } from 'maplibre-gl';
-import { basemaps, getDefaultBasemap, type BasemapConfig } from './basemaps';
-import { mapTrifoldIcon } from './icons';
+import { basemaps, getDefaultBasemap, type BasemapConfig } from '../basemaps';
+import { mapTrifoldIcon } from '../icons';
 
 /**
  * Custom MapLibre control for switching between basemaps.
