@@ -5,12 +5,15 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
+    "preview": "npm run build && wrangler dev",
     "astro": "astro",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "^12.6.12",
     "@duckdb/duckdb-wasm": "^1.33.1-dev18.0",
     "@maplibre/maplibre-gl-style-spec": "^24.6.0",
     "@types/js-yaml": "^4.0.9",
@@ -21,6 +24,7 @@
   "devDependencies": {
     "@types/maplibre-gl": "^1.13.2",
     "vite-plugin-static-copy": "^3.2.0",
-    "vitest": "^3.0.5"
+    "vitest": "^3.0.5",
+    "wrangler": "^4.71.0"
   }
 }
