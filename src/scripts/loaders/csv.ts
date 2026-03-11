@@ -4,7 +4,7 @@
  * builds GeoJSON Point FeatureCollection.
  */
 
-import type { FormatLoader, LoaderOptions, LoaderResult } from './types';
+import type { FormatLoader, LoaderData, LoaderOptions, LoaderResult } from './types';
 import { detectCoordinateColumns } from './columns';
 
 /** Candidate delimiters in preference order */
@@ -248,8 +248,8 @@ function detectGeoColumn(
 }
 
 export const csvLoader: FormatLoader = {
-	async load(response: Response, options?: LoaderOptions): Promise<LoaderResult> {
-		const text = await response.text();
+	async load(data: LoaderData, options?: LoaderOptions): Promise<LoaderResult> {
+		const text = data as string;
 		const rows = parseCSV(text);
 
 		if (rows.length === 0) {

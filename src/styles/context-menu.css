@@ -2,12 +2,10 @@
 
 .context-menu {
 	position: fixed;
-	background-color: rgba(30, 30, 30, 0.85);
+	background-color: rgba(26, 26, 26, 0.95);
 	border: 1px solid #3a3a3a;
 	border-radius: 3px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
 	min-width: 160px;
 	z-index: 1000;
 	padding: 4px 0;

@@ -31,11 +31,15 @@ export interface LoaderResult {
 	crsHandled?: boolean;
 }
 
+/** Raw data types accepted by loaders (replaces browser Response for portability) */
+export type LoaderData = string | object | ArrayBuffer;
+
 /**
  * Interface that all format loaders implement.
- * Each loader receives a fetch Response and returns a GeoJSON FeatureCollection.
+ * Each loader receives pre-unwrapped data and returns a GeoJSON FeatureCollection.
+ * Callers (data-actions) handle Response/File unwrapping before calling loaders.
  */
 export interface FormatLoader {
-	/** Load data from a fetch Response and return a GeoJSON FeatureCollection */
-	load(response: Response, options?: LoaderOptions): Promise<LoaderResult>;
+	/** Load pre-unwrapped data and return a GeoJSON FeatureCollection */
+	load(data: LoaderData, options?: LoaderOptions): Promise<LoaderResult>;
 }

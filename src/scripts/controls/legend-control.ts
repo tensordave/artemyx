@@ -6,7 +6,7 @@
 import type { Map as MaplibreMap, IControl } from 'maplibre-gl';
 import type { SourceLayerInfo } from '../layers/layers';
 import { listIcon } from '../icons';
-import { getDatasets } from '../db/datasets';
+import { getDatasets } from '../db';
 
 const STORAGE_KEY = 'artemyx-legend-expanded';
 const DEBOUNCE_MS = 200;
@@ -296,8 +296,8 @@ export class LegendControl implements IControl {
 		if (stored !== null) {
 			this.expanded = stored === 'true';
 		} else {
-			// Default: collapsed on mobile, expanded on desktop
-			this.expanded = window.innerWidth > 640;
+			// Default: collapsed on all screens
+			this.expanded = false;
 		}
 	}
 

@@ -5,7 +5,7 @@
  * Detects CRS from GeoParquet file metadata and reprojects to WGS84 when needed.
  */
 
-import type { FormatLoader, LoaderOptions, LoaderResult } from './types';
+import type { FormatLoader, LoaderData, LoaderOptions } from './types';
 import { getDB, getConnection } from '../db/core';
 import { parseCrsAuthority, isWgs84 } from './crs';
 
@@ -182,14 +182,14 @@ function findGeometryColumn(
 }
 
 export const geoparquetLoader: FormatLoader = {
-	async load(response: Response, options?: LoaderOptions): Promise<LoaderResult> {
-		const buffer = await response.arrayBuffer();
-		const { data, detectedCrs, crsHandled } = await loadParquet(buffer, options?.crs);
+	async load(data: LoaderData, options?: LoaderOptions) {
+		const buffer = data as ArrayBuffer;
+		const result = await loadParquet(buffer, options?.crs);
 
-		if (data.features.length === 0) {
+		if (result.data.features.length === 0) {
 			throw new Error('GeoParquet file contains no valid geometry features');
 		}
 
-		return { data, detectedCrs, crsHandled };
+		return result;
 	},
 };

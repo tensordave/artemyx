@@ -4,7 +4,7 @@
  * and standard FeatureCollections into a consistent FeatureCollection.
  */
 
-import type { FormatLoader, LoaderResult } from './types';
+import type { FormatLoader, LoaderData } from './types';
 import { parseCrsAuthority } from './crs';
 
 /** GeoJSON geometry type names */
@@ -83,8 +83,7 @@ export function extractGeoJsonCrs(data: unknown): string | undefined {
 }
 
 export const geojsonLoader: FormatLoader = {
-	async load(response) {
-		const data = await response.json();
+	async load(data: LoaderData) {
 		const detectedCrs = extractGeoJsonCrs(data);
 		const normalized = normalizeGeoJSON(data);
 		if (!normalized) {

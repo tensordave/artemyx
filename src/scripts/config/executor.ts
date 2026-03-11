@@ -2,7 +2,8 @@
  * Operation executor - orchestrates spatial operations defined in config.
  * Takes an ExecutionPlan and executes each operation in topological order.
  *
- * Individual operations are implemented in the operations/ directory.
+ * Computation is delegated to the DuckDB Web Worker via executeOperationInWorker().
+ * Rendering (MapLibre source/layer creation) happens on the main thread.
  */
 
 import type maplibregl from 'maplibre-gl';
@@ -10,13 +11,9 @@ import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
 import type { ExecutionPlan } from './operations-graph';
 import type { OperationConfig, LayerConfig } from './types';
-import { isUnaryOperation, isBinaryOperation } from './types';
-import { executeBuffer, executeIntersection, executeUnion, executeDifference, executeContains, executeDistance, executeCentroid, executeAttribute } from './operations';
-import type { OperationContext } from './operations';
-import { datasetExists, getDatasets } from '../db/datasets';
-import { getFeaturesAsGeoJSON } from '../db/features';
-import { addOperationResultToMap } from './operations/buffer';
-import { parseStyleConfig } from './operations';
+import { datasetExists, getDatasetById, getFeaturesAsGeoJSON, executeOperationInWorker, vacuum } from '../db';
+import { addOperationResultToMap } from './operations/render';
+import { parseStyleConfig, shouldSkipAutoLayers } from './operations';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../controls/popup';
 
 /** Context needed for operation execution */
@@ -36,72 +33,9 @@ export interface ExecutionResult {
 }
 
 /**
- * Execute a single operation based on its type.
- * Dispatches to the appropriate operation handler.
- */
-async function executeOperation(
-	op: OperationConfig,
-	context: OperationContext
-): Promise<boolean> {
-	switch (op.type) {
-		case 'buffer':
-			if (!isUnaryOperation(op)) {
-				throw new Error(`Buffer operation must have single 'input' field`);
-			}
-			return executeBuffer(op, context);
-
-		case 'intersection':
-			if (!isBinaryOperation(op)) {
-				throw new Error(`Intersection operation must have 'inputs' array`);
-			}
-			return executeIntersection(op, context);
-
-		case 'union':
-			if (!isBinaryOperation(op)) {
-				throw new Error(`Union operation must have 'inputs' array`);
-			}
-			return executeUnion(op, context);
-
-		case 'difference':
-			if (!isBinaryOperation(op)) {
-				throw new Error(`Difference operation must have 'inputs' array`);
-			}
-			return executeDifference(op, context);
-
-		case 'contains':
-			if (!isBinaryOperation(op)) {
-				throw new Error(`Contains operation must have 'inputs' array`);
-			}
-			return executeContains(op, context);
-
-		case 'distance':
-			if (!isBinaryOperation(op)) {
-				throw new Error(`Distance operation must have 'inputs' array`);
-			}
-			return executeDistance(op, context);
-
-		case 'centroid':
-			if (!isUnaryOperation(op)) {
-				throw new Error(`Centroid operation must have single 'input' field`);
-			}
-			return executeCentroid(op, context);
-
-		case 'attribute':
-			if (!isUnaryOperation(op)) {
-				throw new Error(`Attribute operation must have single 'input' field`);
-			}
-			return executeAttribute(op, context);
-
-		default: {
-			const _exhaustive: never = op;
-			throw new Error(`Unsupported operation type: ${(_exhaustive as OperationConfig).type}`);
-		}
-	}
-}
-
-/**
  * Execute all operations in an ExecutionPlan.
  * Operations run in topological order (dependencies first).
+ * Computation runs in the worker; rendering happens here on the main thread.
  */
 export async function executeOperations(
 	plan: ExecutionPlan,
@@ -128,9 +62,6 @@ export async function executeOperations(
 
 	const { map, layerToggleControl, loadedDatasets, layers } = context;
 
-	// Build set of source IDs covered by explicit layer entries
-	const coveredSources = new Set(layers?.map(l => l.source) ?? []);
-
 	// Centralized popup/hover handler attachment for all operations
 	const onLayersCreated = (layerIds: string[], label: string) => {
 		const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label });
@@ -141,15 +72,17 @@ export async function executeOperations(
 		try {
 			// OPFS restore: if output dataset already exists, render from persisted data
 			if (await datasetExists(op.output)) {
-				const geoJsonData = await getFeaturesAsGeoJSON(op.output);
+				let geoJsonData = await getFeaturesAsGeoJSON(op.output);
 				if (geoJsonData.features && geoJsonData.features.length > 0) {
-					const allDatasets = await getDatasets();
-					const meta = allDatasets.find((d: any) => d.id === op.output);
+					const meta = await getDatasetById(op.output);
 					const color = meta?.color || op.color || '#3388ff';
 					const style = parseStyleConfig(op.style);
+					const featureCount = geoJsonData.features.length;
 
-					const skipLayers = !!layers && coveredSources.has(op.output);
+					const skipLayers = shouldSkipAutoLayers(op.output, layers);
 					const layerIds = addOperationResultToMap(map, op.output, color, style, geoJsonData, skipLayers);
+					// Release GeoJSON reference - MapLibre owns the data now
+					geoJsonData = null as any;
 					loadedDatasets.add(op.output);
 
 					if (layerIds.length > 0) {
@@ -157,13 +90,27 @@ export async function executeOperations(
 					}
 
 					layerToggleControl.refreshPanel();
-					logger.progress(op.name || op.output, 'success', `Restored from session (${geoJsonData.features.length} features)`);
+					logger.progress(op.name || op.output, 'success', `Restored from session (${featureCount} features)`);
 					result.executed++;
 					continue;
 				}
 			}
 
-			await executeOperation(op, { ...context, onLayersCreated });
+			// Delegate computation to worker, render result on main thread
+			const opResult = await executeOperationInWorker(op);
+
+			const skipLayers = shouldSkipAutoLayers(opResult.outputId, layers);
+			const layerIds = addOperationResultToMap(map, opResult.outputId, opResult.color, opResult.style, opResult.geoJson, skipLayers);
+			// Release GeoJSON reference - MapLibre owns the data now
+			opResult.geoJson = null as any;
+			loadedDatasets.add(opResult.outputId);
+
+			if (layerIds.length > 0) {
+				onLayersCreated(layerIds, opResult.displayName);
+			}
+
+			layerToggleControl.refreshPanel();
+			logger.progress(opResult.displayName, 'success', `Created ${opResult.featureCount} feature(s)`);
 			result.executed++;
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -172,6 +119,12 @@ export async function executeOperations(
 			logger.progress(op.name || op.output, 'error', errorMsg);
 			// Continue with other operations (don't fail fast)
 		}
+	}
+
+	// Compact DuckDB storage after all operations complete.
+	// Operations create intermediate data and overwrite outputs - vacuum reclaims freed pages.
+	if (result.executed > 0) {
+		await vacuum();
 	}
 
 	// Summary

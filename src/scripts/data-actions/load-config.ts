@@ -1,10 +1,10 @@
-import maplibregl from 'maplibre-gl';
-import { getFeaturesAsGeoJSON, getDatasets, datasetExists } from '../db';
-import type { LoadGeoJSONOptions as DBLoadOptions } from '../db/datasets';
+import type maplibregl from 'maplibre-gl';
+import { getFeaturesAsGeoJSON, getDatasetById, datasetExists } from '../db';
+import type { LoadGeoJSONOptions as DBLoadOptions } from '../db/constants';
 import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
 import type { DatasetConfig, LayerConfig } from '../config/types';
-import { parseDatasetStyle, addDatasetToMap, fitMapToFeatures } from './shared';
+import { parseDatasetStyle, addDatasetToMap } from './shared';
 import { loadDataFromUrl } from './load-url';
 
 /** Options for loading datasets from config */
@@ -77,27 +77,31 @@ export async function loadDatasetsFromConfig(
 		// OPFS restore: if dataset already exists in DuckDB, render from persisted data
 		if (await datasetExists(dataset.id)) {
 			try {
-				const geoJsonData = await getFeaturesAsGeoJSON(dataset.id);
-				if (geoJsonData.features && geoJsonData.features.length > 0) {
-					// Hidden datasets: mark loaded but skip map rendering
-					if (isHidden) {
-						loadedDatasets.add(dataset.id);
-						logger.progress(displayName, 'success', `Restored from session (${geoJsonData.features.length} features, hidden)`);
-						result.loaded++;
-						continue;
-					}
+				// Hidden datasets: already in DuckDB, no rendering needed - skip GeoJSON materialization entirely
+				if (isHidden) {
+					loadedDatasets.add(dataset.id);
+					const meta = await getDatasetById(dataset.id);
+					const count = meta?.feature_count ?? 0;
+					logger.progress(displayName, 'success', `Restored from session (${count} features, hidden)`);
+					result.loaded++;
+					continue;
+				}
 
-					const allDatasets = await getDatasets();
-					const meta = allDatasets.find((d: any) => d.id === dataset.id);
+				let geoJsonData = await getFeaturesAsGeoJSON(dataset.id);
+				if (geoJsonData.features && geoJsonData.features.length > 0) {
+					const meta = await getDatasetById(dataset.id);
 					const color = meta?.color || dataset.color || '#3388ff';
 					const style = parseDatasetStyle(meta?.style);
+					const featureCount = geoJsonData.features.length;
 
 					addDatasetToMap(map, dataset.id, color, style, geoJsonData, skipLayers);
+					// Release GeoJSON reference - MapLibre owns the data now
+					geoJsonData = null as any;
 					loadedDatasets.add(dataset.id);
 
 					layerToggleControl.refreshPanel();
 
-					logger.progress(displayName, 'success', `Restored from session (${geoJsonData.features.length} features)`);
+					logger.progress(displayName, 'success', `Restored from session (${featureCount} features)`);
 					result.loaded++;
 					continue;
 				}
@@ -142,23 +146,6 @@ export async function loadDatasetsFromConfig(
 		} else {
 			result.failed++;
 			result.errors.push(`${dataset.id}: Failed to load from ${dataset.url}`);
-		}
-	}
-
-	// Fit bounds to datasets that haven't opted out (fitBounds defaults to true)
-	const boundsDatasets = datasets.filter(d => d.fitBounds !== false && loadedDatasets.has(d.id));
-	if (boundsDatasets.length > 0) {
-		try {
-			const allFeatures: GeoJSON.Feature[] = [];
-			for (const d of boundsDatasets) {
-				const fc = await getFeaturesAsGeoJSON(d.id);
-				if (fc.features) allFeatures.push(...fc.features);
-			}
-			if (allFeatures.length > 0) {
-				fitMapToFeatures(map, { type: 'FeatureCollection', features: allFeatures });
-			}
-		} catch (e) {
-			logger.error('Config', 'Failed to fit bounds after config load:', e);
 		}
 	}
 

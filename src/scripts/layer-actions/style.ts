@@ -5,8 +5,8 @@
  */
 
 import maplibregl from 'maplibre-gl';
-import { getDatasetStyle, updateDatasetStyle, type StyleConfig } from '../db/datasets';
-import { getDistinctGeometryTypes } from '../db/features';
+import { getDatasetStyle, updateDatasetStyle, getDistinctGeometryTypes } from '../db';
+import type { StyleConfig } from '../db/constants';
 import { ProgressControl } from '../controls/progress-control';
 import { getLayersBySource, applyZoomRange, type SourceLayerInfo } from '../layers/layers';
 import { buildLabelSection } from './labels';

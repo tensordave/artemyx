@@ -13,26 +13,24 @@
  * is NOT considered contained. Both modes return original geometry (no clipping).
  */
 
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { getConnection } from '../../db/core';
 import { DEFAULT_COLOR } from '../../db/datasets';
 import { getFeaturesAsGeoJSON } from '../../db/features';
 import type { BinaryOperation, ContainsParams } from '../types';
-import type { OperationContext } from './index';
+import type { OperationContext, ComputeResult, ComputeCallbacks } from './index';
 import { parseStyleConfig, shouldSkipAutoLayers } from './index';
-import { addOperationResultToMap } from './buffer';
+import { addOperationResultToMap } from './render';
 
 /**
- * Execute a contains operation.
- * Takes two inputs: A (container polygons) and B (contained features).
- *
- * @param op - Binary operation config with inputs[0] as container (A), inputs[1] as contained (B)
- * @param context - Execution context with map, progress, etc.
+ * Pure SQL computation for contains operation.
+ * No MapLibre imports - can run in a Web Worker or headless CLI.
  */
-export async function executeContains(
+export async function computeContains(
+	connection: AsyncDuckDBConnection,
 	op: BinaryOperation,
-	context: OperationContext
-): Promise<boolean> {
-	const { map, logger, layerToggleControl, loadedDatasets } = context;
+	callbacks?: ComputeCallbacks
+): Promise<ComputeResult> {
 	const params = op.params as ContainsParams | undefined;
 
 	// Validate inputs
@@ -53,9 +51,7 @@ export async function executeContains(
 	const style = parseStyleConfig(op.style);
 
 	const modeLabel = mode === 'filter' ? 'A contains B → keep A' : 'A contains B → keep B';
-	logger.progress(displayName, 'processing', `Contains ${inputA} / ${inputB} (${modeLabel})...`);
-
-	const connection = await getConnection();
+	callbacks?.onProgress?.(`Contains ${inputA} / ${inputB} (${modeLabel})...`);
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -128,12 +124,11 @@ export async function executeContains(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		logger.info('Contains', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+		callbacks?.onInfo?.('Contains', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
 	}
 
 	if (featureCount === 0) {
-		logger.warn('Contains', `${inputA} contains ${inputB} produced no features`);
-		logger.progress(displayName, 'success', `No features found (${mode})`);
+		callbacks?.onWarn?.('Contains', `${inputA} contains ${inputB} produced no features`);
 	}
 
 	// Register dataset metadata
@@ -141,29 +136,58 @@ export async function executeContains(
 		INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
 		VALUES (?, 'operation:contains', ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
 	`);
-	await insertDataset.query(outputId, op.name || outputId, color, featureCount, JSON.stringify(style));
+	await insertDataset.query(outputId, displayName, color, featureCount, JSON.stringify(style));
 	await insertDataset.close();
 
+	return { outputId, displayName, featureCount, color, style };
+}
+
+/**
+ * Execute a contains operation (compute + render).
+ * Thin wrapper that calls computeContains then renders the result on the map.
+ *
+ * @param op - Binary operation config with inputs[0] as container (A), inputs[1] as contained (B)
+ * @param context - Execution context with map, progress, etc.
+ */
+export async function executeContains(
+	op: BinaryOperation,
+	context: OperationContext
+): Promise<boolean> {
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
+
+	const connection = await getConnection();
+	const result = await computeContains(connection, op, {
+		onProgress: (msg) => logger.progress(op.name || op.output, 'processing', msg),
+		onInfo: (tag, msg) => logger.info(tag, msg),
+		onWarn: (tag, msg) => logger.warn(tag, msg),
+	});
+
 	// Query features as GeoJSON for map rendering
-	const geoJsonData = await getFeaturesAsGeoJSON(outputId);
+	const geoJsonData = await getFeaturesAsGeoJSON(result.outputId);
 
 	// Add source and layers to map (skip layers if explicit config exists)
-	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, shouldSkipAutoLayers(outputId, context.layers));
+	const layerIds = addOperationResultToMap(map, result.outputId, result.color, result.style, geoJsonData, shouldSkipAutoLayers(result.outputId, context.layers));
 
 	// Track dataset
-	loadedDatasets.add(outputId);
+	loadedDatasets.add(result.outputId);
 
 	// Notify executor to attach popup/hover handlers
 	if (layerIds.length > 0) {
-		context.onLayersCreated?.(layerIds, displayName);
+		context.onLayersCreated?.(layerIds, result.displayName);
 	}
 
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	logger.progress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
+	const mode = (op.params as ContainsParams | undefined)?.mode ?? 'filter';
 
-	logger.info('Contains', `Complete: ${outputId} with ${featureCount} features`);
+	if (result.featureCount === 0) {
+		logger.progress(result.displayName, 'success', `No features found (${mode})`);
+	} else {
+		logger.progress(result.displayName, 'success', `${result.featureCount} feature(s) (${mode})`);
+	}
+
+	logger.info('Contains', `Complete: ${result.outputId} with ${result.featureCount} features`);
 
 	return true;
 }

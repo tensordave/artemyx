@@ -1,12 +1,11 @@
 import maplibregl from 'maplibre-gl';
-import { getStorageMode } from '../db/core';
-import { DEFAULT_STYLE, type StyleConfig } from '../db/datasets';
+import { getStorageMode } from '../db';
+import { DEFAULT_STYLE, type StyleConfig, type LoadGeoJSONOptions as DBLoadOptions } from '../db/constants';
 import { getSourceId, addSource, removeDefaultLayers, addDefaultLayers } from '../layers';
 import { showErrorDialog, showConfirmDialog } from '../ui/error-dialog';
 import type { ConfigFormat } from '../loaders';
 import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
-import type { LoadGeoJSONOptions as DBLoadOptions } from '../db/datasets';
 
 /**
  * Parse style JSON from dataset, returning defaults if invalid
@@ -169,45 +168,18 @@ export function addDatasetToMap(
 }
 
 /**
- * Fit map bounds to GeoJSON features
+ * Fit map bounds to a precomputed bounding box [west, south, east, north].
+ * Bounds are computed in DuckDB via ST_Extent (see db/features.ts getDatasetBounds).
  */
-export function fitMapToFeatures(map: maplibregl.Map, geoJsonData: GeoJSON.FeatureCollection): void {
+export function fitMapToBounds(map: maplibregl.Map, bbox: [number, number, number, number]): void {
 	try {
 		const bounds = new maplibregl.LngLatBounds();
-		const features = geoJsonData.features;
-
-		features.forEach((feature: any) => {
-			const coords = feature.geometry?.coordinates;
-			if (!coords || !Array.isArray(coords)) return;
-
-			const extendBounds = (c: any) => {
-				if (Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number') {
-					bounds.extend(c as [number, number]);
-				}
-			};
-
-			switch (feature.geometry.type) {
-				case 'Point':
-					extendBounds(coords);
-					break;
-				case 'LineString':
-				case 'MultiPoint':
-					coords.forEach(extendBounds);
-					break;
-				case 'Polygon':
-				case 'MultiLineString':
-					coords.forEach((ring: any[]) => ring?.forEach(extendBounds));
-					break;
-				case 'MultiPolygon':
-					coords.forEach((polygon: any[]) => polygon?.[0]?.forEach(extendBounds));
-					break;
-			}
-		});
-
+		bounds.extend([bbox[0], bbox[1]]);
+		bounds.extend([bbox[2], bbox[3]]);
 		if (!bounds.isEmpty()) {
-			map.fitBounds(bounds, { padding: 50 });
+			map.fitBounds(bounds, { padding: 50, maxZoom: 17 });
 		}
-	} catch (boundsError) {
-		console.error('Failed to fit bounds:', boundsError);
+	} catch (error) {
+		console.error('Failed to fit bounds:', error);
 	}
 }

@@ -7,16 +7,16 @@ import {
 import { getBasemap, getDefaultBasemap } from './basemaps';
 import { loadConfig, getDefaultMapSettings } from './config/parser';
 import { loadDatasetsFromConfig } from './data-actions/load';
+import { fitMapToBounds } from './data-actions/shared';
 import { createExecutionPlan } from './config/operations-graph';
 import { executeOperations } from './config/executor';
 import { executeLayersFromConfig, resyncLayerOrder, restoreLabelIfConfigured } from './layers';
 import { toggleLayerVisibility } from './layer-actions/visibility';
-import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog } from './db/core';
 import { BrowserLogger } from './logger';
 import { databaseIcon } from './icons';
-import { getDatasets, getFeaturesAsGeoJSON } from './db';
-import { addOperationResultToMap } from './config/operations/buffer';
-import { DEFAULT_STYLE, setLayerOrders, saveViewport, getCachedViewport } from './db/datasets';
+import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getDatasets, getDatasetBounds, getFeaturesAsGeoJSON, setLayerOrders, saveViewport, getCachedViewport, setEventHandler, terminateWorker } from './db';
+import { addOperationResultToMap } from './config/operations/render';
+import { DEFAULT_STYLE } from './db/constants';
 import type { MapConfig, MapSettings } from './config/types';
 
 // Catch uncaught OOM and other fatal errors so the UI doesn't silently stall
@@ -119,6 +119,14 @@ basemapControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); geocoding
 geocodingControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); basemapControl.closePanel(); });
 _progressControlRef = progressControl;
 const logger = new BrowserLogger(progressControl);
+
+// Wire worker event handler to forward progress/info/warn from worker to UI
+setEventHandler({
+	onProgress: (op, status, msg) => logger.progress(op, status, msg),
+	onInfo: (tag, msg) => logger.info(tag, msg),
+	onWarn: (tag, msg) => logger.warn(tag, msg),
+	onInitLog: (entries) => progressControl.injectHistory(entries),
+});
 const dataControl = new DataControl({
 	map,
 	logger,
@@ -224,11 +232,8 @@ async function restoreManualDatasets(): Promise<void> {
 progressControl.updateProgress('database', 'processing', 'Initializing database...', databaseIcon);
 await ensureInit();
 
-// Replay DB init log into progress history (steps ran before the control mounted)
-const initLog = getInitLog();
-if (initLog.length > 0) {
-	progressControl.injectHistory(initLog);
-}
+// Init log is replayed via the worker event handler (onInitLog callback)
+// which fires when the init RPC response arrives with the log entries.
 
 if (hasExistingOPFSData()) {
 	progressControl.updateProgress('session', 'processing', 'Restoring session from storage...');
@@ -254,6 +259,13 @@ window.addEventListener('beforeunload', (e) => {
 	if (getStorageMode() === 'memory' && reason !== 'none' && reason !== 'disabled') {
 		e.preventDefault();
 	}
+});
+
+// Clean up resources on page navigation to prevent memory bloat.
+// WASM ArrayBuffers are slow to GC — explicit teardown ensures prompt release.
+window.addEventListener('pagehide', () => {
+	map.remove();          // WebGL context, tile caches, DOM, control onRemove()
+	terminateWorker();     // Kill DuckDB worker + sub-workers, release WASM heap
 });
 
 // Load datasets from config, then execute operations and layers
@@ -301,6 +313,9 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 			}
 		}
 
+		// Fetch all dataset metadata once for layer ordering + visibility restoration below
+		const allDatasets = await getDatasets();
+
 		// Execute explicit layers after datasets and operations are ready
 		if (mapConfig?.layers && mapConfig.layers.length > 0) {
 			console.log(`Creating ${mapConfig.layers.length} layer(s) from config...`);
@@ -316,8 +331,7 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 			for (let i = 0; i < mapConfig.layers.length; i++) {
 				datasetTopIndex.set(mapConfig.layers[i].source, i);
 			}
-			const currentDatasets = await getDatasets();
-			const visible = currentDatasets.filter((d: any) => !d.hidden);
+			const visible = allDatasets.filter((d: any) => !d.hidden);
 			const referenced = visible.filter((d: any) => datasetTopIndex.has(d.id));
 			const unreferenced = visible.filter((d: any) => !datasetTopIndex.has(d.id));
 			referenced.sort((a: any, b: any) => datasetTopIndex.get(a.id)! - datasetTopIndex.get(b.id)!);
@@ -362,14 +376,19 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 		// Apply stored visibility state and restore labels for all datasets
 		// Must happen after executeLayersFromConfig() so layers actually exist
 		try {
-			const allDatasets = await getDatasets();
-			for (const ds of allDatasets) {
-				// Restore labels if configured in saved style
+			// Re-fetch after setLayerOrders so the array order reflects config intent
+			const currentDatasets = await getDatasets();
+
+			// Restore labels concurrently (each calls getDistinctGeometryTypes RPC)
+			await Promise.all(currentDatasets.map(async (ds: any) => {
 				if (ds.style) {
 					const parsedStyle = JSON.parse(ds.style);
 					await restoreLabelIfConfigured(map, ds.id, { ...DEFAULT_STYLE, ...parsedStyle });
 				}
+			}));
 
+			// Apply visibility (synchronous MapLibre calls, no RPCs)
+			for (const ds of currentDatasets) {
 				if (!ds.visible) {
 					toggleLayerVisibility(map, ds.id, false);
 				}
@@ -377,11 +396,45 @@ if (mapConfig?.datasets && mapConfig.datasets.length > 0) {
 
 			// Sync MapLibre layer stack to match stored layer_order
 			// (layer_order was recomputed above if config has explicit layers)
-			resyncLayerOrder(map, allDatasets.filter((d: any) => !d.hidden).map((d: any) => d.id));
+			resyncLayerOrder(map, currentDatasets.filter((d: any) => !d.hidden).map((d: any) => d.id));
 
 			layerToggleControl.refreshPanel();
 		} catch (e) {
 			console.warn('[Visibility] Failed to restore visibility state:', e);
+		}
+
+		// Fit bounds to all visible data (datasets + operation outputs)
+		// Runs last so layers, visibility, and ordering are all finalized first.
+		try {
+			const boundsDatasets = mapConfig!.datasets?.filter(d => d.fitBounds !== false) ?? [];
+			const boundsIds = new Set(boundsDatasets.map(d => d.id));
+			if (mapConfig!.operations) {
+				for (const op of mapConfig!.operations) boundsIds.add(op.output);
+			}
+
+			// Fire all bounds RPCs concurrently instead of sequential awaits
+			const idsToQuery = [...boundsIds].filter(id => loadedDatasets.has(id));
+			const bboxResults = await Promise.all(idsToQuery.map(id => getDatasetBounds(id)));
+
+			// Merge all bounding boxes into a single envelope
+			let merged: [number, number, number, number] | null = null;
+			for (const bbox of bboxResults) {
+				if (bbox) {
+					if (!merged) {
+						merged = [...bbox];
+					} else {
+						merged[0] = Math.min(merged[0], bbox[0]);
+						merged[1] = Math.min(merged[1], bbox[1]);
+						merged[2] = Math.max(merged[2], bbox[2]);
+						merged[3] = Math.max(merged[3], bbox[3]);
+					}
+				}
+			}
+			if (merged) {
+				fitMapToBounds(map, merged);
+			}
+		} catch (e) {
+			console.warn('[Config] Failed to fit bounds after pipeline:', e);
 		}
 
 		// All pipeline work done — schedule idle after the final status has been visible

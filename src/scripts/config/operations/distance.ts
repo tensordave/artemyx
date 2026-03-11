@@ -11,25 +11,25 @@
  * inputs[1] is the proximity target.
  */
 
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { getConnection } from '../../db/core';
 import { DEFAULT_COLOR } from '../../db/datasets';
 import { getFeaturesAsGeoJSON } from '../../db/features';
 import type { BinaryOperation, DistanceParams } from '../types';
-import type { OperationContext } from './index';
-import { parseStyleConfig, shouldSkipAutoLayers } from './index';
-import { addOperationResultToMap } from './buffer';
+import type { OperationContext, ComputeResult, ComputeCallbacks } from './index';
+import { parseStyleConfig, shouldSkipAutoLayers, callbacksToLogger } from './index';
+import { addOperationResultToMap } from './render';
 import { toMeters, fromMeters, metersToDegreesAtLatitude, degreesToMetersAtLatitude, unitSuffix, getProjectedCrs } from './unit-conversion';
 
 /**
- * Execute a distance operation.
- * inputs[0] = primary dataset (filtered or enriched)
- * inputs[1] = proximity target
+ * Pure SQL computation for distance operation.
+ * No MapLibre imports - can run in a Web Worker or headless CLI.
  */
-export async function executeDistance(
+export async function computeDistance(
+	connection: AsyncDuckDBConnection,
 	op: BinaryOperation,
-	context: OperationContext
-): Promise<boolean> {
-	const { map, logger, layerToggleControl, loadedDatasets } = context;
+	callbacks?: ComputeCallbacks
+): Promise<ComputeResult> {
 	const params = op.params as DistanceParams | undefined;
 
 	// Validate inputs
@@ -57,12 +57,10 @@ export async function executeDistance(
 	const suffix = unitSuffix(units);
 
 	const modeLabel = mode === 'filter' ? `filtering within ${maxDistance} ${units}` : 'annotating nearest distance';
-	logger.progress(displayName, 'processing', `Distance: ${inputA} → ${inputB} (${modeLabel})...`);
-
-	const connection = await getConnection();
+	callbacks?.onProgress?.(`Distance: ${inputA} → ${inputB} (${modeLabel})...`);
 
 	// Derive projected CRS for geodetically accurate distance calculations
-	const crs = await getProjectedCrs(connection, inputA, logger);
+	const crs = await getProjectedCrs(connection, inputA, callbacksToLogger(callbacks));
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -79,7 +77,7 @@ export async function executeDistance(
 		if (crs.fallback) {
 			// Polar fallback: degree approximation
 			const distanceDegrees = metersToDegreesAtLatitude(maxDistMeters, crs.latitude);
-			logger.info('Distance', `Filter (fallback): ${maxDistance} ${units} (${maxDistMeters}m) → ${distanceDegrees.toFixed(6)}° at lat ${crs.latitude.toFixed(2)}°`);
+			callbacks?.onInfo?.('Distance', `Filter (fallback): ${maxDistance} ${units} (${maxDistMeters}m) → ${distanceDegrees.toFixed(6)}° at lat ${crs.latitude.toFixed(2)}°`);
 
 			const insertFiltered = await connection.prepare(`
 				INSERT INTO features (dataset_id, source_url, geometry, properties)
@@ -101,7 +99,7 @@ export async function executeDistance(
 		} else {
 			// Projected CRS: ST_DWithin in meters
 			// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
-			logger.info('Distance', `Filter: ${maxDistance} ${units} (${maxDistMeters}m), crs=${crs.epsg}`);
+			callbacks?.onInfo?.('Distance', `Filter: ${maxDistance} ${units} (${maxDistMeters}m), crs=${crs.epsg}`);
 
 			const insertFiltered = await connection.prepare(`
 				INSERT INTO features (dataset_id, source_url, geometry, properties)
@@ -133,7 +131,7 @@ export async function executeDistance(
 			// Polar fallback: degree approximation with scale factor
 			const metersPerDegree = degreesToMetersAtLatitude(1, crs.latitude);
 			const unitsPerDegree = fromMeters(metersPerDegree, units);
-			logger.info('Distance', `Annotate (fallback): scale factor ${unitsPerDegree.toFixed(4)} ${units}/° at lat ${crs.latitude.toFixed(2)}° (property: ${propName})`);
+			callbacks?.onInfo?.('Distance', `Annotate (fallback): scale factor ${unitsPerDegree.toFixed(4)} ${units}/° at lat ${crs.latitude.toFixed(2)}° (property: ${propName})`);
 
 			const havingClause = maxDistance !== undefined
 				? `HAVING min_dist_deg <= ${metersToDegreesAtLatitude(toMeters(maxDistance, units), crs.latitude)}`
@@ -170,7 +168,7 @@ export async function executeDistance(
 			// Projected CRS: ST_Distance in meters, convert to output unit
 			// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
 			const unitDivisor = toMeters(1, units); // meters per output unit
-			logger.info('Distance', `Annotate: crs=${crs.epsg}, output unit=${units} (property: ${propName})`);
+			callbacks?.onInfo?.('Distance', `Annotate: crs=${crs.epsg}, output unit=${units} (property: ${propName})`);
 
 			const havingClause = maxDistance !== undefined
 				? `HAVING min_dist_m <= ${toMeters(maxDistance, units)}`
@@ -229,12 +227,11 @@ export async function executeDistance(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		logger.info('Distance', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+		callbacks?.onInfo?.('Distance', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
 	}
 
 	if (featureCount === 0) {
-		logger.warn('Distance', `${inputA} → ${inputB} produced no features`);
-		logger.progress(displayName, 'success', `No features within distance`);
+		callbacks?.onWarn?.('Distance', `${inputA} → ${inputB} produced no features`);
 	}
 
 	// Register dataset metadata
@@ -245,27 +242,51 @@ export async function executeDistance(
 	await insertDataset.query(outputId, op.name || outputId, color, featureCount, JSON.stringify(style));
 	await insertDataset.close();
 
+	return { outputId, displayName, featureCount, color, style };
+}
+
+/**
+ * Execute a distance operation (compute + render).
+ * Thin wrapper that calls computeDistance then renders the result on the map.
+ */
+export async function executeDistance(
+	op: BinaryOperation,
+	context: OperationContext
+): Promise<boolean> {
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
+
+	const connection = await getConnection();
+	const result = await computeDistance(connection, op, {
+		onProgress: (msg) => logger.progress(op.name || op.output, 'processing', msg),
+		onInfo: (tag, msg) => logger.info(tag, msg),
+		onWarn: (tag, msg) => logger.warn(tag, msg),
+	});
+
 	// Query features as GeoJSON for map rendering
-	const geoJsonData = await getFeaturesAsGeoJSON(outputId);
+	const geoJsonData = await getFeaturesAsGeoJSON(result.outputId);
 
 	// Add source and layers to map (skip layers if explicit config exists)
-	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, shouldSkipAutoLayers(outputId, context.layers));
+	const layerIds = addOperationResultToMap(map, result.outputId, result.color, result.style, geoJsonData, shouldSkipAutoLayers(result.outputId, context.layers));
 
 	// Track dataset
-	loadedDatasets.add(outputId);
+	loadedDatasets.add(result.outputId);
 
 	// Notify executor to attach popup/hover handlers
 	if (layerIds.length > 0) {
-		context.onLayersCreated?.(layerIds, displayName);
+		context.onLayersCreated?.(layerIds, result.displayName);
 	}
 
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
+	const params = op.params as DistanceParams | undefined;
+	const maxDistance = params?.maxDistance;
+	const units = params?.units ?? 'meters';
+	const mode = params?.mode ?? 'filter';
 	const distNote = maxDistance !== undefined ? ` (≤${maxDistance} ${units})` : '';
-	logger.progress(displayName, 'success', `${featureCount} feature(s) (${mode}${distNote})`);
+	logger.progress(result.displayName, 'success', `${result.featureCount} feature(s) (${mode}${distNote})`);
 
-	logger.info('Distance', `Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Distance', `Complete: ${result.outputId} with ${result.featureCount} features`);
 
 	return true;
 }
