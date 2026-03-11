@@ -29,7 +29,12 @@ export function addSource(
 
 	map.addSource(sourceId, {
 		type: 'geojson',
-		data
+		data,
+		// Reduce MapLibre's internal vector tile cache footprint:
+		// - tolerance: simplification during tiling (default 0.375) - slightly higher reduces tile geometry
+		// - buffer: tile edge overlap in pixels (default 128) - lower means fewer duplicated features at edges
+		tolerance: 0.5,
+		buffer: 64,
 	});
 }
 

@@ -4,8 +4,8 @@
  */
 
 import maplibregl from 'maplibre-gl';
-import type { StyleConfig } from '../db/datasets';
-import { getPropertyKeys } from '../db/features';
+import type { StyleConfig } from '../db/constants';
+import { getPropertyKeys } from '../db';
 import { addLabelLayer, removeLabelLayer, getLabelLayerId, getLayersBySource } from '../layers/layers';
 import { getSourceId } from '../layers/sources';
 import { createSliderRow } from './style';

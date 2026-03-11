@@ -4,58 +4,25 @@
  * Falls back to degree approximation for polar regions outside UTM coverage.
  */
 
-import type maplibregl from 'maplibre-gl';
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { getConnection } from '../../db/core';
 import { DEFAULT_COLOR } from '../../db/datasets';
-import type { StyleConfig } from '../../db/datasets';
 import { getFeaturesAsGeoJSON } from '../../db/features';
-import { getSourceId, addSource, removeDefaultLayers, addDefaultLayers } from '../../layers';
 import type { UnaryOperation, BufferParams } from '../types';
-import type { OperationContext } from './index';
-import { parseStyleConfig, shouldSkipAutoLayers } from './index';
+import type { OperationContext, ComputeResult, ComputeCallbacks } from './index';
+import { parseStyleConfig, shouldSkipAutoLayers, callbacksToLogger } from './index';
+import { addOperationResultToMap } from './render';
 import { toMeters, metersToDegreesAtLatitude, getProjectedCrs } from './unit-conversion';
 
 /**
- * Add GeoJSON data to map as source, optionally with default layers.
- * Removes existing source/layers first (for re-running operations).
- *
- * @param skipLayers - When true, only add source (explicit layers defined in config).
- * @returns Layer IDs if layers were created, empty array otherwise.
+ * Pure SQL computation for buffer operation.
+ * No MapLibre imports - can run in a Web Worker or headless CLI.
  */
-export function addOperationResultToMap(
-	map: maplibregl.Map,
-	datasetId: string,
-	datasetColor: string,
-	style: StyleConfig,
-	geoJsonData: GeoJSON.FeatureCollection,
-	skipLayers: boolean = false
-): string[] {
-	const sourceId = getSourceId(datasetId);
-
-	// Remove existing layers and source if present
-	removeDefaultLayers(map, datasetId);
-
-	// Add source
-	addSource(map, sourceId, geoJsonData);
-
-	// Add default layers only if no explicit layers config
-	if (!skipLayers) {
-		return addDefaultLayers(map, sourceId, datasetId, datasetColor, style);
-	}
-
-	return [];
-}
-
-/**
- * Execute a buffer operation.
- * Reprojects input geometry to a local UTM CRS so ST_Buffer operates in meters,
- * then reprojects the result back to WGS84. Optionally dissolves with ST_Union_Agg.
- */
-export async function executeBuffer(
+export async function computeBuffer(
+	connection: AsyncDuckDBConnection,
 	op: UnaryOperation,
-	context: OperationContext
-): Promise<boolean> {
-	const { map, logger, layerToggleControl, loadedDatasets } = context;
+	callbacks?: ComputeCallbacks
+): Promise<ComputeResult> {
 	const params = op.params as BufferParams | undefined;
 
 	// Validate params
@@ -73,14 +40,12 @@ export async function executeBuffer(
 	const color = op.color ?? DEFAULT_COLOR;
 	const style = parseStyleConfig(op.style);
 
-	logger.progress(displayName, 'processing', `Buffering ${inputId} by ${params.distance}${units === 'meters' ? 'm' : ' ' + units}...`);
-
-	const connection = await getConnection();
+	callbacks?.onProgress?.(`Buffering ${inputId} by ${params.distance}${units === 'meters' ? 'm' : ' ' + units}...`);
 
 	// Derive projected CRS for geodetically accurate buffering
-	const crs = await getProjectedCrs(connection, inputId, logger);
+	const crs = await getProjectedCrs(connection, inputId, callbacksToLogger(callbacks));
 
-	logger.info('Buffer', `${params.distance} ${units} (${distanceMeters}m), quadSegs=${quadSegs}, crs=${crs.epsg ?? 'degree-fallback'}`);
+	callbacks?.onInfo?.('Buffer', `${params.distance} ${units} (${distanceMeters}m), quadSegs=${quadSegs}, crs=${crs.epsg ?? 'degree-fallback'}`);
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -102,7 +67,7 @@ export async function executeBuffer(
 				SELECT
 					?,
 					'operation:buffer',
-					ST_Union_Agg(ST_Simplify(ST_Buffer(geometry, ?, CAST(? AS INTEGER)), ?)),
+					ST_Union_Agg(ST_MakeValid(ST_Simplify(ST_Buffer(geometry, ?, CAST(? AS INTEGER)), ?))),
 					'{"dissolved": true}'
 				FROM features
 				WHERE dataset_id = ?
@@ -125,10 +90,10 @@ export async function executeBuffer(
 			await insertBuffered.close();
 		}
 	} else if (dissolve) {
-		// Projected CRS dissolve: flip → reproject → buffer → simplify → union → reproject back → flip
+		// Projected CRS dissolve: flip → reproject → buffer → simplify → make valid → union → reproject back → flip
 		// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
-		// ST_Simplify (5% of buffer distance) reduces vertices, then ST_Buffer(geom, 0)
-		// repairs topology to prevent TopologyException during union.
+		// ST_Simplify (5% of buffer distance) reduces vertices, ST_MakeValid repairs topology
+		// to prevent TopologyException during union.
 		const simplifyTolerance = distanceMeters * 0.05;
 		const insertDissolved = await connection.prepare(`
 			INSERT INTO features (dataset_id, source_url, geometry, properties)
@@ -136,10 +101,10 @@ export async function executeBuffer(
 				?,
 				'operation:buffer',
 				ST_FlipCoordinates(ST_Transform(
-					ST_Union_Agg(ST_Buffer(ST_Simplify(
+					ST_Union_Agg(ST_MakeValid(ST_Simplify(
 						ST_Buffer(ST_Transform(ST_FlipCoordinates(geometry), 'EPSG:4326', ?), ?, CAST(? AS INTEGER)),
 						?
-					), 0)),
+					))),
 					?, 'EPSG:4326'
 				)),
 				'{"dissolved": true}'
@@ -190,7 +155,7 @@ export async function executeBuffer(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		logger.info('Buffer', `Result: ${featureCount} features, type=${debugRow.geom_type}, geojson length=${debugRow.geojson?.length || 0}`);
+		callbacks?.onInfo?.('Buffer', `Result: ${featureCount} features, type=${debugRow.geom_type}, geojson length=${debugRow.geojson?.length || 0}`);
 	}
 
 	if (featureCount === 0) {
@@ -202,34 +167,55 @@ export async function executeBuffer(
 		INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
 		VALUES (?, 'operation:buffer', ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
 	`);
-	await insertDataset.query(outputId, op.name || outputId, color, featureCount, JSON.stringify(style));
+	await insertDataset.query(outputId, displayName, color, featureCount, JSON.stringify(style));
 	await insertDataset.close();
 
+	return { outputId, displayName, featureCount, color, style };
+}
+
+/**
+ * Execute a buffer operation (compute + render).
+ * Thin wrapper that calls computeBuffer then renders the result on the map.
+ */
+export async function executeBuffer(
+	op: UnaryOperation,
+	context: OperationContext
+): Promise<boolean> {
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
+
+	const connection = await getConnection();
+	const result = await computeBuffer(connection, op, {
+		onProgress: (msg) => logger.progress(op.name || op.output, 'processing', msg),
+		onInfo: (tag, msg) => logger.info(tag, msg),
+		onWarn: (tag, msg) => logger.warn(tag, msg),
+	});
+
 	// Query features as GeoJSON for map rendering
-	const geoJsonData = await getFeaturesAsGeoJSON(outputId);
+	const geoJsonData = await getFeaturesAsGeoJSON(result.outputId);
 
 	if (!geoJsonData.features || geoJsonData.features.length === 0) {
 		throw new Error(`Buffer operation '${op.output}': no features returned from query`);
 	}
 
 	// Add source and layers to map (skip layers if explicit config exists)
-	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, shouldSkipAutoLayers(outputId, context.layers));
+	const layerIds = addOperationResultToMap(map, result.outputId, result.color, result.style, geoJsonData, shouldSkipAutoLayers(result.outputId, context.layers));
 
 	// Track dataset
-	loadedDatasets.add(outputId);
+	loadedDatasets.add(result.outputId);
 
 	// Notify executor to attach popup/hover handlers
 	if (layerIds.length > 0) {
-		context.onLayersCreated?.(layerIds, displayName);
+		context.onLayersCreated?.(layerIds, result.displayName);
 	}
 
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
+	const dissolve = (op.params as BufferParams | undefined)?.dissolve ?? false;
 	const dissolveNote = dissolve ? ' (dissolved)' : '';
-	logger.progress(displayName, 'success', `Created ${featureCount} feature(s)${dissolveNote}`);
+	logger.progress(result.displayName, 'success', `Created ${result.featureCount} feature(s)${dissolveNote}`);
 
-	logger.info('Buffer', `Complete: ${outputId} with ${featureCount} features`);
+	logger.info('Buffer', `Complete: ${result.outputId} with ${result.featureCount} features`);
 
 	return true;
 }

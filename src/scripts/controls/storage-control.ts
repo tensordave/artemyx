@@ -1,8 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import { databaseIcon, crosshairIcon, trashIcon } from '../icons';
-import { getStorageMode, getFallbackReason, clearOPFS } from '../db/core';
-import { clearCachedViewport, getCachedViewport } from '../db/datasets';
-import type { FallbackReason } from '../db/core';
+import { getStorageMode, getFallbackReason, clearOPFS, clearCachedViewport, getCachedViewport } from '../db';
+import type { FallbackReason } from '../db';
 
 function formatBytes(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -31,7 +30,7 @@ interface StorageControlOptions {
  * Posts 'tab-open' on creation; responds 'tab-present' to others.
  * Returns a promise that resolves to true if another tab responds within 200ms.
  */
-function detectOtherTabs(): Promise<boolean> {
+function detectOtherTabs(): Promise<{ detected: boolean; channel: BroadcastChannel | null }> {
 	return new Promise((resolve) => {
 		try {
 			const channel = new BroadcastChannel('artemyx-gis');
@@ -50,10 +49,10 @@ function detectOtherTabs(): Promise<boolean> {
 			channel.postMessage('tab-open');
 
 			// Wait 200ms for a response, then resolve
-			setTimeout(() => resolve(detected), 200);
+			setTimeout(() => resolve({ detected, channel }), 200);
 		} catch {
 			// BroadcastChannel not supported — skip detection
-			resolve(false);
+			resolve({ detected: false, channel: null });
 		}
 	});
 }
@@ -64,6 +63,7 @@ export class StorageControl implements maplibregl.IControl {
 	private panel: HTMLDivElement | undefined;
 	private onPanelOpen?: () => void;
 	private multiTabDetected = false;
+	private broadcastChannel: BroadcastChannel | null = null;
 	private onDocPointerDown: (e: PointerEvent) => void;
 
 	constructor(options?: StorageControlOptions) {
@@ -75,8 +75,9 @@ export class StorageControl implements maplibregl.IControl {
 		};
 
 		// Start multi-tab detection immediately (non-blocking)
-		detectOtherTabs().then((detected) => {
+		detectOtherTabs().then(({ detected, channel }) => {
 			this.multiTabDetected = detected;
+			this.broadcastChannel = channel;
 			if (detected) {
 				console.warn('[Storage] Another tab is already open — shared OPFS access may cause issues');
 				this.updateIconColor();
@@ -124,6 +125,8 @@ export class StorageControl implements maplibregl.IControl {
 
 	onRemove(): void {
 		document.removeEventListener('pointerdown', this.onDocPointerDown);
+		this.broadcastChannel?.close();
+		this.broadcastChannel = null;
 		if (this.container?.parentNode) {
 			this.container.parentNode.removeChild(this.container);
 		}

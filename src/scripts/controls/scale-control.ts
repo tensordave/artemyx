@@ -137,11 +137,17 @@ export class ScaleBarControl implements IControl {
 		this.updateCoords();
 	}
 
+	private coordRafPending = false;
 	private onMouseMove = (e: MapMouseEvent): void => {
 		this.hasMouseOver = true;
 		this.cursorLat = e.lngLat.lat;
 		this.cursorLng = e.lngLat.lng;
-		this.updateCoords();
+		if (this.coordRafPending) return;
+		this.coordRafPending = true;
+		requestAnimationFrame(() => {
+			this.coordRafPending = false;
+			this.updateCoords();
+		});
 	};
 
 	private onMouseLeave = (): void => {

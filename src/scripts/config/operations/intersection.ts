@@ -6,26 +6,24 @@
  * - 'clip': Compute actual geometric intersection (output is the overlapping geometry)
  */
 
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { getConnection } from '../../db/core';
 import { DEFAULT_COLOR } from '../../db/datasets';
 import { getFeaturesAsGeoJSON } from '../../db/features';
 import type { BinaryOperation, IntersectionParams } from '../types';
-import type { OperationContext } from './index';
+import type { OperationContext, ComputeResult, ComputeCallbacks } from './index';
 import { parseStyleConfig, shouldSkipAutoLayers } from './index';
-import { addOperationResultToMap } from './buffer';
+import { addOperationResultToMap } from './render';
 
 /**
- * Execute an intersection operation.
- * Takes two inputs: first input's features are tested/clipped against second input.
- *
- * @param op - Binary operation config with inputs[0] as primary, inputs[1] as overlay
- * @param context - Execution context with map, progress, etc.
+ * Pure SQL computation for intersection operation.
+ * No MapLibre imports - can run in a Web Worker or headless CLI.
  */
-export async function executeIntersection(
+export async function computeIntersection(
+	connection: AsyncDuckDBConnection,
 	op: BinaryOperation,
-	context: OperationContext
-): Promise<boolean> {
-	const { map, logger, layerToggleControl, loadedDatasets } = context;
+	callbacks?: ComputeCallbacks
+): Promise<ComputeResult> {
 	const params = op.params as IntersectionParams | undefined;
 
 	// Validate inputs
@@ -46,9 +44,7 @@ export async function executeIntersection(
 	const style = parseStyleConfig(op.style);
 
 	const modeLabel = mode === 'filter' ? 'filtering' : 'clipping';
-	logger.progress(displayName, 'processing', `Intersecting ${inputA} with ${inputB} (${modeLabel})...`);
-
-	const connection = await getConnection();
+	callbacks?.onProgress?.(`Intersecting ${inputA} with ${inputB} (${modeLabel})...`);
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -88,7 +84,7 @@ export async function executeIntersection(
 		const insertClipped = await connection.prepare(`
 			INSERT INTO features (dataset_id, source_url, geometry, properties)
 			WITH clip_mask AS (
-				SELECT ST_Union_Agg(ST_Simplify(geometry, 0.0003)) AS geometry
+				SELECT ST_Union_Agg(ST_MakeValid(ST_Simplify(geometry, 0.0003))) AS geometry
 				FROM features
 				WHERE dataset_id = ?
 				AND geometry IS NOT NULL
@@ -128,13 +124,12 @@ export async function executeIntersection(
 		const debugResult = await debugStmt.query(outputId);
 		await debugStmt.close();
 		const debugRow = debugResult.toArray()[0];
-		logger.info('Intersection', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
+		callbacks?.onInfo?.('Intersection', `Result: ${featureCount} features, type=${debugRow.geom_type}, mode=${mode}`);
 	}
 
 	if (featureCount === 0) {
 		// Not necessarily an error - could be valid "no intersection" result
-		logger.warn('Intersection', `${inputA} ∩ ${inputB} produced no features`);
-		logger.progress(displayName, 'success', `No intersecting features found`);
+		callbacks?.onWarn?.('Intersection', `${inputA} ∩ ${inputB} produced no features`);
 		// Still register empty dataset for consistency
 	}
 
@@ -143,29 +138,58 @@ export async function executeIntersection(
 		INSERT INTO datasets (id, source_url, name, color, visible, feature_count, loaded_at, style)
 		VALUES (?, 'operation:intersection', ?, ?, true, ?, CURRENT_TIMESTAMP, ?)
 	`);
-	await insertDataset.query(outputId, op.name || outputId, color, featureCount, JSON.stringify(style));
+	await insertDataset.query(outputId, displayName, color, featureCount, JSON.stringify(style));
 	await insertDataset.close();
 
+	return { outputId, displayName, featureCount, color, style };
+}
+
+/**
+ * Execute an intersection operation (compute + render).
+ * Thin wrapper that calls computeIntersection then renders the result on the map.
+ *
+ * @param op - Binary operation config with inputs[0] as primary, inputs[1] as overlay
+ * @param context - Execution context with map, progress, etc.
+ */
+export async function executeIntersection(
+	op: BinaryOperation,
+	context: OperationContext
+): Promise<boolean> {
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
+
+	const connection = await getConnection();
+	const result = await computeIntersection(connection, op, {
+		onProgress: (msg) => logger.progress(op.name || op.output, 'processing', msg),
+		onInfo: (tag, msg) => logger.info(tag, msg),
+		onWarn: (tag, msg) => logger.warn(tag, msg),
+	});
+
 	// Query features as GeoJSON for map rendering
-	const geoJsonData = await getFeaturesAsGeoJSON(outputId);
+	const geoJsonData = await getFeaturesAsGeoJSON(result.outputId);
 
 	// Add source and layers to map (skip layers if explicit config exists)
-	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, shouldSkipAutoLayers(outputId, context.layers));
+	const layerIds = addOperationResultToMap(map, result.outputId, result.color, result.style, geoJsonData, shouldSkipAutoLayers(result.outputId, context.layers));
 
 	// Track dataset
-	loadedDatasets.add(outputId);
+	loadedDatasets.add(result.outputId);
 
 	// Notify executor to attach popup/hover handlers
 	if (layerIds.length > 0) {
-		context.onLayersCreated?.(layerIds, displayName);
+		context.onLayersCreated?.(layerIds, result.displayName);
 	}
 
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	logger.progress(displayName, 'success', `${featureCount} feature(s) (${mode})`);
+	const mode = (op.params as IntersectionParams | undefined)?.mode ?? 'filter';
 
-	logger.info('Intersection', `Complete: ${outputId} with ${featureCount} features`);
+	if (result.featureCount === 0) {
+		logger.progress(result.displayName, 'success', `No intersecting features found`);
+	} else {
+		logger.progress(result.displayName, 'success', `${result.featureCount} feature(s) (${mode})`);
+	}
+
+	logger.info('Intersection', `Complete: ${result.outputId} with ${result.featureCount} features`);
 
 	return true;
 }

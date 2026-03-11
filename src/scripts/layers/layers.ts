@@ -4,10 +4,10 @@
  */
 
 import type maplibregl from 'maplibre-gl';
-import type { StyleConfig } from '../db/datasets';
+import type { StyleConfig } from '../db/constants';
 import type { LayerConfig } from '../config/types';
 import { getSourceId } from './sources';
-import { getDistinctGeometryTypes } from '../db/features';
+import { getDistinctGeometryTypes } from '../db';
 
 /**
  * Layer info returned by getLayersBySource.

@@ -5,25 +5,16 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.6.0 - Large Data Infrastructure
-
-- **Cumulative feature count guard** - Track running feature total during OPFS restore; skip rendering datasets beyond threshold with a progress message (data stays in OPFS for operations); stopgap until v0.8.x auto-promote replaces this guard
-- **Worker-based DuckDB pipeline** - Move fetch + DuckDB insert pipeline into a Web Worker so the map and controls remain responsive during large loads; run all DuckDB-WASM file access through the worker to satisfy Safari's `createSyncAccessHandle()` worker-only requirement, unblocking full OPFS persistence on iOS/iPadOS Safari and all WebKit-based browsers
-- **Bounds query optimization** - Replace coordinate iteration with `SELECT ST_Envelope(ST_Union_Agg(geometry)) FROM features WHERE dataset_id = ?`
-- **Geometry validation** - `ST_IsValid` + `ST_MakeValid` on load to catch and repair invalid geometries
-- **Operation compute/render split** - Refactor each operation file in `config/operations/` to separate SQL execution (pure, returns GeoJSON) from MapLibre rendering (source/layer creation, popup handlers); executor.ts delegates rendering as a post-step; pure execution functions become the shared core for the v0.9.x CLI
-- **Loader Response decoupling** - Refactor loader signatures from `load(response: Response)` to `load(data: string | object | ArrayBuffer)`; callers (data-actions) handle Response unwrapping; makes loaders usable from Node.js without polyfilling browser Response
-
 ### v0.6.1 - Config Editor
 
 Goal: evolve ConfigControl from a read-only viewer into a full config editor. Import, edit, run, and export configs from a single panel - the same codeblock icon, same position, but with modes instead of separate controls.
 
+- **Clean teardown** - New function to remove all datasets, sources, and layers from DuckDB and MapLibre; required by edit/import to reset state before re-running a config
 - **Edit mode** - Toggle from Shiki-highlighted read-only view to a monospace textarea; "Run" button parses YAML via existing `config/parser.ts`, tears down current state (datasets, sources, layers), and re-runs the full pipeline; inline validation errors for invalid YAML or config; update landing page controls grid to reflect new config editor capabilities (edit, import, export vs view-only)
 - **Import** - Paste or upload a `.yaml` file to replace the current config; equivalent to editing + running but from an external source
-- **Export data** - Export datasets as GeoJSON, CSV, or Parquet
 - **Export config** - Generate reproducible YAML from current session state; exported config uses the full author schema (datasets, operations, layers); this is the same config the CLI consumes
 - **Export viewer config** - Generate a viewer-only YAML from current session: datasets pointing to exported files + layer definitions; no operations or outputs (data is pre-baked); pairs with CLI's `--viewer-config` output for the same purpose
-- **Clean teardown** - New function to remove all datasets, sources, and layers from DuckDB and MapLibre; required by edit/import to reset state before re-running a config
+- **Export data** - Export datasets as GeoJSON, CSV, or Parquet
 - **External PMTiles loading** - Register the `pmtiles://` protocol handler on map init; allow `pmtiles://` URLs in `DatasetConfig` as a tiled vector source; enables loading externally hosted PMTiles files (open data portals, self-hosted, GitHub Pages); bridges to in-browser PMTiles generation in v0.7.0
 
 ### v0.6.2 - Config Generation
@@ -184,8 +175,21 @@ Items worth building eventually but not yet assigned to a version:
 - **Persist scale bar unit preference** - store the user's last-selected metric/imperial toggle choice in `localStorage`; restored on next session; overrides config default but can itself be overridden by explicit `map.unit` in config
 - **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc.
 - **DB mutation error feedback** - Surface failures from color, style, and visibility DB updates in the progress control; currently callers don't check return values, leaving the UI appearing to succeed when the DB write failed (hard to test - DB mutations have been rock-solid in practice)
+- **Geometry validation** - Add `ST_IsValid` + `ST_MakeValid` to the DuckDB INSERT pipeline so invalid geometries (self-intersections, degenerate rings) are repaired on load
+  - `datasets.ts`: wrap geometry expression in `loadGeoJSON()` INSERT with `CASE WHEN ST_IsValid(geom_raw) THEN geom_raw ELSE ST_MakeValid(geom_raw) END`
+  - Same for `appendFeatures()` (paginated path)
+  - Order: parse geometry -> validate/repair -> CRS reproject (transform wraps validated geometry)
+- **Cumulative feature count guard** - Track running feature total during OPFS restore; skip MapLibre source/layer creation (not DuckDB data) for datasets beyond threshold; data stays in DuckDB for operations; stopgap until v0.8.x auto-promote replaces this guard with deck.gl rendering
+  - `RENDER_THRESHOLD = 200_000` constant
+  - `map.ts` `restoreManualDatasets()`: cumulative counter, skip `addDatasetToMap()` when exceeded
+  - `load-config.ts` and `executor.ts` OPFS restore paths: same guard logic
+  - `loadedDatasets.add()` still called so operations can reference skipped datasets
+  - Progress message: "Skipped rendering (N features, M already rendered). Data available for operations."
 
 ## Completed
+
+### v0.6.0 - Worker Pipeline
+- Full DuckDB pipeline moved off main thread into a Web Worker with typed RPC; loader signatures decoupled from Response API; pure compute functions for operations; zero-copy transfers; memory management (vacuum, pagehide cleanup, registerFileBuffer); idle CPU reduction (backdrop-filter removal, RAF-throttled mousemove); bounds queries via DuckDB aggregation; fitBounds fix for broken ST_Extent; layer ordering fix
 
 ### v0.5.2 - Legend and Polish
 - Auto-generated legend panel (color swatches, interpolate ramps, match categories), label config GUI fix for config-defined symbol layers, landing page controls grid update, mobile bug fixes (iOS input zoom, progress panel overflow, hamburger icon), map controls and style panel refactors

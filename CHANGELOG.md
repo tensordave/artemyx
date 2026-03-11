@@ -1,6 +1,61 @@
 # Changelog
 
-## v0.5.2 - In Progress
+## v0.6.0 - 2026-03-10
+
+### Worker-based DuckDB Pipeline
+
+- **Worker architecture** (`db/worker.ts`, `db/worker-types.ts`, `db/client.ts`): full data pipeline (fetch, format detection, parse, DuckDB insert, operation compute) moved into a dedicated module worker; typed discriminated union message protocol for all DB operations and pipeline RPCs; main-thread RPC client with monotonic request IDs, pending Promise map, and 120s timeout; event handler registration for progress/info/warn forwarding and CRS prompt round-trip (pauses worker pipeline while main thread shows dialog); `db.ts` facade re-exports switched to `client.ts` - all existing callers unchanged
+- **Pipeline delegation** (`load-url.ts`, `load-file.ts`, `executor.ts`): URL loading delegates entire fetch/parse/insert pipeline to worker via `loadFromUrl()`; file loading transfers `ArrayBuffer` zero-copy via `loadFromBuffer()`; executor uses `executeOperationInWorker()` for compute then renders on main thread with `addOperationResultToMap()`; main thread reduced to pre-flight checks, MapLibre rendering, and UI
+- **Module isolation** (`db/constants.ts`): pure constants, types, and localStorage helpers extracted into a standalone module with no DuckDB imports; prevents `core.ts` from being pulled onto the main thread via transitive imports
+
+### Worker Integration Fixes
+
+- **OPFS wipe-and-retry** (`db/core.ts`): two-attempt OPFS init loop; on first failure (e.g. corrupted config making SQL unparseable), deletes the OPFS file and creates a fresh worker for retry; previously the broken file persisted, creating a permanent failure loop
+- **Init promise wiring** (`db/worker.ts`): worker init now calls `startInit()` + `await ensureInit()` instead of `initDB()` directly; the old path never set `initPromise`, causing every subsequent `getConnection()` to spawn a competing DuckDB instance
+- **Arrow Proxy serialization** (`db/datasets.ts`): `getDatasets()` maps Arrow Proxy rows to plain objects before returning; Proxy objects cannot survive `postMessage` structured clone
+
+### Performance
+
+- **GeoJSON as Transferable buffer** (`db/features.ts`): replaced per-row `JSON.parse` with a single `string_agg` SQL query building the entire FeatureCollection inside DuckDB; encoded as `Uint8Array` and transferred zero-copy via `postMessage` Transferable; eliminates structured clone overhead and 100K+ JS `JSON.parse` calls
+- **SQL-based bounds** (`db/features.ts`): `getDatasetBounds()` returns 4 numbers via `MIN(ST_XMin)`/`MAX(ST_XMax)` aggregation; replaces round-tripping full FeatureCollections through structured clone just to compute bounding boxes
+- **`getDatasetById()`** (`db/datasets.ts`): targeted single-row query replacing `getDatasets()` full table scan + `.find()` patterns across OPFS restore paths and worker load pipelines; also fixes `getDatasets()[0]` bug where multi-dataset loads returned wrong metadata
+- **Hidden dataset skip**: hidden datasets (source-only, no rendering) skip GeoJSON materialization entirely during OPFS restore and worker pipeline; uses metadata query instead
+- **Parallelized loops** (`map.ts`): `getDatasetBounds` and `restoreLabelIfConfigured` loops run concurrently via `Promise.all()` instead of sequential awaits; consolidated duplicate `getDatasets()` calls in post-pipeline section
+
+### In-Memory Mode Memory Management
+
+- **VACUUM compaction** (`db/core.ts`): `vacuum()` wired through worker RPC; compacts DuckDB's buffer pool after deletions and operations; in-memory mode previously grew monotonically since DELETE only marked pages as reusable
+- **Reduced peak memory** (`db/datasets.ts`, `data-actions/`): `loadGeoJSON()` uses `registerFileBuffer()` instead of `registerFileText()` to avoid holding both JS string and DuckDB copies; GeoJSON references nulled immediately after MapLibre source creation for earlier GC
+- **MapLibre tile cache reduction** (`layers/sources.ts`): GeoJSON sources configured with `tolerance: 0.5` and `buffer: 64` (reduced from defaults) to shrink internal tile cache footprint
+- **Page navigation teardown** (`map.ts`): `pagehide` handler calls `map.remove()` then `worker.terminate()` to release WebGL context, WASM heap, and sub-workers; BroadcastChannel stored and closed in `onRemove()` to prevent listener leaks
+
+### Loader Response Decoupling
+
+- **Portable loader signatures** (`loaders/types.ts`): `FormatLoader` interface refactored from `load(response: Response)` to `load(data: LoaderData)` where `LoaderData = string | object | ArrayBuffer`; loaders no longer depend on the browser `Response` API, enabling use from Node.js and Web Workers
+- **Caller-side unwrapping** (`load-url.ts`, `load-file.ts`): `Response`/`File` unwrapping moved from loaders into data-actions callers; `dispatch()` now takes `(data, format, options)` instead of `(response, format, options)`
+
+### Config Pipeline Fixes
+
+- **Layer ordering fix** (`map.ts`): visibility restoration reused a stale dataset snapshot from before `setLayerOrders` wrote config-derived order to DB; replaced with a fresh `getDatasets()` call so `resyncLayerOrder` receives the correct order
+- **fitBounds pipeline** (`map.ts`): moved from `loadDatasetsFromConfig` (before operations) to end of full pipeline so operation outputs are included in bounds; bounds computed via `getDatasetBounds()` inside the worker load pipeline and merged into a single envelope; replaces main-thread GeoJSON coordinate iteration; uses per-geometry min/max aggregation instead of `ST_Extent` which returned degenerate bounding boxes in DuckDB-WASM; `maxZoom: 17` cap added
+
+### Idle CPU Reduction
+
+- **Removed `backdrop-filter: blur()`** (`controls.css`, `progress.css`, `legend.css`, `context-menu.css`): 6 blur declarations removed; each forced GPU compositing over MapLibre's WebGL canvas every frame; replaced with higher background opacity; idle CPU dropped from 6-12% to 1-3%
+- **Throttled mousemove handlers** (`popup.ts`, `scale-control.ts`): hover tooltip and coordinate display handlers gated behind `requestAnimationFrame` to cap at 60fps
+
+### Bug Fixes
+
+- **Union dissolve TopologyException** (`operations/union.ts`): replaced `ST_Simplify` with `ST_MakeValid` before `ST_Union_Agg` in dissolve mode; degenerate geometries caused `TopologyException` that simpler repair tricks couldn't fix
+- **Legend collapsed by default** (`controls/legend-control.ts`): legend panel now defaults to collapsed on all screen sizes; previously expanded on desktop (>640px); user preference still persisted via localStorage
+
+### Operation Compute/Render Split
+
+- **Pure compute functions** (`operations/*.ts`): each operation exports `compute<Name>(connection, op, callbacks?)` with explicit DuckDB connection parameter and optional `ComputeCallbacks` for progress; returns `ComputeResult` with output metadata; no MapLibre imports in compute path
+- **Shared render module** (`operations/render.ts`): `addOperationResultToMap()` extracted from `buffer.ts`; handles MapLibre source/layer creation for all 8 operations
+- **Dual exports** (`operations/index.ts`): both `execute<Name>` (compute + render) and `compute<Name>` (pure SQL) exported; compute exports are the contract for Web Worker and future CLI
+
+## v0.5.2 - 2026-03-08
 
 ### Legend
 

@@ -2,73 +2,15 @@
  * Dataset CRUD operations
  */
 
-import { getConnection, getDB, setFallbackReason, checkpoint } from './core';
+import { getConnection, getDB, setFallbackReason, checkpoint, vacuum } from './core';
 import { generateDatasetId, extractDatasetName } from './utils';
 
-/**
- * Style configuration for dataset rendering
- */
-export interface StyleConfig {
-	fillOpacity: number;
-	lineOpacity: number;
-	pointOpacity: number;
-	lineWidth: number;
-	pointRadius: number;
-	labelField: string | null;
-	labelSize: number;
-	labelColor: string;
-	labelHaloColor: string;
-	labelHaloWidth: number;
-	labelMinzoom: number;
-	labelMaxzoom: number;
-	minzoom: number;
-	maxzoom: number;
-}
-
-/**
- * Default style values applied to new datasets
- */
-export const DEFAULT_STYLE: StyleConfig = {
-	fillOpacity: 0.2,
-	lineOpacity: 0.6,
-	pointOpacity: 0.6,
-	lineWidth: 2,
-	pointRadius: 6,
-	labelField: null,
-	labelSize: 12,
-	labelColor: '#ffffff',
-	labelHaloColor: '#000000',
-	labelHaloWidth: 1,
-	labelMinzoom: 0,
-	labelMaxzoom: 24,
-	minzoom: 0,
-	maxzoom: 24
-};
-
-/** Default color for new datasets */
-export const DEFAULT_COLOR = '#3388ff';
-
-/**
- * Options for loading GeoJSON with config overrides
- */
-export interface LoadGeoJSONOptions {
-	/** Override the auto-generated dataset ID (use config ID instead of URL hash) */
-	id?: string;
-	/** Override the auto-generated dataset name */
-	name?: string;
-	/** Override the default color */
-	color?: string;
-	/** Override default style values */
-	style?: Partial<StyleConfig>;
-	/** When true, dataset is source-only (not rendered or shown in layer panel) */
-	hidden?: boolean;
-	/**
-	 * Source CRS for reprojection. When set, ST_Transform is applied during INSERT
-	 * to convert from this CRS to WGS84 (EPSG:4326). Null or undefined = already WGS84.
-	 * Resolved via resolveSourceCrs() before calling this function.
-	 */
-	sourceCrs?: string | null;
-}
+// Re-export pure constants/types/localStorage helpers so existing imports from
+// './datasets' keep working (worker-side code imports from here).
+export { DEFAULT_STYLE, DEFAULT_COLOR, saveViewport, getCachedViewport, clearCachedViewport } from './constants';
+export type { StyleConfig, LoadGeoJSONOptions } from './constants';
+import type { StyleConfig, LoadGeoJSONOptions } from './constants';
+import { DEFAULT_STYLE, DEFAULT_COLOR } from './constants';
 
 /**
  * Load GeoJSON data into DuckDB using bulk in-memory conversion
@@ -92,9 +34,11 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 			...options?.style
 		};
 
-		// Extract features array
+		// Extract features array then release the incoming data reference.
+		// This helps GC reclaim the original FeatureCollection wrapper sooner.
 		const features = data.type === 'FeatureCollection' ? data.features : [data];
-		console.log(`[DuckDB] Loading ${features.length} features for dataset ${datasetId}`);
+		const featureCount = features.length;
+		console.log(`[DuckDB] Loading ${featureCount} features for dataset ${datasetId}`);
 
 		// Delete existing data for this dataset (if reloading)
 		const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -105,9 +49,14 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 		await deleteDatasets.query(datasetId);
 		await deleteDatasets.close();
 
-		// Register features as virtual JSON file
-		const featuresJson = JSON.stringify(features);
-		await database.registerFileText(virtualFileName, featuresJson);
+		// Register features as virtual JSON file.
+		// Use registerFileBuffer with TextEncoder to go directly from JS objects to
+		// a Uint8Array, avoiding the intermediate JS string that registerFileText
+		// would hold alongside its internal copy (reduces peak memory ~33%).
+		const featuresBuffer = new TextEncoder().encode(JSON.stringify(features));
+		// Clear the features array to help GC reclaim before DuckDB processes the buffer
+		features.length = 0;
+		await database.registerFileBuffer(virtualFileName, featuresBuffer);
 
 		// Bulk insert JSON into features table with spatial transformation.
 		// maximum_depth=1 prevents DuckDB from inferring deep nested types inside
@@ -337,6 +286,38 @@ export async function setLayerOrders(orderedIds: string[]): Promise<void> {
 }
 
 /**
+ * Get a single dataset's metadata by ID.
+ * Returns null if the dataset doesn't exist.
+ */
+export async function getDatasetById(id: string): Promise<any | null> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare('SELECT * FROM datasets WHERE id = ?');
+		const result = await stmt.query(id);
+		await stmt.close();
+		const rows = result.toArray();
+		if (rows.length === 0) return null;
+		const row = rows[0];
+		return {
+			id: row.id,
+			source_url: row.source_url,
+			name: row.name,
+			color: row.color,
+			visible: row.visible,
+			hidden: row.hidden,
+			feature_count: Number(row.feature_count),
+			loaded_at: row.loaded_at,
+			style: row.style,
+			source_crs: row.source_crs,
+			layer_order: Number(row.layer_order),
+		};
+	} catch (error) {
+		console.error('Failed to query dataset by ID:', error);
+		return null;
+	}
+}
+
+/**
  * Get all loaded datasets metadata
  */
 export async function getDatasets(): Promise<any[]> {
@@ -346,7 +327,20 @@ export async function getDatasets(): Promise<any[]> {
 			SELECT * FROM datasets
 			ORDER BY layer_order DESC
 		`);
-		return result.toArray();
+		// Convert Arrow Proxy rows to plain objects for structured clone (postMessage)
+		return result.toArray().map((row: any) => ({
+			id: row.id,
+			source_url: row.source_url,
+			name: row.name,
+			color: row.color,
+			visible: row.visible,
+			hidden: row.hidden,
+			feature_count: Number(row.feature_count),
+			loaded_at: row.loaded_at,
+			style: row.style,
+			source_crs: row.source_crs,
+			layer_order: Number(row.layer_order),
+		}));
 	} catch (error) {
 		console.error('Failed to query datasets:', error);
 		return [];
@@ -440,7 +434,10 @@ export async function deleteDataset(datasetId: string): Promise<boolean> {
 		await deleteDatasets.close();
 
 		console.log(`[DuckDB] Successfully deleted dataset ${datasetId} and all associated features`);
+		// Checkpoint (OPFS) then vacuum to reclaim freed pages.
+		// Especially important in-memory mode where the buffer pool only grows.
 		await checkpoint();
+		await vacuum();
 		return true;
 	} catch (error) {
 		console.error('Failed to delete dataset:', error);
@@ -505,31 +502,3 @@ export async function updateDatasetStyle(datasetId: string, style: StyleConfig):
 	}
 }
 
-const VIEWPORT_STORAGE_KEY = 'artemyx-viewport';
-
-/**
- * Save the current map viewport (center + zoom) to localStorage.
- */
-export function saveViewport(center: [number, number], zoom: number): void {
-	try { localStorage.setItem(VIEWPORT_STORAGE_KEY, JSON.stringify({ center, zoom })); } catch { /* quota or private mode */ }
-}
-
-/**
- * Synchronously read the cached viewport from localStorage.
- */
-export function getCachedViewport(): { center: [number, number]; zoom: number } | null {
-	try {
-		const raw = localStorage.getItem(VIEWPORT_STORAGE_KEY);
-		if (!raw) return null;
-		return JSON.parse(raw);
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Clear the saved viewport from localStorage.
- */
-export function clearCachedViewport(): void {
-	try { localStorage.removeItem(VIEWPORT_STORAGE_KEY); } catch { /* private mode */ }
-}

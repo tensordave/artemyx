@@ -150,9 +150,95 @@ async function wipeSchema(): Promise<void> {
 }
 
 /**
+ * Delete the OPFS database file. No-op if it doesn't exist.
+ */
+async function deleteOPFSFile(): Promise<void> {
+	try {
+		const root = await navigator.storage.getDirectory();
+		await root.removeEntry(OPFS_FILE_NAME);
+		console.log('[DuckDB] OPFS file deleted');
+	} catch {
+		// File may not exist — that's fine
+	}
+}
+
+/**
+ * Try to open an OPFS-backed database with one automatic retry.
+ * On first failure, wipes the OPFS file and retries with a clean slate.
+ * Returns true if OPFS succeeded, false to fall through to in-memory.
+ */
+async function tryOpenOPFS(
+	bundle: { mainModule: string; mainWorker?: string | null; pthreadWorker?: string | null },
+	voidLogger: duckdb.VoidLogger
+): Promise<boolean> {
+	for (let attempt = 1; attempt <= 2; attempt++) {
+		try {
+			if (attempt === 2) {
+				logInitStep('Retrying OPFS with clean database...');
+			} else {
+				logInitStep('Opening OPFS database...');
+			}
+
+			await db!.open({
+				path: OPFS_DB_PATH,
+				accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
+			});
+			conn = await db!.connect();
+
+			// OPFS open can reset max_expression_depth to 0; restore a sane default.
+			// If depth is already 0, even this SET fails (parser can't parse the literal).
+			await conn.query('SET max_expression_depth TO 250');
+
+			logInitStep('Loading spatial extension...');
+			await conn.query('INSTALL spatial; LOAD spatial;');
+
+			logInitStep('Validating schema...');
+			const valid = await validateSchema();
+			if (valid) {
+				opfsHadExistingData = true;
+			} else {
+				logInitStep('Initializing schema...');
+				await initSchema();
+			}
+
+			storageMode = 'opfs';
+			fallbackReason = 'none';
+			logInitStep('Database ready (OPFS)');
+			console.log('[DuckDB] Initialized with OPFS persistence');
+			return true;
+
+		} catch (opfsError) {
+			console.warn(`[DuckDB] OPFS attempt ${attempt} failed:`, opfsError);
+
+			// Teardown broken instance
+			try { if (conn) await conn.close(); } catch { /* ignore */ }
+			conn = null;
+			try { await db!.terminate(); } catch { /* ignore */ }
+
+			if (attempt === 1) {
+				// First failure: wipe the (likely corrupt) OPFS file and retry
+				await deleteOPFSFile();
+				const freshWorker = new Worker(bundle.mainWorker!);
+				db = new duckdb.AsyncDuckDB(voidLogger, freshWorker);
+				await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+				continue;
+			}
+
+			// Second failure: genuine browser/permission issue — give up on OPFS
+			fallbackReason = 'opfs-failed';
+			const freshWorker = new Worker(bundle.mainWorker!);
+			db = new duckdb.AsyncDuckDB(voidLogger, freshWorker);
+			await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+			return false;
+		}
+	}
+	return false;
+}
+
+/**
  * Initialize DuckDB-WASM with spatial extension.
  * When useOPFS is true, attempts OPFS-backed persistence with automatic
- * fallback to in-memory on any failure.
+ * wipe-and-retry on failure, then fallback to in-memory.
  */
 export async function initDB(useOPFS: boolean = false): Promise<void> {
 	try {
@@ -178,45 +264,16 @@ export async function initDB(useOPFS: boolean = false): Promise<void> {
 
 		// Create worker directly from same-origin URL (no Blob wrapper needed)
 		const worker = new Worker(bundle.mainWorker!);
-		const logger = new duckdb.VoidLogger();
+		const voidLogger = new duckdb.VoidLogger();
 
 		// Initialize database
 		logInitStep('Downloading DuckDB engine...');
-		db = new duckdb.AsyncDuckDB(logger, worker);
+		db = new duckdb.AsyncDuckDB(voidLogger, worker);
 		await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
 		if (useOPFS) {
-			try {
-				logInitStep('Opening OPFS database...');
-				await db.open({
-					path: OPFS_DB_PATH,
-					accessMode: duckdb.DuckDBAccessMode.READ_WRITE
-				});
-				conn = await db.connect();
-				logInitStep('Loading spatial extension...');
-				await conn.query('INSTALL spatial; LOAD spatial;');
-
-				// Check if this is an existing DB with a valid schema
-				logInitStep('Validating schema...');
-				const valid = await validateSchema();
-				if (valid) {
-					opfsHadExistingData = true;
-				} else {
-					logInitStep('Initializing schema...');
-					await initSchema();
-				}
-
-				storageMode = 'opfs';
-				fallbackReason = 'none';
-				logInitStep('Database ready (OPFS)');
-				console.log('[DuckDB] Initialized with OPFS persistence');
-				return;
-			} catch (opfsError) {
-				console.warn('[DuckDB] OPFS failed, falling back to in-memory:', opfsError);
-				fallbackReason = 'opfs-failed';
-				// Reset state for in-memory fallback
-				conn = null;
-			}
+			const opfsOk = await tryOpenOPFS(bundle, voidLogger);
+			if (opfsOk) return;
 		} else {
 			fallbackReason = 'disabled';
 		}
@@ -269,31 +326,9 @@ export function hasExistingOPFSData(): boolean {
  * Used for "Clear Session" and "Clear & Retry" recovery.
  */
 export async function clearOPFS(): Promise<void> {
-	// Close connection and database before deleting
-	try {
-		if (conn) {
-			await conn.close();
-			conn = null;
-		}
-		if (db) {
-			await db.terminate();
-			db = null;
-		}
-	} catch (e) {
-		console.warn('[DuckDB] Error closing DB before OPFS clear:', e);
-	}
-
-	// Delete the OPFS file
-	try {
-		const root = await navigator.storage.getDirectory();
-		await root.removeEntry(OPFS_FILE_NAME);
-		console.log('[DuckDB] OPFS file deleted');
-	} catch (e) {
-		// File may not exist — that's fine
-		console.warn('[DuckDB] Could not delete OPFS file (may not exist):', e);
-	}
-
-	// Reload to start fresh
+	try { if (conn) { await conn.close(); conn = null; } } catch { /* ignore */ }
+	try { if (db) { await db.terminate(); db = null; } } catch { /* ignore */ }
+	await deleteOPFSFile();
 	location.reload();
 }
 
@@ -358,5 +393,24 @@ export async function checkpoint(): Promise<void> {
 		await connection.query('CHECKPOINT');
 	} catch (error) {
 		console.warn('[DuckDB] Checkpoint failed:', error);
+	}
+}
+
+/**
+ * Compact the database to reclaim freed pages.
+ * In-memory mode: DuckDB's buffer pool grows monotonically - DELETE frees pages
+ * for reuse but never returns memory to the browser. VACUUM rebuilds tables and
+ * releases unused pages back to the allocator.
+ * OPFS mode: CHECKPOINT flushes WAL, then VACUUM compacts the database file.
+ */
+export async function vacuum(): Promise<void> {
+	try {
+		const connection = await getConnection();
+		if (storageMode === 'opfs') {
+			await connection.query('CHECKPOINT');
+		}
+		await connection.query('VACUUM');
+	} catch (error) {
+		console.warn('[DuckDB] Vacuum failed:', error);
 	}
 }

@@ -46,11 +46,15 @@ src/scripts/
 │   ├── validators/    # Domain-specific validation (datasets, operations, layers, shared)
 │   ├── operations-graph.ts  # Dependency resolution, topological sort
 │   ├── executor.ts    # Spatial operation execution
-│   └── operations/    # One file per operation (buffer, intersection, union, ...)
-├── db/                # DuckDB-WASM initialization and queries
-│   ├── core.ts        # DB init, OPFS persistence, spatial extension
-│   ├── datasets.ts    # Dataset CRUD operations
-│   ├── features.ts    # Feature queries, GeoJSON export
+│   └── operations/    # One file per operation (buffer, intersection, union, ...) + shared render.ts
+├── db/                # DuckDB-WASM (runs in Web Worker)
+│   ├── worker.ts      # Module worker entry point, message dispatch, full load pipeline
+│   ├── worker-types.ts # Typed discriminated union message protocol
+│   ├── client.ts      # Main-thread RPC client (async API matching old direct modules)
+│   ├── core.ts        # DB init, OPFS persistence, spatial extension (worker-side)
+│   ├── datasets.ts    # Dataset CRUD operations (worker-side)
+│   ├── features.ts    # Feature queries, GeoJSON export (worker-side)
+│   ├── constants.ts   # Pure constants, types, localStorage helpers (shared)
 │   └── utils.ts       # Hash generation, helpers
 ├── loaders/           # Format loader registry
 │   ├── detect.ts      # Format detection (URL extension, path segment, Content-Type)
@@ -97,7 +101,7 @@ src/scripts/
 └── basemaps.ts        # Basemap tile configurations
 ```
 
-Data flows through: **YAML config** -> **DuckDB-WASM** (storage + spatial ops) -> **MapLibre** (rendering)
+Data flows through: **YAML config** -> **Web Worker** (DuckDB-WASM storage + spatial ops) -> **Main thread** (MapLibre rendering + UI)
 
 ## Development
 

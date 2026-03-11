@@ -4,7 +4,7 @@
  * Reuses coordinate column detection from the CSV loader.
  */
 
-import type { FormatLoader, LoaderOptions, LoaderResult } from './types';
+import type { FormatLoader, LoaderData, LoaderOptions, LoaderResult } from './types';
 import { normalizeGeoJSON } from './geojson';
 import { detectCoordinateColumns } from './columns';
 
@@ -206,9 +206,7 @@ export function tryLoadJsonArray(
 }
 
 export const jsonArrayLoader: FormatLoader = {
-	async load(response: Response, options?: LoaderOptions): Promise<LoaderResult> {
-		const data = await response.json();
-
+	async load(data: LoaderData, options?: LoaderOptions): Promise<LoaderResult> {
 		// Try GeoJSON first (a JSON array of Features is valid GeoJSON)
 		const geoJson = normalizeGeoJSON(data);
 		if (geoJson) return { data: geoJson };

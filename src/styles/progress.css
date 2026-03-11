@@ -4,13 +4,11 @@
 	position: absolute !important;
 	bottom: 0 !important;
 	left: 0 !important;
-	background: rgba(30, 30, 30, 0.85) !important;
+	background: rgba(30, 30, 30, 0.95) !important;
 	border: 1px solid #3a3a3a !important;
 	border-radius: 3px !important;
 	padding: 0 !important;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
-	backdrop-filter: blur(8px) !important;
-	-webkit-backdrop-filter: blur(8px) !important;
 	font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace !important;
 	font-size: 12px !important;
 }
@@ -156,11 +154,9 @@
 	width: 450px;
 	max-width: calc(100% - 20px);
 	height: 300px;
-	background: rgba(20, 20, 20, 0.92);
+	background: rgba(20, 20, 20, 0.97);
 	border: 1px solid #3a3a3a;
 	border-radius: 3px;
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
 }
 
 /* Panel header */

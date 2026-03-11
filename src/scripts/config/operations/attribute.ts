@@ -9,13 +9,14 @@
  * Features missing the filtered property are silently excluded.
  */
 
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { getConnection } from '../../db/core';
 import { DEFAULT_COLOR } from '../../db/datasets';
 import { getFeaturesAsGeoJSON } from '../../db/features';
 import type { UnaryOperation, AttributeParams } from '../types';
-import type { OperationContext } from './index';
+import type { OperationContext, ComputeResult, ComputeCallbacks } from './index';
 import { parseStyleConfig, shouldSkipAutoLayers } from './index';
-import { addOperationResultToMap } from './buffer';
+import { addOperationResultToMap } from './render';
 
 /**
  * Build a SQL WHERE clause fragment from structured params.
@@ -31,13 +32,14 @@ function buildStructuredWhere(property: string, operator: string, value: string 
 }
 
 /**
- * Execute an attribute filter operation.
+ * Pure SQL computation for attribute filter operation.
+ * No MapLibre imports - can run in a Web Worker or headless CLI.
  */
-export async function executeAttribute(
+export async function computeAttribute(
+	connection: AsyncDuckDBConnection,
 	op: UnaryOperation,
-	context: OperationContext
-): Promise<boolean> {
-	const { map, logger, layerToggleControl, loadedDatasets } = context;
+	callbacks?: ComputeCallbacks
+): Promise<ComputeResult> {
 	const params = op.params as AttributeParams | undefined;
 
 	if (!params) {
@@ -66,9 +68,7 @@ export async function executeAttribute(
 		filterLabel = `${property} ${operator} ${typeof value === 'string' ? `'${value}'` : value}`;
 	}
 
-	logger.progress(displayName, 'processing', `Filtering ${inputId} (${filterLabel})...`);
-
-	const connection = await getConnection();
+	callbacks?.onProgress?.(`Filtering ${inputId} (${filterLabel})...`);
 
 	// Delete existing output if present (allows re-running)
 	const deleteFeatures = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
@@ -104,8 +104,7 @@ export async function executeAttribute(
 	const featureCount = Number(countResult.toArray()[0].count);
 
 	if (featureCount === 0) {
-		logger.warn('Attribute', `${inputId} filter produced no features (${filterLabel})`);
-		logger.progress(displayName, 'success', `No features matched filter`);
+		callbacks?.onWarn?.('Attribute', `${inputId} filter produced no features (${filterLabel})`);
 	}
 
 	// Register dataset metadata
@@ -116,26 +115,58 @@ export async function executeAttribute(
 	await insertDataset.query(outputId, op.name || outputId, color, featureCount, JSON.stringify(style));
 	await insertDataset.close();
 
+	return { outputId, displayName, featureCount, color, style };
+}
+
+/**
+ * Execute an attribute filter operation (compute + render).
+ * Thin wrapper that calls computeAttribute then renders the result on the map.
+ */
+export async function executeAttribute(
+	op: UnaryOperation,
+	context: OperationContext
+): Promise<boolean> {
+	const { map, logger, layerToggleControl, loadedDatasets } = context;
+
+	const connection = await getConnection();
+	const result = await computeAttribute(connection, op, {
+		onProgress: (msg) => logger.progress(op.name || op.output, 'processing', msg),
+		onInfo: (tag, msg) => logger.info(tag, msg),
+		onWarn: (tag, msg) => logger.warn(tag, msg),
+	});
+
 	// Query features as GeoJSON for map rendering
-	const geoJsonData = await getFeaturesAsGeoJSON(outputId);
+	const geoJsonData = await getFeaturesAsGeoJSON(result.outputId);
 
 	// Add source and layers to map (skip layers if explicit config exists)
-	const layerIds = addOperationResultToMap(map, outputId, color, style, geoJsonData, shouldSkipAutoLayers(outputId, context.layers));
+	const layerIds = addOperationResultToMap(map, result.outputId, result.color, result.style, geoJsonData, shouldSkipAutoLayers(result.outputId, context.layers));
 
 	// Track dataset
-	loadedDatasets.add(outputId);
+	loadedDatasets.add(result.outputId);
 
 	// Notify executor to attach popup/hover handlers
 	if (layerIds.length > 0) {
-		context.onLayersCreated?.(layerIds, displayName);
+		context.onLayersCreated?.(layerIds, result.displayName);
 	}
 
 	// Refresh layer control
 	layerToggleControl.refreshPanel();
 
-	logger.progress(displayName, 'success', `${featureCount} feature(s) (${filterLabel})`);
+	// Recompute filterLabel for the final progress message
+	const params = op.params as AttributeParams | undefined;
+	let filterLabel: string;
+	if (params?.where) {
+		filterLabel = 'custom SQL filter';
+	} else {
+		const property = params!.property!;
+		const operator = params!.operator ?? '=';
+		const value = params!.value!;
+		filterLabel = `${property} ${operator} ${typeof value === 'string' ? `'${value}'` : value}`;
+	}
 
-	logger.info('Attribute', `Complete: ${outputId} with ${featureCount} features (${filterLabel})`);
+	logger.progress(result.displayName, 'success', `${result.featureCount} feature(s) (${filterLabel})`);
+
+	logger.info('Attribute', `Complete: ${result.outputId} with ${result.featureCount} features (${filterLabel})`);
 
 	return true;
 }

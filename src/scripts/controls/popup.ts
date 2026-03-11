@@ -246,31 +246,38 @@ export function attachFeatureHoverHandlers(
 		hoverRegistry.set(id, options);
 	}
 
-	// Attach a single map-level mousemove handler (once)
+	// Attach a single map-level mousemove handler (once), throttled to animation frame rate
 	if (!hoverHandlerAttached) {
+		let hoverRafPending = false;
 		map.on('mousemove', (e) => {
-			const registeredIds = [...hoverRegistry.keys()];
-			if (registeredIds.length === 0) return;
+			if (hoverRafPending) return;
+			hoverRafPending = true;
+			requestAnimationFrame(() => {
+				hoverRafPending = false;
 
-			// Query only our registered layers — topmost feature is first
-			const features = map.queryRenderedFeatures(e.point, { layers: registeredIds });
+				const registeredIds = [...hoverRegistry.keys()];
+				if (registeredIds.length === 0) return;
 
-			if (features.length === 0) {
-				sharedHoverPopup!.remove();
-				return;
-			}
+				// Query only our registered layers — topmost feature is first
+				const features = map.queryRenderedFeatures(e.point, { layers: registeredIds });
 
-			const topFeature = features[0];
-			const layerId = topFeature.layer.id;
-			const opts = hoverRegistry.get(layerId);
-			if (!opts) return;
+				if (features.length === 0) {
+					sharedHoverPopup!.remove();
+					return;
+				}
 
-			const html = buildTooltipHTML(opts.label, topFeature.properties as Record<string, unknown>, opts.fields);
+				const topFeature = features[0];
+				const layerId = topFeature.layer.id;
+				const opts = hoverRegistry.get(layerId);
+				if (!opts) return;
 
-			sharedHoverPopup!
-				.setLngLat(e.lngLat)
-				.setHTML(html)
-				.addTo(map);
+				const html = buildTooltipHTML(opts.label, topFeature.properties as Record<string, unknown>, opts.fields);
+
+				sharedHoverPopup!
+					.setLngLat(e.lngLat)
+					.setHTML(html)
+					.addTo(map);
+			});
 		});
 
 		hoverHandlerAttached = true;

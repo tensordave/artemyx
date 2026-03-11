@@ -16,6 +16,36 @@ import type { LayerConfig, StyleConfigPartial } from '../types';
 import type { StyleConfig } from '../../db/datasets';
 import { DEFAULT_STYLE } from '../../db/datasets';
 
+/** Result from a pure compute function (no MapLibre dependency) */
+export interface ComputeResult {
+	outputId: string;
+	displayName: string;
+	featureCount: number;
+	color: string;
+	style: StyleConfig;
+}
+
+/** Progress callbacks for compute functions (replaces Logger dependency) */
+export interface ComputeCallbacks {
+	onProgress?: (message: string) => void;
+	onInfo?: (tag: string, message: string) => void;
+	onWarn?: (tag: string, message: string) => void;
+}
+
+/**
+ * Create a minimal Logger-compatible object from ComputeCallbacks.
+ * Used to bridge compute callbacks to functions that expect Logger (e.g. getProjectedCrs).
+ */
+export function callbacksToLogger(callbacks?: ComputeCallbacks): Logger {
+	return {
+		info: (prefix, message) => callbacks?.onInfo?.(prefix, message),
+		warn: (prefix, message) => callbacks?.onWarn?.(prefix, message),
+		error: (prefix, message) => callbacks?.onWarn?.(prefix, message),
+		progress: () => {},
+		scheduleIdle: () => {},
+	};
+}
+
 /** Context passed to all operation executors */
 export interface OperationContext {
 	map: maplibregl.Map;
@@ -68,7 +98,10 @@ export function shouldSkipAutoLayers(outputId: string, layers?: LayerConfig[]): 
 	return !!layers && layers.some(l => l.source === outputId);
 }
 
-// Re-export operations
+// Re-export render utility
+export { addOperationResultToMap } from './render';
+
+// Re-export execute wrappers (compute + render)
 export { executeBuffer } from './buffer';
 export { executeIntersection } from './intersection';
 export { executeUnion } from './union';
@@ -77,3 +110,13 @@ export { executeContains } from './contains';
 export { executeDistance } from './distance';
 export { executeCentroid } from './centroid';
 export { executeAttribute } from './attribute';
+
+// Re-export compute functions (pure SQL, no MapLibre)
+export { computeBuffer } from './buffer';
+export { computeIntersection } from './intersection';
+export { computeUnion } from './union';
+export { computeDifference } from './difference';
+export { computeContains } from './contains';
+export { computeDistance } from './distance';
+export { computeCentroid } from './centroid';
+export { computeAttribute } from './attribute';

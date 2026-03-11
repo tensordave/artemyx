@@ -1,11 +1,9 @@
 /* Legend Control — bottom-right overlay above scale bar */
 
 .legend-control {
-	background-color: rgba(30, 30, 30, 0.85);
+	background-color: rgba(30, 30, 30, 0.95);
 	border: 1px solid #3a3a3a;
 	border-radius: 3px;
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
 	min-width: 140px;
 	max-width: 220px;
 	font-family: system-ui, -apple-system, sans-serif;
