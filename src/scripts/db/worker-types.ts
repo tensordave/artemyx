@@ -68,6 +68,10 @@ export interface DeleteDatasetRequest extends RequestBase {
 	datasetId: string;
 }
 
+export interface DeleteAllDatasetsRequest extends RequestBase {
+	type: 'deleteAllDatasets';
+}
+
 export interface UpdateDatasetColorRequest extends RequestBase {
 	type: 'updateDatasetColor';
 	datasetId: string;
@@ -206,6 +210,22 @@ export interface ExecuteOperationRequest extends RequestBase {
 	op: OperationConfig;
 }
 
+export interface SaveConfigRequest extends RequestBase {
+	type: 'saveConfig';
+	configPath: string;
+	yaml: string;
+}
+
+export interface GetSavedConfigRequest extends RequestBase {
+	type: 'getSavedConfig';
+	configPath: string;
+}
+
+export interface DeleteSavedConfigRequest extends RequestBase {
+	type: 'deleteSavedConfig';
+	configPath: string;
+}
+
 // ── CRS prompt response (main -> worker, no requestId) ──────────────────────
 
 export interface CrsPromptResponse {
@@ -225,6 +245,7 @@ export type WorkerRequest =
 	| GetDatasetByIdRequest
 	| DatasetExistsRequest
 	| DeleteDatasetRequest
+	| DeleteAllDatasetsRequest
 	| UpdateDatasetColorRequest
 	| UpdateDatasetNameRequest
 	| UpdateDatasetVisibleRequest
@@ -246,7 +267,10 @@ export type WorkerRequest =
 	| GetInitLogRequest
 	| LoadFromUrlRequest
 	| LoadFromBufferRequest
-	| ExecuteOperationRequest;
+	| ExecuteOperationRequest
+	| SaveConfigRequest
+	| GetSavedConfigRequest
+	| DeleteSavedConfigRequest;
 
 // ── Response types (worker -> main, correlated by requestId) ────────────────
 
@@ -295,12 +319,19 @@ export interface InitLogEvent {
 	entries: InitLogEntry[];
 }
 
+/** Batched events to reduce IPC frequency (Safari Mach port overflow mitigation). */
+export interface BatchEvent {
+	event: 'batch';
+	events: (ProgressEvent | InfoEvent | WarnEvent)[];
+}
+
 export type WorkerEvent =
 	| ProgressEvent
 	| InfoEvent
 	| WarnEvent
 	| CrsPromptEvent
-	| InitLogEvent;
+	| InitLogEvent
+	| BatchEvent;
 
 /** All messages the worker can send to main thread */
 export type WorkerMessage = WorkerResponse | WorkerEvent;

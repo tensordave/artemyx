@@ -147,8 +147,8 @@ export async function appendFeatures(datasetId: string, data: GeoJSON.FeatureCol
 		const features = data.features;
 		console.log(`[DuckDB] Appending ${features.length} features to dataset ${datasetId}`);
 
-		const featuresJson = JSON.stringify(features);
-		await database.registerFileText(virtualFileName, featuresJson);
+		const featuresBuffer = new TextEncoder().encode(JSON.stringify(features));
+		await database.registerFileBuffer(virtualFileName, featuresBuffer);
 
 		const rawGeomExpr = 'ST_GeomFromGeoJSON(json_extract_string(j, \'$.geometry\'))';
 		const geomExpr = sourceCrs
@@ -414,6 +414,18 @@ export async function updateDatasetVisible(datasetId: string, visible: boolean):
 		console.error('Failed to update dataset visibility:', error);
 		return false;
 	}
+}
+
+/**
+ * Delete all datasets and features (bulk teardown).
+ * Single checkpoint + vacuum at the end instead of per-dataset.
+ */
+export async function deleteAllDatasets(): Promise<void> {
+	const connection = await getConnection();
+	await connection.query('DELETE FROM features');
+	await connection.query('DELETE FROM datasets');
+	await checkpoint();
+	await vacuum();
 }
 
 /**

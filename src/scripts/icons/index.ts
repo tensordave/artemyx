@@ -35,6 +35,13 @@ export { magnifyingGlassIcon } from './magnifying-glass'; // geocoding search bu
 // Legend
 export { listIcon } from './list';
 
+// Safari gate
+export { warningIcon } from './warning';                     // Safari unsupported banner
+
+// Config control
+export { playIcon } from './play';                           // run config button
+export { eraserIcon } from './eraser';                       // clear all data button
+
 // Roadmap: future features
 export { downloadSimpleIcon } from './download-simple';    // export datasets
 export { codeBlockIcon } from './code-block';                         // YAML snippet runner

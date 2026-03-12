@@ -6,7 +6,7 @@
 
 import type { MainMessage, WorkerRequest, CrsPromptResponse, InitResult, LoadPipelineRawResult, OperationPipelineRawResult } from './worker-types';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog, getConnection, getDB, checkpoint, vacuum } from './core';
-import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, updateDatasetColor, updateDatasetName, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
+import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, updateDatasetColor, updateDatasetName, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
 import type { StyleConfig } from './datasets';
 import { getFeaturesAsGeoJSONString, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './features';
 import type { OperationConfig } from '../config/types';
@@ -30,6 +30,7 @@ import type { WorkerLoadUrlOptions, WorkerLoadFileOptions } from './worker-types
 import type { LoadGeoJSONOptions } from './datasets';
 import { generateDatasetId } from './utils';
 import type { ProgressStatus } from '../logger/types';
+import type { ProgressEvent, InfoEvent, WarnEvent } from './worker-types';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -49,16 +50,66 @@ function respondError(requestId: string, error: unknown): void {
 	self.postMessage({ requestId, type: 'error', message });
 }
 
+// ── Event batching (Safari Mach IPC overflow mitigation) ─────────────────
+
+const BATCH_INTERVAL_MS = 150;
+let pendingEvents: (ProgressEvent | InfoEvent | WarnEvent)[] = [];
+let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Flush all pending events as a single batched postMessage. */
+function flushEvents(): void {
+	batchTimer = null;
+	if (pendingEvents.length === 0) return;
+
+	// Deduplicate progress events: keep only the latest per operation key
+	const progressLatest = new Map<string, ProgressEvent>();
+	const nonProgress: (InfoEvent | WarnEvent)[] = [];
+
+	for (const evt of pendingEvents) {
+		if (evt.event === 'progress') {
+			progressLatest.set(evt.operation, evt);
+		} else {
+			nonProgress.push(evt);
+		}
+	}
+
+	const deduped = [...nonProgress, ...progressLatest.values()];
+	pendingEvents = [];
+
+	if (deduped.length === 1) {
+		self.postMessage(deduped[0]);
+	} else {
+		self.postMessage({ event: 'batch', events: deduped });
+	}
+}
+
+function scheduleBatchFlush(): void {
+	if (batchTimer === null) {
+		batchTimer = setTimeout(flushEvents, BATCH_INTERVAL_MS);
+	}
+}
+
 function postProgress(operation: string, status: ProgressStatus, message?: string): void {
-	self.postMessage({ event: 'progress', operation, status, message });
+	const evt: ProgressEvent = { event: 'progress', operation, status, message };
+	// Terminal statuses flush immediately for instant user feedback
+	if (status === 'success' || status === 'error') {
+		pendingEvents.push(evt);
+		if (batchTimer !== null) { clearTimeout(batchTimer); batchTimer = null; }
+		flushEvents();
+		return;
+	}
+	pendingEvents.push(evt);
+	scheduleBatchFlush();
 }
 
 function postInfo(tag: string, message: string): void {
-	self.postMessage({ event: 'info', tag, message });
+	pendingEvents.push({ event: 'info', tag, message });
+	scheduleBatchFlush();
 }
 
 function postWarn(tag: string, message: string): void {
-	self.postMessage({ event: 'warn', tag, message });
+	pendingEvents.push({ event: 'warn', tag, message });
+	scheduleBatchFlush();
 }
 
 function makeCallbacks(operationName: string): ComputeCallbacks {
@@ -174,6 +225,12 @@ async function workerLoadFromUrl(url: string, options: WorkerLoadUrlOptions): Pr
 	}
 
 	const finalCount = await updateFeatureCount(datasetId);
+
+	// Compact memory after bulk paginated load to prevent WASM heap monotonic growth
+	if (pageNum > 2) {
+		await vacuum();
+	}
+
 	postInfo('Data', `Pagination complete: ${finalCount} total features across ${pageNum - 1} pages`);
 
 	const geoJsonStr = await getFeaturesAsGeoJSONString(datasetId);
@@ -570,6 +627,12 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 				break;
 			}
 
+			case 'deleteAllDatasets': {
+				await deleteAllDatasets();
+				respond(requestId, true);
+				break;
+			}
+
 			case 'updateDatasetColor': {
 				const ok = await updateDatasetColor(req.datasetId, req.color);
 				respond(requestId, ok);
@@ -679,6 +742,39 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 
 			case 'getInitLog': {
 				respond(requestId, getInitLog());
+				break;
+			}
+
+			case 'saveConfig': {
+				const c = await getConnection();
+				const key = `config:${req.configPath}`;
+				const stmt = await c.prepare(`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = ?`);
+				await stmt.query(key, req.yaml, req.yaml);
+				await stmt.close();
+				await checkpoint();
+				respond(requestId, undefined);
+				break;
+			}
+
+			case 'getSavedConfig': {
+				const c = await getConnection();
+				const key = `config:${req.configPath}`;
+				const stmt = await c.prepare(`SELECT value FROM meta WHERE key = ?`);
+				const result = await stmt.query(key);
+				await stmt.close();
+				const rows = result.toArray();
+				respond(requestId, rows.length > 0 ? rows[0].value : null);
+				break;
+			}
+
+			case 'deleteSavedConfig': {
+				const c = await getConnection();
+				const key = `config:${req.configPath}`;
+				const stmt = await c.prepare(`DELETE FROM meta WHERE key = ?`);
+				await stmt.query(key);
+				await stmt.close();
+				await checkpoint();
+				respond(requestId, undefined);
 				break;
 			}
 

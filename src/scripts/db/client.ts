@@ -21,12 +21,22 @@ import type { FallbackReason } from './core';
 import type { OperationConfig } from '../config/types';
 import type { ProgressStatus } from '../logger/types';
 
-// ── Worker instance ─────────────────────────────────────────────────────────
+// ── Worker instance (lazy — deferred until first RPC call) ───────────────────
+// Not created at module load so that importing this module on Safari
+// doesn't spawn a worker that will crash due to per-tab memory limits.
 
-const worker = new Worker(
-	new URL('./worker.ts', import.meta.url),
-	{ type: 'module' }
-);
+let worker: Worker | null = null;
+
+function getWorker(): Worker {
+	if (!worker) {
+		worker = new Worker(
+			new URL('./worker.ts', import.meta.url),
+			{ type: 'module' }
+		);
+		wireWorkerHandlers(worker);
+	}
+	return worker;
+}
 
 // ── RPC mechanism ───────────────────────────────────────────────────────────
 
@@ -36,6 +46,7 @@ const pending = new Map<string, { resolve: (data: any) => void; reject: (err: Er
 const RPC_TIMEOUT_MS = 120_000; // 2 minutes — generous for heavy spatial ops
 
 function rpc<T>(type: string, payload: Record<string, unknown> = {}, transfer?: Transferable[]): Promise<T> {
+	const w = getWorker();
 	const requestId = String(++requestCounter);
 	return new Promise((resolve, reject) => {
 		const timer = setTimeout(() => {
@@ -49,9 +60,9 @@ function rpc<T>(type: string, payload: Record<string, unknown> = {}, transfer?: 
 		});
 		const msg = { requestId, type, ...payload } as WorkerRequest;
 		if (transfer) {
-			worker.postMessage(msg, transfer);
+			w.postMessage(msg, transfer);
 		} else {
-			worker.postMessage(msg);
+			w.postMessage(msg);
 		}
 	});
 }
@@ -73,62 +84,80 @@ export function setEventHandler(handler: WorkerEventHandler): void {
 
 // ── Message routing ─────────────────────────────────────────────────────────
 
-worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
-	const msg = e.data;
+function wireWorkerHandlers(w: Worker): void {
+	w.onmessage = (e: MessageEvent<WorkerMessage>) => {
+		const msg = e.data;
 
-	// Correlated RPC response
-	if ('requestId' in msg && msg.requestId) {
-		const p = pending.get(msg.requestId);
-		if (!p) return;
-		pending.delete(msg.requestId);
-		if (msg.type === 'error') {
-			p.reject(new Error(msg.message));
-		} else {
-			p.resolve(msg.data);
+		// Correlated RPC response
+		if ('requestId' in msg && msg.requestId) {
+			const p = pending.get(msg.requestId);
+			if (!p) return;
+			pending.delete(msg.requestId);
+			if (msg.type === 'error') {
+				p.reject(new Error(msg.message));
+			} else {
+				p.resolve(msg.data);
+			}
+			return;
 		}
-		return;
-	}
 
-	// Worker event (push notification)
-	if ('event' in msg) {
-		switch (msg.event) {
-			case 'progress':
-				eventHandler?.onProgress?.(msg.operation, msg.status, msg.message);
-				break;
-			case 'info':
-				eventHandler?.onInfo?.(msg.tag, msg.message);
-				break;
-			case 'warn':
-				eventHandler?.onWarn?.(msg.tag, msg.message);
-				break;
-			case 'crsPrompt':
-				handleCrsPrompt(msg.promptId);
-				break;
-			case 'initLog':
-				eventHandler?.onInitLog?.(msg.entries);
-				break;
+		// Worker event (push notification)
+		if ('event' in msg) {
+			switch (msg.event) {
+				case 'progress':
+					eventHandler?.onProgress?.(msg.operation, msg.status, msg.message);
+					break;
+				case 'info':
+					eventHandler?.onInfo?.(msg.tag, msg.message);
+					break;
+				case 'warn':
+					eventHandler?.onWarn?.(msg.tag, msg.message);
+					break;
+				case 'crsPrompt':
+					handleCrsPrompt(msg.promptId);
+					break;
+				case 'initLog':
+					eventHandler?.onInitLog?.(msg.entries);
+					break;
+				case 'batch':
+					for (const evt of msg.events) {
+						switch (evt.event) {
+							case 'progress':
+								eventHandler?.onProgress?.(evt.operation, evt.status, evt.message);
+								break;
+							case 'info':
+								eventHandler?.onInfo?.(evt.tag, evt.message);
+								break;
+							case 'warn':
+								eventHandler?.onWarn?.(evt.tag, evt.message);
+								break;
+						}
+					}
+					break;
+			}
 		}
-	}
-};
+	};
 
-worker.onerror = (e) => {
-	// Reject all pending RPCs on worker crash
-	for (const [, { reject }] of pending) {
-		reject(new Error(`Worker crashed: ${e.message}`));
-	}
-	pending.clear();
-	eventHandler?.onProgress?.('worker', 'error', 'Processing worker crashed. Try clearing the session.');
-};
+	w.onerror = (e: ErrorEvent) => {
+		// Reject all pending RPCs on worker crash
+		for (const [, { reject }] of pending) {
+			reject(new Error(`Worker crashed: ${e.message}`));
+		}
+		pending.clear();
+		eventHandler?.onProgress?.('worker', 'error', 'Processing worker crashed. Try clearing the session.');
+	};
+}
 
 // ── CRS prompt handler ──────────────────────────────────────────────────────
 
 async function handleCrsPrompt(promptId: string): Promise<void> {
+	const w = getWorker();
 	try {
 		const { showCrsPromptDialog } = await import('../ui/error-dialog');
 		const crs = await showCrsPromptDialog();
-		worker.postMessage({ type: 'crsPromptResponse', promptId, crs });
+		w.postMessage({ type: 'crsPromptResponse', promptId, crs });
 	} catch {
-		worker.postMessage({ type: 'crsPromptResponse', promptId, crs: null });
+		w.postMessage({ type: 'crsPromptResponse', promptId, crs: null });
 	}
 }
 
@@ -212,6 +241,10 @@ export async function deleteDataset(datasetId: string): Promise<boolean> {
 	return rpc<boolean>('deleteDataset', { datasetId });
 }
 
+export async function deleteAllDatasets(): Promise<void> {
+	await rpc<boolean>('deleteAllDatasets');
+}
+
 export async function updateDatasetColor(datasetId: string, color: string): Promise<boolean> {
 	return rpc<boolean>('updateDatasetColor', { datasetId, color });
 }
@@ -260,6 +293,18 @@ export async function getPropertyKeys(datasetId: string): Promise<string[]> {
 export async function getDistinctGeometryTypes(datasetId: string): Promise<Set<string>> {
 	const arr = await rpc<string[]>('getDistinctGeometryTypes', { datasetId });
 	return new Set(arr);
+}
+
+export async function saveConfig(configPath: string, yaml: string): Promise<void> {
+	await rpc<void>('saveConfig', { configPath, yaml });
+}
+
+export async function getSavedConfig(configPath: string): Promise<string | null> {
+	return rpc<string | null>('getSavedConfig', { configPath });
+}
+
+export async function deleteSavedConfig(configPath: string): Promise<void> {
+	await rpc<void>('deleteSavedConfig', { configPath });
 }
 
 export async function checkpoint(): Promise<void> {
@@ -315,7 +360,7 @@ export async function loadFromBuffer(buffer: ArrayBuffer, options: WorkerLoadFil
  * Called during page teardown to release WASM memory promptly.
  */
 export function terminateWorker(): void {
-	worker.terminate();
+	worker?.terminate();
 }
 
 export async function executeOperationInWorker(op: OperationConfig): Promise<OperationPipelineResult> {

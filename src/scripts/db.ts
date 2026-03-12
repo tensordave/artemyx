@@ -7,11 +7,11 @@
  */
 
 // Core operations (via worker RPC)
-export { startInit, ensureInit, getStorageMode, getFallbackReason, setFallbackReason, hasExistingOPFSData, clearOPFS, getInitLog, terminateWorker } from './db/client';
+export { startInit, ensureInit, getStorageMode, getFallbackReason, setFallbackReason, hasExistingOPFSData, clearOPFS, getInitLog, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig } from './db/client';
 export type { FallbackReason } from './db/core';
 
 // Dataset CRUD operations (via worker RPC)
-export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, updateDatasetColor, updateDatasetName, updateDatasetVisible, deleteDataset, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, checkpoint, vacuum } from './db/client';
+export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, updateDatasetColor, updateDatasetName, updateDatasetVisible, deleteDataset, deleteAllDatasets, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, checkpoint, vacuum } from './db/client';
 
 // Feature query operations (via worker RPC)
 export { getFeaturesAsGeoJSON, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './db/client';

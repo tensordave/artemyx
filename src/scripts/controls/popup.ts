@@ -295,3 +295,11 @@ export function removeFeatureHandlers(layerIds: string[]): void {
 		hoverRegistry.delete(id);
 	}
 }
+
+/**
+ * Clear all entries from the hover tooltip registry.
+ * Used by teardown to bulk-remove all feature handlers at once.
+ */
+export function clearAllFeatureHandlers(): void {
+	hoverRegistry.clear();
+}

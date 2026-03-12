@@ -121,4 +121,8 @@ export class BasemapControl implements IControl {
 	getCurrentBasemapId(): string {
 		return this.currentBasemap.id;
 	}
+
+	setBasemap(basemap: BasemapConfig): void {
+		this.selectBasemap(basemap);
+	}
 }

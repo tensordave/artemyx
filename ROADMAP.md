@@ -5,22 +5,15 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.6.1 - Config Editor
+### v0.6.2 - Config Generation and Export
 
-Goal: evolve ConfigControl from a read-only viewer into a full config editor. Import, edit, run, and export configs from a single panel - the same codeblock icon, same position, but with modes instead of separate controls.
-
-- **Clean teardown** - New function to remove all datasets, sources, and layers from DuckDB and MapLibre; required by edit/import to reset state before re-running a config
-- **Edit mode** - Toggle from Shiki-highlighted read-only view to a monospace textarea; "Run" button parses YAML via existing `config/parser.ts`, tears down current state (datasets, sources, layers), and re-runs the full pipeline; inline validation errors for invalid YAML or config; update landing page controls grid to reflect new config editor capabilities (edit, import, export vs view-only)
-- **Import** - Paste or upload a `.yaml` file to replace the current config; equivalent to editing + running but from an external source
-- **Export config** - Generate reproducible YAML from current session state; exported config uses the full author schema (datasets, operations, layers); this is the same config the CLI consumes
-- **Export viewer config** - Generate a viewer-only YAML from current session: datasets pointing to exported files + layer definitions; no operations or outputs (data is pre-baked); pairs with CLI's `--viewer-config` output for the same purpose
-- **Export data** - Export datasets as GeoJSON, CSV, or Parquet
-- **External PMTiles loading** - Register the `pmtiles://` protocol handler on map init; allow `pmtiles://` URLs in `DatasetConfig` as a tiled vector source; enables loading externally hosted PMTiles files (open data portals, self-hosted, GitHub Pages); bridges to in-browser PMTiles generation in v0.7.0
-
-### v0.6.2 - Config Generation
+Goal: round-trip config workflow - generate configs from session state, export configs and data for external use.
 
 - **Generate config from session** - "Generate" button in the config editor toolbar; reads current map state (datasets, styles, operations, layers) and serializes to YAML; populates the editor textarea so the user can review, tweak, and re-run; file-uploaded datasets emit a placeholder comment since they have no URL to reference; reads paint properties back from MapLibre via `getPaintProperty()` for manually adjusted styles
 - **Preserve local datasets on re-run** - When the config pipeline tears down and re-runs, file-uploaded datasets (no URL) are kept in DuckDB untouched; teardown skips them, and the pipeline treats them as already-loaded (same `datasetExists()` check used for OPFS restore); the placeholder comment in generated YAML is cosmetic only and does not affect the running session
+- **Export config** - Generate reproducible YAML from current session state; exported config uses the full author schema (datasets, operations, layers); this is the same config the CLI consumes
+- **Export viewer config** - Generate a viewer-only YAML from current session: datasets pointing to exported files + layer definitions; no operations or outputs (data is pre-baked); pairs with CLI's `--viewer-config` output for the same purpose
+- **Export data** - Export datasets as GeoJSON, CSV, or Parquet
 
 ### v0.6.3 - Operations Builder
 
@@ -29,11 +22,13 @@ Goal: form-based UI for running spatial operations without writing YAML. Dedicat
 - **Operation form** - Dropdown for operation type; input dropdown(s) populated from loaded datasets (one for unary ops, two for binary); type-specific parameter fields (distance + unit for buffer, mode for intersection, etc.); output name text input; "Run" button executes via existing operation pipeline; add to landing page controls grid
 - **Generated YAML preview** - Show the equivalent YAML snippet below the form as a learning aid; users see the config syntax for what they just built visually
 
-### v0.7.0 - In-browser PMTiles Generation
+### v0.7.0 - PMTiles Support
 
-Goal: generate PMTiles archives directly in the browser from any DuckDB-backed dataset, enabling MapLibre to render large datasets as tiled vector sources rather than monolithic GeoJSON; zoom-level simplification and viewport streaming come for free via the tile protocol.
+Goal: load externally hosted PMTiles files and generate PMTiles archives directly in the browser, enabling MapLibre to render large datasets as tiled vector sources rather than monolithic GeoJSON; zoom-level simplification and viewport streaming come for free via the tile protocol.
 
+- **External PMTiles loading** - Register the `pmtiles://` protocol handler on map init; allow `pmtiles://` URLs in `DatasetConfig` as a tiled vector source; enables loading externally hosted PMTiles files (open data portals, self-hosted, GitHub Pages); foundational for in-browser generation and the CLI/viewer pipeline
 - **`outputs:` config section** - Top-level `outputs:` key in `MapConfig` declaring dataset output formats; `format: geojson | csv | parquet | pmtiles` with format-specific options (PMTiles: `minzoom`, `maxzoom`, `layerName`); this is the contract between the full app, CLI, and viewer - the same config drives all three
+- **PMTiles export** - Download generated .pmtiles from OPFS via blob URL; surfaced in StorageControl alongside cache size display; enables local backup or manual deployment to R2/S3/Pages without CLI
 - **Tiling pipeline** - Worker-based pipeline off main thread: `getFeaturesAsGeoJSON()` -> `geojson-vt` (tiles and simplifies per zoom level) -> `vt-pbf` (encodes as MVT protobuf) -> `pmtiles` writer (packs archive); progress surfaced in ProgressControl during generation
 - **OPFS PMTiles cache** - Generated `.pmtiles` files persisted in OPFS alongside the DuckDB database; restored on session reload without regeneration; invalidated when source dataset changes; `StorageControl` panel updated to surface PMTiles cache size alongside DB size
 - **MapLibre vector source wiring** - Tiled datasets use a MapLibre `vector` source pointing to the OPFS `pmtiles://` path instead of a `geojson` source; layer config requires a `source-layer` matching the declared `layerName`
@@ -138,42 +133,51 @@ Goal: a minimal map app that renders pre-processed data without DuckDB, operatio
   - Config and data files co-located or hosted separately (URLs in config)
   - Example GitHub Actions workflow: CLI runs on schedule, commits outputs, viewer rebuilds via Pages
 
-## Backlog (Unscheduled)
+### v0.10.0 - Sharing and Additional Render Types
 
-Items worth building eventually but not yet assigned to a version:
-
-- **Expression-aware overrides** - Expression-driven properties shown as disabled with an "Expression" badge; toggle lets user replace the expression with a flat GUI value for that property
-- **Layer Expression Editor** - Raw MapLibre expression input per layer paint property; JSON validation before applying; updates MapLibre directly without modifying the config file
-- **Feature generalization (LOD)** - `ST_Simplify(geometry, tolerance)` with tolerance scaled to zoom level; applies to GeoJSON-backed sources (superseded for tiled datasets by the PMTiles pipeline); may be removable once PMTiles is the default large-data path
-- **Viewport streaming** - Load only features visible in current extent via `ST_Intersects(geometry, ST_MakeEnvelope(west, south, east, north))`; applies to GeoJSON-backed sources; may be removable once PMTiles is the default large-data path
 - **URL state sharing** - Serialize session (datasets, layers, paint, operations) into URL parameters for shareable links without needing a repo or exported YAML
-- **Feature selection** - Click or box-select features on the map to create a subset dataset; selected features visually distinguished; selection available as input to operations
-- **Tabular view** - Bottom panel with sortable, filterable data grid; row click highlights feature on map
-- **`join` operation** - Tabular join: attach a CSV or JSON dataset to a spatial dataset by a shared key field; enables workflows like coloring parcels by census data or enriching transit stops with ridership counts; config references a tabular `source`, a spatial `target`, and an `on` key; joined properties merged into the output feature's attributes
-- **`spatial-join` operation** - Attach attributes from layer B to layer A based on geometric relationship (intersects, contains, nearest); distinct from tabular join - no shared key required, relationship is spatial; e.g., tag parcels with their containing neighbourhood or find the nearest transit stop to each school
-- **Undo/redo** - Session history stack for operations and dataset changes; step backward and forward through state; covers dataset loads, operation executions, and layer modifications
-- **Statistics panel** - Per-dataset summary statistics: feature count, and for numeric attribute columns, min/max/mean/median. Use Phosphor chart-bar icon. Top-left.
-- **Measurement tools** - Distance, area, bearing calculations. Use Phosphor ruler icon. Top-left.
-- **Collapsed tools menu** - Collapsible "tools" menu or grouped overflow control to keep the UI manageable on smaller screens without hiding functionality
-- **Toggle for showing text beside icons** - Accessibility improvement for desktop mainly, a button to expand all buttons to show their text value (ie the tooltip button title)
 - **Arrow binary data path** - `getFeaturesAsArrow()` in `features.ts` returns the raw Arrow table from DuckDB, bypassing `ST_AsGeoJSON` string serialization; coordinate columns extracted as `Float64Array` for direct consumption by deck.gl binary input format; eliminates the GeoJSON round-trip for large datasets
 - **`ScatterplotLayer`** - deck.gl large point cloud rendering with radius scale and fill/stroke color accessors; suited for transit stops, parcel centroids, and other high-count point datasets
 - **`HeatmapLayer`** - deck.gl GPU-accelerated continuous density; distinct from MapLibre's `heatmap` type, operates entirely on the deck.gl pipeline
 - **`HexagonLayer`** - deck.gl aggregation hexbins; count or sum of features per cell; configurable radius and elevation scale
 - **`ColumnLayer`** - deck.gl 3D vertical bars driven by a numeric property; pairs with `fill-extrusion` use cases that need deck.gl's rendering scale
-- **`attribute` annotate mode** - Extend the `attribute` operation with a second mode that enriches features with computed properties via SQL expressions (e.g., derive a `category` field from `speed_limit` thresholds, or normalize a string column); structured params for simple computed fields, raw SQL expression escape hatch for advanced transformations; adds to the existing filter mode introduced in v0.4.0
+
+### v0.11.0 - Large Data Optimizations & Custom Basemaps
+- **Feature generalization (LOD)** - `ST_Simplify(geometry, tolerance)` with tolerance scaled to zoom level; applies to GeoJSON-backed sources (superseded for tiled datasets by the PMTiles pipeline); may be removable once PMTiles is the default large-data path
+- **Viewport streaming** - Load only features visible in current extent via `ST_Intersects(geometry, ST_MakeEnvelope(west, south, east, north))`; applies to GeoJSON-backed sources; may be removable once PMTiles is the default large-data path
 - **Custom basemap tile URL** - Let users point at their own tile server (self-hosted MapTiler, PMTiles, WMS) via config or UI; extends the existing basemap switcher; pairs with the CLI's PMTiles output for a full static publish-and-load workflow
+
+### v0.12.0 - Tools Expansion
+- **Statistics panel** - Per-dataset summary statistics: feature count, and for numeric attribute columns, min/max/mean/median. Use Phosphor chart-bar icon. Top-left.
+- **Measurement tools** - Distance, area, bearing calculations. Use Phosphor ruler icon. Top-left.
+- **Collapsed tools menu** - Collapsible "tools" menu or grouped overflow control to keep the UI manageable on smaller screens without hiding functionality
+- **Toggle for showing text beside icons** - Accessibility improvement for desktop mainly, a button to expand all buttons to show their text value (ie the tooltip button title)
+- **Expression-aware overrides** - Expression-driven properties shown as disabled with an "Expression" badge; toggle lets user replace the expression with a flat GUI value for that property
+
+### v0.13.0 - More Formats and Configurations
+- **Shapefile support** - Load `.shp`/`.dbf` archives from URLs; requires an additional JS library (e.g., shpjs) for parsing multi-file ZIP archives; more involved than other format additions and likely requires download endpoint handling to be in place first
+- **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc.
+
+## Backlog (Unscheduled)
+
+Items worth building eventually but not yet assigned to a version:
+
+- **Layer Expression Editor** - Raw MapLibre expression input per layer paint property; JSON validation before applying; updates MapLibre directly without modifying the config file
+- **Feature selection** - Click or box-select features on the map to create a subset dataset; selected features visually distinguished; selection available as input to operations
+- **Tabular view** - Bottom panel with sortable, filterable data grid; row click highlights feature on map
+- **`join` operation** - Tabular join: attach a CSV or JSON dataset to a spatial dataset by a shared key field; enables workflows like coloring parcels by census data or enriching transit stops with ridership counts; config references a tabular `source`, a spatial `target`, and an `on` key; joined properties merged into the output feature's attributes
+- **`spatial-join` operation** - Attach attributes from layer B to layer A based on geometric relationship (intersects, contains, nearest); distinct from tabular join - no shared key required, relationship is spatial; e.g., tag parcels with their containing neighbourhood or find the nearest transit stop to each school
+- **Undo/redo** - Session history stack for operations and dataset changes; step backward and forward through state; covers dataset loads, operation executions, and layer modifications
+- **`attribute` annotate mode** - Extend the `attribute` operation with a second mode that enriches features with computed properties via SQL expressions (e.g., derive a `category` field from `speed_limit` thresholds, or normalize a string column); structured params for simple computed fields, raw SQL expression escape hatch for advanced transformations; adds to the existing filter mode introduced in v0.4.0
 - **Screenshot / print export** - Export current map view as PNG via `map.getCanvas().toDataURL()`; useful for reports and presentations
 - **Bookmarks** - Named saved views (center, zoom, active layers, paint state); useful for multi-site projects or returning to a specific area
 - **Multi-config loading** - Load an additional YAML on top of the current session, merging datasets and layers; enables composing configs without editing files
 - **Drawing / digitizing** - Draw points, lines, and polygons directly on the map; output as a new dataset available for operations
 - **PWA / offline support** - Service worker caching of app shell and tile assets for offline use; aligns with the static-first approach
-- **Shapefile support** - Load `.shp`/`.dbf` archives from URLs; requires an additional JS library (e.g., shpjs) for parsing multi-file ZIP archives; more involved than other format additions and likely requires download endpoint handling to be in place first
 - **`geometryColumn` config field** - explicit geometry column name override on `DatasetConfig` for GeoParquet and similar tabular formats where auto-detection fails or is ambiguous; paired with an input in the load UI for manual datasets
 - **Smarter URL label extraction** - Progress control currently shows raw URLs in loading messages; extract human-readable dataset names from well-known portal URL patterns (Socrata `/resource/<4x4>`, ArcGIS REST `/FeatureServer/0/query`, OGC `/collections/<id>/items`); fall back to hostname or full URL for unrecognized patterns
 - **Scale bar unit config field** - `map.unit: metric | imperial` in YAML config to set the default scale bar unit for a given map; useful for configs targeting a specific regional audience; defaults to metric when omitted
 - **Persist scale bar unit preference** - store the user's last-selected metric/imperial toggle choice in `localStorage`; restored on next session; overrides config default but can itself be overridden by explicit `map.unit` in config
-- **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc.
 - **DB mutation error feedback** - Surface failures from color, style, and visibility DB updates in the progress control; currently callers don't check return values, leaving the UI appearing to succeed when the DB write failed (hard to test - DB mutations have been rock-solid in practice)
 - **Geometry validation** - Add `ST_IsValid` + `ST_MakeValid` to the DuckDB INSERT pipeline so invalid geometries (self-intersections, degenerate rings) are repaired on load
   - `datasets.ts`: wrap geometry expression in `loadGeoJSON()` INSERT with `CASE WHEN ST_IsValid(geom_raw) THEN geom_raw ELSE ST_MakeValid(geom_raw) END`
@@ -185,8 +189,13 @@ Items worth building eventually but not yet assigned to a version:
   - `load-config.ts` and `executor.ts` OPFS restore paths: same guard logic
   - `loadedDatasets.add()` still called so operations can reference skipped datasets
   - Progress message: "Skipped rendering (N features, M already rendered). Data available for operations."
+- **Native Apple Authoring (Swift)** - native macOS/iOS authoring app for the full spatial operations pipeline on Apple devices, where Safari's memory constraints make browser-based authoring unviable.
+
 
 ## Completed
+
+### v0.6.1 - Config Editor and Safari Compatibility
+- Interactive config editor with live Shiki highlighting, edit/run/clear/import buttons, draggable+resizable panel, OPFS config persistence, clean teardown for re-runs; Safari browser gate with dismissible warning (DuckDB skipped), worker message batching, COI bundle skip on Safari/mobile, memory fixes for paginated loads
 
 ### v0.6.0 - Worker Pipeline
 - Full DuckDB pipeline moved off main thread into a Web Worker with typed RPC; loader signatures decoupled from Response API; pure compute functions for operations; zero-copy transfers; memory management (vacuum, pagehide cleanup, registerFileBuffer); idle CPU reduction (backdrop-filter removal, RAF-throttled mousemove); bounds queries via DuckDB aggregation; fitBounds fix for broken ST_Extent; layer ordering fix

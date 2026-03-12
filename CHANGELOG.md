@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.6.1 - 2026-03-11
+
+### Config Control
+
+- **Edit mode**: pencil button toggles between read-only Shiki view and editable textarea; live syntax highlighting via transparent textarea overlaid on a Shiki-highlighted div, updated per keystroke with `requestAnimationFrame` batching; closing mid-edit preserves changes for next open; subtle green border indicates active editing; double-click body to enter, double-click header to exit
+- **Run button**: play button tears down all data and re-executes the current config; config pipeline extracted into reusable `runConfigPipeline()` in `map.ts`; basemap now reapplied on each run (previously only set at initial map creation); parse errors shown via ProgressControl without crashing
+- **Clear button**: eraser button tears down all data without re-running; double-click confirm pattern (first click swaps to red trash icon, 3s auto-revert)
+- **Clean teardown** (`teardown.ts`): removes all MapLibre layers/sources, clears hover/click handlers, bulk-deletes datasets from DuckDB, and refreshes the layer panel; `deleteAllDatasets()` added through the worker RPC stack as a single bulk operation
+- **Import config**: upload button accepts `.yaml`/`.yml` files and enters edit mode for review before running
+- **Config persistence**: edited YAML saved to DuckDB `meta` table keyed by config path via `saveConfig`/`getSavedConfig`/`deleteSavedConfig` worker RPCs; on page load, saved config checked before fetching the file-based default; Clear deletes saved config; invalid saved configs auto-deleted with fallback to defaults; skipped when `data-persistence="false"`
+- **Draggable and resizable panel**: header acts as drag handle with viewport clamping; bottom-right resize handle with min/max constraints; position and size retained across open/close; both disabled on mobile
+- **Auto-expand in edit mode**: panel grows to fit content up to 60vh, then requires manual resize
+- **Scroll position preserved**: entering and exiting edit mode saves and restores scroll position
+- **Semi-transparent background**: panel uses 5% transparency so the map is faintly visible behind it
+- **Consistent font metrics**: view and edit modes share identical font specs so text does not shift when toggling
+
+### Safari Compatibility
+
+- **Safari browser gate** (`map.ts`, `safari-detect.ts`, `safari-banner.ts`): DuckDB-WASM exceeds Safari's per-tab memory limits; Safari users get basemap, geocoding, and scale bar only, with a dismissible warning banner suggesting Chrome/Firefox/Edge
+- **Lazy worker creation** (`db/client.ts`): worker deferred to first RPC call so Safari never spawns a worker that would crash
+- **Event message batching** (`db/worker.ts`): worker-to-main messages batched and flushed every 150ms to avoid Safari's Mach IPC port overflow; terminal statuses bypass the timer for immediate feedback
+- **COI bundle skip on Safari/mobile** (`db/core.ts`): excludes pthread sub-workers to reduce IPC channel count; EH bundle is sufficient for the sequential pipeline
+- **`appendFeatures` memory fix** (`db/datasets.ts`): switched to `registerFileBuffer()` to avoid holding both a JS string and DuckDB's copy during paginated loads
+- **Vacuum after paginated loads** (`db/worker.ts`): compacts WASM heap after multi-page loads to prevent monotonic growth on memory-constrained devices
+
+### Refactor
+
+- **Move `highlight-config.ts`**: consolidated from `src/utils/` into `src/scripts/utils/`; fixed redundant ternary where both branches were identical
+
 ## v0.6.0 - 2026-03-10
 
 ### Worker-based DuckDB Pipeline

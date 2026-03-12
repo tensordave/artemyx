@@ -17,7 +17,7 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - Interactive mapping with switchable basemaps (CARTO, Satellite)
 - Multi-dataset support with layer management UI (visibility, color, rename, delete, per-layer style panel with labels)
 - Auto-generated legend from active layer styles (color swatches, gradient ramps, category entries)
-- YAML-driven configuration for declarative map setup and spatial operations
+- YAML-driven configuration with in-browser editor (live syntax highlighting, edit/run/clear/import)
 - Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
 - Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays) with paginated fetching
 - Local file upload via drag-and-drop or file picker
@@ -84,7 +84,7 @@ src/scripts/
 ├── controls/          # MapLibre custom map controls
 │   ├── data-control.ts       # Load data from URL with advanced options (CRS, format, columns)
 │   ├── upload-control.ts     # Local file upload (drag-and-drop, file picker)
-│   ├── config-control.ts     # View active YAML config with syntax highlighting
+│   ├── config-control.ts     # Config editor (edit, run, clear, import) with live Shiki highlighting
 │   ├── layer-control.ts      # Layer visibility, color, rename, delete, reorder
 │   ├── legend-control.ts     # Auto-generated legend from active layer styles
 │   ├── storage-control.ts    # OPFS status and session management
@@ -95,8 +95,13 @@ src/scripts/
 │   └── popup.ts              # Feature popup and hover tooltip utilities
 ├── ui/                # Reusable UI components
 │   ├── error-dialog.ts
-│   └── advanced-options.ts  # DataControl advanced options panel
+│   ├── advanced-options.ts  # DataControl advanced options panel
+│   └── safari-banner.ts    # Dismissible Safari compatibility warning
+├── utils/             # Shared utilities
+│   ├── highlight-config.ts  # Shiki YAML highlighting helper
+│   └── safari-detect.ts     # Safari/WebKit detection
 ├── icons/             # Phosphor SVG icon strings
+├── teardown.ts        # Clean teardown (remove all datasets, sources, layers)
 ├── map.ts             # MapLibre init + config loading (entry point)
 └── basemaps.ts        # Basemap tile configurations
 ```
@@ -185,6 +190,10 @@ layers:
 ```
 
 Layers support full MapLibre paint/layout properties including expressions (`match` for categories, `interpolate` for gradients).
+
+## Browser Compatibility
+
+Requires Chrome, Firefox, or Edge. Safari's per-tab memory limits are too low for DuckDB-WASM with spatial operations - Safari users see a warning banner and get basemap/geocoding/scale bar only. A lightweight viewer (no DuckDB) is on the roadmap for full cross-browser support.
 
 ## Status
 

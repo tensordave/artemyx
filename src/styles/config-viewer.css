@@ -8,7 +8,7 @@
 	transform: translate(-50%, -50%);
 	width: 680px;
 	max-height: 60vh;
-	background-color: #1a1a1a;
+	background-color: rgba(26, 26, 26, 0.95);
 	border: 1px solid #444;
 	border-radius: 8px;
 	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -21,6 +21,10 @@
 	display: flex;
 }
 
+.config-viewer--positioned {
+	transform: none;
+}
+
 .config-viewer-header {
 	display: flex;
 	align-items: center;
@@ -28,12 +32,93 @@
 	padding: 12px 16px;
 	border-bottom: 1px solid #333;
 	flex-shrink: 0;
+	cursor: grab;
+}
+
+.config-viewer--dragging .config-viewer-header {
+	cursor: grabbing;
+}
+
+.config-viewer-resize-handle {
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	width: 14px;
+	height: 14px;
+	cursor: nwse-resize;
+	z-index: 2;
+}
+
+.config-viewer-resize-handle::after {
+	content: '';
+	position: absolute;
+	bottom: 3px;
+	right: 3px;
+	width: 8px;
+	height: 8px;
+	border-right: 2px solid #555;
+	border-bottom: 2px solid #555;
 }
 
 .config-viewer-filename {
 	font-family: monospace;
 	font-size: 13px;
 	color: #94a3b8;
+}
+
+.config-viewer-actions {
+	display: flex;
+	gap: 8px;
+	margin-left: auto;
+	margin-right: 12px;
+}
+
+.config-viewer-action-btn {
+	background: none;
+	border: 1px solid #555;
+	border-radius: 4px;
+	color: #94a3b8;
+	cursor: pointer;
+	padding: 4px 6px;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+}
+
+.config-viewer-action-btn:hover {
+	color: #fff;
+	border-color: #888;
+}
+
+.config-viewer-action-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.config-viewer-action-btn--confirm {
+	border-color: #ef4444;
+	color: #ef4444;
+}
+
+.config-viewer-action-btn--active {
+	border-color: #22c55e;
+	color: #22c55e;
+}
+
+.config-viewer--editing {
+	border-color: #22c55e;
+	transition: border-color 0.2s;
+}
+
+.config-viewer--editing .config-viewer-header {
+	border-bottom-color: #22c55e;
+	background-color: rgba(34, 197, 94, 0.08);
+	transition: border-bottom-color 0.2s, background-color 0.2s;
+}
+
+.config-viewer-action-btn svg {
+	width: 16px;
+	height: 16px;
 }
 
 .config-viewer-close {
@@ -60,6 +145,69 @@
 	margin: 0;
 	padding: 16px;
 	border-radius: 0;
+	background: transparent !important;
+	font-family: monospace;
+	font-size: 13px;
+	line-height: 1.5;
+	tab-size: 2;
+	white-space: pre;
+}
+
+.config-viewer-editor {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	min-height: 200px;
+}
+
+.config-viewer-highlight {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.config-viewer-highlight pre {
+	margin: 0;
+	padding: 16px;
+	background: transparent !important;
+	font-family: monospace;
+	font-size: 13px;
+	line-height: 1.5;
+	tab-size: 2;
+	white-space: pre;
+}
+
+.config-viewer-highlight code {
+	font-family: inherit;
+	font-size: inherit;
+	line-height: inherit;
+	tab-size: inherit;
+}
+
+.config-viewer-textarea {
+	position: relative;
+	z-index: 1;
+	width: 100%;
+	height: 100%;
+	min-height: 200px;
+	background: transparent;
+	color: transparent;
+	caret-color: #d4d4d4;
+	border: none;
+	padding: 16px;
+	font-family: monospace;
+	font-size: 13px;
+	line-height: 1.5;
+	resize: none;
+	outline: none;
+	tab-size: 2;
+	box-sizing: border-box;
+	-webkit-text-fill-color: transparent;
+	white-space: pre;
+	overflow-wrap: normal;
+	word-wrap: normal;
+	overflow-x: auto;
 }
 
 @media (max-width: 767px) {
@@ -72,5 +220,13 @@
 		width: 100%;
 		max-height: 60vh;
 		border-radius: 8px 8px 0 0;
+	}
+
+	.config-viewer-header {
+		cursor: default;
+	}
+
+	.config-viewer-resize-handle {
+		display: none;
 	}
 }

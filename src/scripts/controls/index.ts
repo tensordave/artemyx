@@ -12,6 +12,7 @@ export {
 	attachFeatureClickHandlers,
 	attachFeatureHoverHandlers,
 	removeFeatureHandlers,
+	clearAllFeatureHandlers,
 	formatProperties,
 	createPopupContent,
 	type HoverTooltipOptions,

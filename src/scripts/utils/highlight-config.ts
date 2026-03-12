@@ -7,9 +7,7 @@ import path from 'node:path';
  * Runs at build time in Astro frontmatter.
  */
 export async function highlightConfigYaml(publicPath: string): Promise<string> {
-	const resolved = publicPath.startsWith('/')
-		? path.join(process.cwd(), 'public', publicPath)
-		: path.join(process.cwd(), 'public', publicPath);
+	const resolved = path.join(process.cwd(), 'public', publicPath);
 	const yaml = fs.readFileSync(resolved, 'utf-8');
 	return codeToHtml(yaml, { lang: 'yaml', theme: 'github-dark' });
 }

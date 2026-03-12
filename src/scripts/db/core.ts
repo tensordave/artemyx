@@ -9,6 +9,7 @@
  */
 
 import * as duckdb from '@duckdb/duckdb-wasm';
+import { isSafari } from '../utils/safari-detect';
 
 const SCHEMA_VERSION = '3';
 const OPFS_DB_PATH = 'opfs://gis_app.db';
@@ -240,12 +241,27 @@ async function tryOpenOPFS(
  * When useOPFS is true, attempts OPFS-backed persistence with automatic
  * wipe-and-retry on failure, then fallback to in-memory.
  */
+/**
+ * Detect Safari or mobile devices where the COI bundle's pthread workers
+ * create excessive IPC channels that overwhelm Safari's Mach port limits.
+ */
+function shouldUseCOI(): boolean {
+	if (typeof navigator === 'undefined') return true;
+	// Safari is gated at the map.ts level (worker never created), but guard here too
+	if (isSafari()) return false;
+	// Mobile devices have tighter memory/IPC limits
+	const ua = navigator.userAgent;
+	if (/iPhone|iPad|iPod|Android/i.test(ua) || navigator.maxTouchPoints > 1) return false;
+	return true;
+}
+
 export async function initDB(useOPFS: boolean = false): Promise<void> {
 	try {
 		logInitStep('Resolving DuckDB bundle...');
 
 		// Workers are self-hosted; WASM loads from jsDelivr (files exceed Cloudflare's 25MB limit)
 		const cdnBundles = duckdb.getJsDelivrBundles();
+		const useCoi = shouldUseCOI();
 		const bundle = await duckdb.selectBundle({
 			mvp: {
 				mainModule: cdnBundles.mvp.mainModule,
@@ -255,7 +271,7 @@ export async function initDB(useOPFS: boolean = false): Promise<void> {
 				mainModule: cdnBundles.eh.mainModule,
 				mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
 			} : undefined,
-			coi: cdnBundles.coi ? {
+			coi: useCoi && cdnBundles.coi ? {
 				mainModule: cdnBundles.coi.mainModule,
 				mainWorker: '/duckdb/duckdb-browser-coi.worker.js',
 				pthreadWorker: '/duckdb/duckdb-browser-coi.pthread.worker.js',

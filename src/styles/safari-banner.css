@@ -1,0 +1,45 @@
+/* Safari unsupported banner — dismissible amber bar at top of map */
+
+.safari-banner {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	background: rgba(245, 158, 11, 0.95);
+	color: #1a1a1a;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.safari-banner-icon {
+	flex-shrink: 0;
+	display: flex;
+}
+
+.safari-banner-icon svg {
+	fill: #1a1a1a;
+}
+
+.safari-banner-text {
+	flex: 1;
+}
+
+.safari-banner-dismiss {
+	flex-shrink: 0;
+	padding: 4px 10px;
+	border: 1px solid rgba(0, 0, 0, 0.3);
+	border-radius: 4px;
+	background: rgba(0, 0, 0, 0.15);
+	color: #1a1a1a;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.safari-banner-dismiss:hover {
+	background: rgba(0, 0, 0, 0.25);
+}
