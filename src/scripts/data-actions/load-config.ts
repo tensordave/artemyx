@@ -6,6 +6,8 @@ import type { Logger } from '../logger';
 import type { DatasetConfig, LayerConfig } from '../config/types';
 import { parseDatasetStyle, addDatasetToMap } from './shared';
 import { loadDataFromUrl } from './load-url';
+import { loadDataFromFile } from './load-file';
+import { showFilePromptDialog } from '../ui/error-dialog';
 
 /** Options for loading datasets from config */
 export interface ConfigLoadOptions {
@@ -74,7 +76,9 @@ export async function loadDatasetsFromConfig(
 			continue;
 		}
 
-		// OPFS restore: if dataset already exists in DuckDB, render from persisted data
+		// OPFS / DuckDB restore: if dataset already exists in DuckDB, render from persisted data.
+		// This handles both OPFS session restore and file-uploaded datasets (url: "")
+		// that were preserved during selective teardown.
 		if (await datasetExists(dataset.id)) {
 			try {
 				// Hidden datasets: already in DuckDB, no rendering needed - skip GeoJSON materialization entirely
@@ -108,6 +112,55 @@ export async function loadDatasetsFromConfig(
 			} catch (e) {
 				logger.warn('OPFS', `Failed to restore ${dataset.id}, will re-fetch:`, e);
 			}
+		}
+
+		// Local dataset (file-upload placeholder or relative path) and not in DuckDB - prompt for file
+		const isLocalUrl = !dataset.url || dataset.url.startsWith('./') || dataset.url.startsWith('../');
+		if (isLocalUrl) {
+			// Extract filename hint from sourceFile field, relative path basename, or nothing
+			const filenameHint = dataset.sourceFile
+				|| (dataset.url ? dataset.url.split('/').pop() : undefined);
+
+			const file = await showFilePromptDialog(displayName, filenameHint);
+
+			if (!file) {
+				logger.progress(displayName, 'error', 'Local dataset skipped');
+				result.skipped++;
+				continue;
+			}
+
+			const configOverrides: DBLoadOptions = {
+				id: dataset.id,
+				name: displayName,
+				color: dataset.color,
+				style: dataset.style,
+				hidden: isHidden
+			};
+
+			const success = await loadDataFromFile(file, {
+				map,
+				logger,
+				layerToggleControl,
+				loadedDatasets,
+				configOverrides,
+				skipFitBounds: true,
+				skipErrorDialog: true,
+				skipLayers,
+				hidden: isHidden,
+				format: dataset.format,
+				crs: dataset.crs,
+				latColumn: dataset.latColumn,
+				lngColumn: dataset.lngColumn,
+				geoColumn: dataset.geoColumn,
+			});
+
+			if (success) {
+				result.loaded++;
+			} else {
+				result.failed++;
+				result.errors.push(`${dataset.id}: Failed to load from file`);
+			}
+			continue;
 		}
 
 		// Build config overrides from dataset config

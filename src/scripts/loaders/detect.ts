@@ -86,18 +86,25 @@ function getUrlExtension(url: string): string {
 }
 
 /**
+ * Detect data format from a filename string (extension-based).
+ * Falls back to 'geojson' if no extension matches.
+ */
+export function detectFormatFromFilename(filename: string): DetectedFormat {
+	const ext = getFilenameExtension(filename);
+	if (ext && ext in EXTENSION_MAP) {
+		return EXTENSION_MAP[ext];
+	}
+	return 'geojson';
+}
+
+/**
  * Detect data format from a local File object.
  * Uses filename extension first, then MIME type from file.type.
  * Falls back to 'geojson' if neither matches.
  */
 export function detectFormatFromFile(file: File): DetectedFormat {
-	const dotIndex = file.name.lastIndexOf('.');
-	if (dotIndex !== -1) {
-		const ext = file.name.slice(dotIndex).toLowerCase();
-		if (ext in EXTENSION_MAP) {
-			return EXTENSION_MAP[ext];
-		}
-	}
+	const fromName = detectFormatFromFilename(file.name);
+	if (fromName !== 'geojson') return fromName;
 
 	if (file.type) {
 		const mimeType = file.type.toLowerCase().split(';')[0].trim();

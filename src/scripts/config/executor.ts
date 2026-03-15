@@ -11,9 +11,11 @@ import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
 import type { ExecutionPlan } from './operations-graph';
 import type { OperationConfig, LayerConfig } from './types';
-import { datasetExists, getDatasetById, getFeaturesAsGeoJSON, executeOperationInWorker, vacuum } from '../db';
+import { datasetExists, getDatasetById, getFeaturesAsGeoJSON, executeOperationInWorker, clearOperations, saveOperationMetadata, vacuum } from '../db';
+import { getOperationInputs } from './types';
 import { addOperationResultToMap } from './operations/render';
-import { parseStyleConfig, shouldSkipAutoLayers } from './operations';
+import { shouldSkipAutoLayers } from './operations';
+import { parseDatasetStyle } from '../data-actions/shared';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../controls/popup';
 
 /** Context needed for operation execution */
@@ -62,13 +64,17 @@ export async function executeOperations(
 
 	const { map, layerToggleControl, loadedDatasets, layers } = context;
 
+	// Reset operation metadata so exec_order starts clean for this run
+	await clearOperations();
+
 	// Centralized popup/hover handler attachment for all operations
 	const onLayersCreated = (layerIds: string[], label: string) => {
 		const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label });
 		attachFeatureClickHandlers(map, layerIds, hoverPopup);
 	};
 
-	for (const op of plan.order) {
+	for (let i = 0; i < plan.order.length; i++) {
+		const op = plan.order[i];
 		try {
 			// OPFS restore: if output dataset already exists, render from persisted data
 			if (await datasetExists(op.output)) {
@@ -76,7 +82,7 @@ export async function executeOperations(
 				if (geoJsonData.features && geoJsonData.features.length > 0) {
 					const meta = await getDatasetById(op.output);
 					const color = meta?.color || op.color || '#3388ff';
-					const style = parseStyleConfig(op.style);
+					const style = parseDatasetStyle(meta?.style);
 					const featureCount = geoJsonData.features.length;
 
 					const skipLayers = shouldSkipAutoLayers(op.output, layers);
@@ -84,6 +90,13 @@ export async function executeOperations(
 					// Release GeoJSON reference - MapLibre owns the data now
 					geoJsonData = null as any;
 					loadedDatasets.add(op.output);
+
+					// Re-write operation metadata (clearOperations() wiped it at the start)
+					const inputs = getOperationInputs(op);
+					saveOperationMetadata(
+						op.output, op.type, JSON.stringify(inputs),
+						op.params ? JSON.stringify(op.params) : null, i
+					);
 
 					if (layerIds.length > 0) {
 						onLayersCreated(layerIds, op.name || op.output);
@@ -97,7 +110,7 @@ export async function executeOperations(
 			}
 
 			// Delegate computation to worker, render result on main thread
-			const opResult = await executeOperationInWorker(op);
+			const opResult = await executeOperationInWorker(op, i);
 
 			const skipLayers = shouldSkipAutoLayers(opResult.outputId, layers);
 			const layerIds = addOperationResultToMap(map, opResult.outputId, opResult.color, opResult.style, opResult.geoJson, skipLayers);

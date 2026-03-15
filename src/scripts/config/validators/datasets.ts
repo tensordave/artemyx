@@ -27,12 +27,13 @@ export function validateDataset(dataset: unknown, index: number): string[] {
 		errors.push(`${prefix}.id: must be a non-empty string`);
 	}
 
-	// Required: url (string, valid URL format)
+	// Required: url (string, valid URL format; empty string allowed for file-upload placeholders;
+	// relative paths like ./data/file.geojson allowed for viewer config exports)
 	if (!('url' in d)) {
 		errors.push(`${prefix}: missing required 'url'`);
 	} else if (typeof d.url !== 'string') {
 		errors.push(`${prefix}.url: must be a string`);
-	} else {
+	} else if (d.url !== '' && !d.url.startsWith('./') && !d.url.startsWith('../')) {
 		try {
 			const parsedUrl = new URL(d.url);
 			if (parsedUrl.protocol !== 'https:') {
@@ -126,6 +127,13 @@ export function validateDataset(dataset: unknown, index: number): string[] {
 	// Optional: crs (authority:code string for explicit CRS override)
 	if ('crs' in d && d.crs !== undefined) {
 		errors.push(...validateCrsString(d.crs, `${prefix}.crs`));
+	}
+
+	// Optional: sourceFile (string, original filename for file-uploaded datasets)
+	if ('sourceFile' in d && d.sourceFile !== undefined) {
+		if (typeof d.sourceFile !== 'string' || d.sourceFile.trim() === '') {
+			errors.push(`${prefix}.sourceFile: must be a non-empty string`);
+		}
 	}
 
 	return errors;

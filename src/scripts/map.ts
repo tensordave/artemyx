@@ -10,7 +10,7 @@ import { loadDatasetsFromConfig } from './data-actions/load';
 import { fitMapToBounds } from './data-actions/shared';
 import { createExecutionPlan } from './config/operations-graph';
 import { executeOperations } from './config/executor';
-import { executeLayersFromConfig, resyncLayerOrder, restoreLabelIfConfigured } from './layers';
+import { executeLayersFromConfig, resyncLayerOrder, restoreLabelIfConfigured, restoreStoredPaint } from './layers';
 import { toggleLayerVisibility } from './layer-actions/visibility';
 import { BrowserLogger } from './logger';
 import { databaseIcon } from './icons';
@@ -172,8 +172,9 @@ const uploadControl = new UploadControl({
 	loadedDatasets
 });
 const configControl = new ConfigControl({
+	getBasemapId: () => basemapControl.getCurrentBasemapId(),
 	onRun: async (yamlText?: string) => {
-		await teardownAll({ map, progressControl, layerToggleControl, loadedDatasets });
+		await teardownAll({ map, progressControl, layerToggleControl, loadedDatasets, preserveFileUploads: true });
 
 		let configToRun = mapConfig;
 		if (yamlText !== undefined) {
@@ -199,6 +200,9 @@ const configControl = new ConfigControl({
 		if (configToRun) {
 			await runConfigPipeline(configToRun);
 		}
+
+		// Re-render file-uploaded datasets that survived selective teardown
+		await restoreNonConfigDatasets(configToRun);
 	},
 	onClear: async () => {
 		await teardownAll({ map, progressControl, layerToggleControl, loadedDatasets });
@@ -239,27 +243,28 @@ if (configError) {
 }
 
 /**
- * Restore manually-loaded datasets from OPFS that aren't covered by config.
- * These are datasets the user loaded via the GeoJSON control in a previous session.
+ * Re-render datasets in DuckDB that aren't covered by the given config.
+ * Used both for OPFS session restore and to re-render file-uploaded datasets
+ * that survived a selective teardown during config re-run.
  */
-async function restoreManualDatasets(): Promise<void> {
+async function restoreNonConfigDatasets(config: MapConfig | null): Promise<void> {
 	const allDatasets = await getDatasets();
 	if (allDatasets.length === 0) return;
 
 	// Build set of IDs that config will handle (datasets + operation outputs)
 	const configIds = new Set<string>();
-	if (mapConfig?.datasets) {
-		for (const d of mapConfig.datasets) configIds.add(d.id);
+	if (config?.datasets) {
+		for (const d of config.datasets) configIds.add(d.id);
 	}
-	if (mapConfig?.operations) {
-		for (const op of mapConfig.operations) configIds.add(op.output);
+	if (config?.operations) {
+		for (const op of config.operations) configIds.add(op.output);
 	}
 
 	// Restore datasets not covered by config
 	const manualDatasets = allDatasets.filter((d: any) => !configIds.has(d.id));
 	if (manualDatasets.length === 0) return;
 
-	console.log(`[OPFS] Restoring ${manualDatasets.length} manual dataset(s) from previous session`);
+	console.log(`[Restore] Restoring ${manualDatasets.length} non-config dataset(s)`);
 
 	for (const dataset of manualDatasets) {
 		try {
@@ -294,7 +299,7 @@ async function restoreManualDatasets(): Promise<void> {
 				`Restored from session (${geoJsonData.features.length} features)`
 			);
 		} catch (e) {
-			console.warn(`[OPFS] Failed to restore manual dataset ${dataset.id}:`, e);
+			console.warn(`[Restore] Failed to restore dataset ${dataset.id}:`, e);
 			progressControl.updateProgress(dataset.name || dataset.id, 'error', 'Failed to restore from session');
 		}
 	}
@@ -332,7 +337,7 @@ if (useOPFS && mapConfig) {
 }
 
 // Restore manual datasets from OPFS, then sync layer order
-await restoreManualDatasets();
+await restoreNonConfigDatasets(mapConfig);
 
 // Ensure MapLibre layer stack matches stored layer_order after restore
 const restoredDatasets = await getDatasets();
@@ -466,10 +471,17 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 		}
 	}
 
-	// Apply stored visibility state and restore labels for all datasets
-	// Must happen after executeLayersFromConfig() so layers actually exist
+	// Apply stored visibility state, paint overrides, and labels for all datasets.
+	// Must happen after executeLayersFromConfig() so layers actually exist.
 	try {
 		const currentDatasets = await getDatasets();
+
+		// Restore OPFS-stored color and style overrides on top of config-defined layers.
+		// Skips expression-driven paint properties (user can't override those via GUI).
+		for (const ds of currentDatasets) {
+			const parsedStyle = ds.style ? { ...DEFAULT_STYLE, ...JSON.parse(ds.style) } : { ...DEFAULT_STYLE };
+			restoreStoredPaint(map, ds.id, ds.color || '#3388ff', parsedStyle);
+		}
 
 		await Promise.all(currentDatasets.map(async (ds: any) => {
 			if (ds.style) {

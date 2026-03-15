@@ -322,6 +322,15 @@ export async function clearOPFS(): Promise<void> {
 	location.reload();
 }
 
+export async function exportOPFS(): Promise<Uint8Array> {
+	return rpc<Uint8Array>('exportOPFS');
+}
+
+export async function importOPFS(buffer: ArrayBuffer): Promise<void> {
+	await rpc<void>('importOPFS', { buffer }, [buffer]);
+	location.reload();
+}
+
 export function getInitLog(): InitLogEntry[] {
 	// Init log is delivered via event handler after init completes
 	// This sync function is kept for backwards compatibility but returns empty
@@ -363,8 +372,26 @@ export function terminateWorker(): void {
 	worker?.terminate();
 }
 
-export async function executeOperationInWorker(op: OperationConfig): Promise<OperationPipelineResult> {
-	const raw = await rpc<OperationPipelineRawResult>('executeOperation', { op });
+export async function executeOperationInWorker(op: OperationConfig, execOrder: number): Promise<OperationPipelineResult> {
+	const raw = await rpc<OperationPipelineRawResult>('executeOperation', { op, execOrder });
 	const geoJson = decodeGeoJsonBuffer(raw.geoJsonBuffer);
 	return { outputId: raw.outputId, displayName: raw.displayName, featureCount: raw.featureCount, color: raw.color, style: raw.style, geoJson };
+}
+
+export async function getOperations(): Promise<import('./worker-types').OperationRecord[]> {
+	return rpc<import('./worker-types').OperationRecord[]>('getOperations');
+}
+
+export async function clearOperations(): Promise<void> {
+	await rpc<undefined>('clearOperations');
+}
+
+export async function saveOperationMetadata(
+	outputId: string,
+	opType: string,
+	inputsJson: string,
+	paramsJson: string | null,
+	execOrder: number
+): Promise<void> {
+	await rpc<undefined>('saveOperationMetadata', { outputId, opType, inputsJson, paramsJson, execOrder });
 }

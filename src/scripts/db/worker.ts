@@ -5,8 +5,8 @@
  */
 
 import type { MainMessage, WorkerRequest, CrsPromptResponse, InitResult, LoadPipelineRawResult, OperationPipelineRawResult } from './worker-types';
-import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog, getConnection, getDB, checkpoint, vacuum } from './core';
-import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, updateDatasetColor, updateDatasetName, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
+import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog, getConnection, getDB, checkpoint, vacuum, exportOPFSFile, importOPFSFile } from './core';
+import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, updateDatasetColor, updateDatasetName, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, getOperations, clearOperations, saveOperationMetadata, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
 import type { StyleConfig } from './datasets';
 import { getFeaturesAsGeoJSONString, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './features';
 import type { OperationConfig } from '../config/types';
@@ -20,7 +20,7 @@ import { computeContains } from '../config/operations/contains';
 import { computeDistance } from '../config/operations/distance';
 import { computeCentroid } from '../config/operations/centroid';
 import { computeAttribute } from '../config/operations/attribute';
-import { detectFormat } from '../loaders/detect';
+import { detectFormat, detectFormatFromFilename } from '../loaders/detect';
 import { dispatch as loaderDispatch } from '../loaders';
 import type { LoaderOptions } from '../loaders/types';
 import { resolveSourceCrs, hasProjectedCoordinates } from '../loaders/crs';
@@ -388,8 +388,8 @@ async function workerLoadFromBuffer(buffer: ArrayBuffer, options: WorkerLoadFile
 
 	postProgress(displayName, 'processing');
 
-	// Detect format from file name
-	const detectedFormat = detectFormat(options.fileName, null, options.format, null);
+	// Detect format from file name (use filename-based detection, not URL-based)
+	const detectedFormat = options.format || detectFormatFromFilename(options.fileName);
 
 	// Convert buffer to appropriate raw data
 	let rawData: string | object | ArrayBuffer;
@@ -451,7 +451,7 @@ async function workerLoadFromBuffer(buffer: ArrayBuffer, options: WorkerLoadFile
 
 // ── Full pipeline: executeOperation ─────────────────────────────────────────
 
-async function workerExecuteOperation(op: OperationConfig): Promise<OperationPipelineRawResult> {
+async function workerExecuteOperation(op: OperationConfig, execOrder: number): Promise<OperationPipelineRawResult> {
 	const connection = await getConnection();
 	const callbacks = makeCallbacks(op.name || op.output);
 	let result: ComputeResult;
@@ -494,6 +494,24 @@ async function workerExecuteOperation(op: OperationConfig): Promise<OperationPip
 			throw new Error(`Unsupported operation type: ${(_exhaustive as OperationConfig).type}`);
 		}
 	}
+
+	// Persist operation metadata for config reconstruction
+	const inputs = isUnaryOperation(op) ? [op.input] : op.inputs;
+	const insertOp = await connection.prepare(`
+		INSERT INTO operations (output_id, type, inputs_json, params_json, exec_order)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (output_id) DO UPDATE SET
+			type = EXCLUDED.type, inputs_json = EXCLUDED.inputs_json,
+			params_json = EXCLUDED.params_json, exec_order = EXCLUDED.exec_order
+	`);
+	await insertOp.query(
+		op.output,
+		op.type,
+		JSON.stringify(inputs),
+		op.params ? JSON.stringify(op.params) : null,
+		execOrder
+	);
+	await insertOp.close();
 
 	const geoJsonStr = await getFeaturesAsGeoJSONString(result.outputId);
 	const hasFeatures = geoJsonStr.length > '{"type":"FeatureCollection","features":[]}'.length;
@@ -633,6 +651,24 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 				break;
 			}
 
+			case 'getOperations': {
+				const ops = await getOperations();
+				respond(requestId, ops);
+				break;
+			}
+
+			case 'clearOperations': {
+				await clearOperations();
+				respond(requestId, undefined);
+				break;
+			}
+
+			case 'saveOperationMetadata': {
+				await saveOperationMetadata(req.outputId, req.opType, req.inputsJson, req.paramsJson, req.execOrder);
+				respond(requestId, undefined);
+				break;
+			}
+
 			case 'updateDatasetColor': {
 				const ok = await updateDatasetColor(req.datasetId, req.color);
 				respond(requestId, ok);
@@ -719,6 +755,18 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 				break;
 			}
 
+			case 'exportOPFS': {
+				const bytes = await exportOPFSFile();
+				respondTransfer(requestId, bytes, [bytes.buffer]);
+				break;
+			}
+
+			case 'importOPFS': {
+				await importOPFSFile(new Uint8Array(req.buffer));
+				respond(requestId, undefined);
+				break;
+			}
+
 			case 'vacuum': {
 				await vacuum();
 				respond(requestId, undefined);
@@ -794,7 +842,7 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 			}
 
 			case 'executeOperation': {
-				const result = await workerExecuteOperation(req.op);
+				const result = await workerExecuteOperation(req.op, req.execOrder);
 				const transfer = result.geoJsonBuffer ? [result.geoJsonBuffer.buffer] : [];
 				respondTransfer(requestId, result, transfer);
 				break;

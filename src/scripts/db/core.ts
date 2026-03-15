@@ -11,7 +11,7 @@
 import * as duckdb from '@duckdb/duckdb-wasm';
 import { isSafari } from '../utils/safari-detect';
 
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '4';
 const OPFS_DB_PATH = 'opfs://gis_app.db';
 const OPFS_FILE_NAME = 'gis_app.db';
 
@@ -108,6 +108,17 @@ async function initSchema(): Promise<void> {
 		WHERE datasets.id = sub.id AND datasets.layer_order = 0
 	`);
 
+	// Operation metadata for config reconstruction
+	await conn.query(`
+		CREATE TABLE IF NOT EXISTS operations (
+			output_id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			inputs_json TEXT NOT NULL,
+			params_json TEXT,
+			exec_order INTEGER NOT NULL
+		)
+	`);
+
 	// Create spatial index for geometry queries (bounding box, intersections, etc.)
 	await conn.query(`
 		CREATE INDEX IF NOT EXISTS features_geom_idx ON features USING RTREE (geometry)
@@ -147,6 +158,7 @@ async function wipeSchema(): Promise<void> {
 	await conn.query('DROP INDEX IF EXISTS features_geom_idx');
 	await conn.query('DROP TABLE IF EXISTS features');
 	await conn.query('DROP TABLE IF EXISTS datasets');
+	await conn.query('DROP TABLE IF EXISTS operations');
 	await conn.query('DROP TABLE IF EXISTS meta');
 }
 
@@ -346,6 +358,41 @@ export async function clearOPFS(): Promise<void> {
 	try { if (db) { await db.terminate(); db = null; } } catch { /* ignore */ }
 	await deleteOPFSFile();
 	location.reload();
+}
+
+/**
+ * Export the raw OPFS database file as a Uint8Array for download.
+ * Checkpoints the WAL first to ensure all data is flushed.
+ */
+export async function exportOPFSFile(): Promise<Uint8Array> {
+	if (storageMode !== 'opfs') {
+		throw new Error('Cannot export: database is not using OPFS persistence');
+	}
+	await checkpoint();
+	const root = await navigator.storage.getDirectory();
+	const fileHandle = await root.getFileHandle(OPFS_FILE_NAME);
+	const file = await fileHandle.getFile();
+	const buffer = await file.arrayBuffer();
+	return new Uint8Array(buffer);
+}
+
+/**
+ * Import a database file into OPFS, replacing the current session.
+ * Closes the current DB and writes the uploaded file. Does NOT reload —
+ * the main thread handles location.reload() after this resolves.
+ */
+export async function importOPFSFile(buffer: Uint8Array): Promise<void> {
+	// Close current DB
+	try { if (conn) { await conn.close(); conn = null; } } catch { /* ignore */ }
+	try { if (db) { await db.terminate(); db = null; } } catch { /* ignore */ }
+
+	// Replace the OPFS file
+	await deleteOPFSFile();
+	const root = await navigator.storage.getDirectory();
+	const fileHandle = await root.getFileHandle(OPFS_FILE_NAME, { create: true });
+	const writable = await fileHandle.createWritable();
+	await writable.write(buffer.buffer as ArrayBuffer);
+	await writable.close();
 }
 
 /**

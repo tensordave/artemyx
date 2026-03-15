@@ -303,3 +303,11 @@ export function removeFeatureHandlers(layerIds: string[]): void {
 export function clearAllFeatureHandlers(): void {
 	hoverRegistry.clear();
 }
+
+/**
+ * Read the tooltip fields configured for a layer.
+ * Used by the config generator to reconstruct tooltip config from runtime state.
+ */
+export function getTooltipFields(layerId: string): string[] | undefined {
+	return hoverRegistry.get(layerId)?.fields;
+}

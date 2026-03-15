@@ -7,7 +7,7 @@
  */
 
 // Core operations (via worker RPC)
-export { startInit, ensureInit, getStorageMode, getFallbackReason, setFallbackReason, hasExistingOPFSData, clearOPFS, getInitLog, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig } from './db/client';
+export { startInit, ensureInit, getStorageMode, getFallbackReason, setFallbackReason, hasExistingOPFSData, clearOPFS, exportOPFS, importOPFS, getInitLog, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig } from './db/client';
 export type { FallbackReason } from './db/core';
 
 // Dataset CRUD operations (via worker RPC)
@@ -17,7 +17,7 @@ export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatase
 export { getFeaturesAsGeoJSON, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './db/client';
 
 // Full pipeline operations (worker-side fetch + parse + insert)
-export { loadFromUrl, loadFromBuffer, executeOperationInWorker } from './db/client';
+export { loadFromUrl, loadFromBuffer, executeOperationInWorker, getOperations, clearOperations, saveOperationMetadata } from './db/client';
 
 // Event handler for progress/info/warn forwarding from worker
 export { setEventHandler } from './db/client';

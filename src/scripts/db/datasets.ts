@@ -424,6 +424,7 @@ export async function deleteAllDatasets(): Promise<void> {
 	const connection = await getConnection();
 	await connection.query('DELETE FROM features');
 	await connection.query('DELETE FROM datasets');
+	await connection.query('DELETE FROM operations');
 	await checkpoint();
 	await vacuum();
 }
@@ -444,6 +445,11 @@ export async function deleteDataset(datasetId: string): Promise<boolean> {
 		const deleteDatasets = await connection.prepare('DELETE FROM datasets WHERE id = ?');
 		await deleteDatasets.query(datasetId);
 		await deleteDatasets.close();
+
+		// Remove operation metadata if this was an operation output
+		const deleteOp = await connection.prepare('DELETE FROM operations WHERE output_id = ?');
+		await deleteOp.query(datasetId);
+		await deleteOp.close();
 
 		console.log(`[DuckDB] Successfully deleted dataset ${datasetId} and all associated features`);
 		// Checkpoint (OPFS) then vacuum to reclaim freed pages.
@@ -512,5 +518,64 @@ export async function updateDatasetStyle(datasetId: string, style: StyleConfig):
 		console.error('Failed to update dataset style:', error);
 		return false;
 	}
+}
+
+// ── Operation metadata ──────────────────────────────────────────────────────
+
+import type { OperationRecord } from './worker-types';
+export type { OperationRecord } from './worker-types';
+
+/**
+ * Get all persisted operation metadata, ordered by execution order.
+ */
+export async function getOperations(): Promise<OperationRecord[]> {
+	try {
+		const connection = await getConnection();
+		const result = await connection.query(
+			'SELECT * FROM operations ORDER BY exec_order ASC'
+		);
+		return result.toArray().map((row: any) => ({
+			output_id: row.output_id,
+			type: row.type,
+			inputs_json: row.inputs_json,
+			params_json: row.params_json,
+			exec_order: Number(row.exec_order),
+		}));
+	} catch (error) {
+		console.error('Failed to query operations:', error);
+		return [];
+	}
+}
+
+/**
+ * Save a single operation's metadata. Used by the OPFS restore path to
+ * re-populate the operations table after clearOperations() wiped it.
+ */
+export async function saveOperationMetadata(
+	outputId: string,
+	type: string,
+	inputsJson: string,
+	paramsJson: string | null,
+	execOrder: number
+): Promise<void> {
+	const connection = await getConnection();
+	const stmt = await connection.prepare(`
+		INSERT INTO operations (output_id, type, inputs_json, params_json, exec_order)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (output_id) DO UPDATE SET
+			type = EXCLUDED.type, inputs_json = EXCLUDED.inputs_json,
+			params_json = EXCLUDED.params_json, exec_order = EXCLUDED.exec_order
+	`);
+	await stmt.query(outputId, type, inputsJson, paramsJson, execOrder);
+	await stmt.close();
+}
+
+/**
+ * Clear all operation metadata. Called at the start of each config pipeline run
+ * so exec_order resets cleanly.
+ */
+export async function clearOperations(): Promise<void> {
+	const connection = await getConnection();
+	await connection.query('DELETE FROM operations');
 }
 

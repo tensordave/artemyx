@@ -41,8 +41,11 @@ export { warningIcon } from './warning';                     // Safari unsupport
 // Config control
 export { playIcon } from './play';                           // run config button
 export { eraserIcon } from './eraser';                       // clear all data button
+export { magicWandIcon } from './magic-wand';                // generate config from session
+export { exportIcon } from './export';                       // export config menu
 
 // Roadmap: future features
+export { downloadIcon } from './download';                   // export data from layer context menu
 export { downloadSimpleIcon } from './download-simple';    // export datasets
 export { codeBlockIcon } from './code-block';                         // YAML snippet runner
 export { fileCodeIcon } from './file-code';                // export config

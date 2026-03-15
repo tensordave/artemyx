@@ -208,6 +208,24 @@ export interface LoadFromBufferRequest extends RequestBase {
 export interface ExecuteOperationRequest extends RequestBase {
 	type: 'executeOperation';
 	op: OperationConfig;
+	execOrder: number;
+}
+
+export interface GetOperationsRequest extends RequestBase {
+	type: 'getOperations';
+}
+
+export interface ClearOperationsRequest extends RequestBase {
+	type: 'clearOperations';
+}
+
+export interface SaveOperationMetadataRequest extends RequestBase {
+	type: 'saveOperationMetadata';
+	outputId: string;
+	opType: string;
+	inputsJson: string;
+	paramsJson: string | null;
+	execOrder: number;
 }
 
 export interface SaveConfigRequest extends RequestBase {
@@ -224,6 +242,15 @@ export interface GetSavedConfigRequest extends RequestBase {
 export interface DeleteSavedConfigRequest extends RequestBase {
 	type: 'deleteSavedConfig';
 	configPath: string;
+}
+
+export interface ExportOPFSRequest extends RequestBase {
+	type: 'exportOPFS';
+}
+
+export interface ImportOPFSRequest extends RequestBase {
+	type: 'importOPFS';
+	buffer: ArrayBuffer;
 }
 
 // ── CRS prompt response (main -> worker, no requestId) ──────────────────────
@@ -268,9 +295,14 @@ export type WorkerRequest =
 	| LoadFromUrlRequest
 	| LoadFromBufferRequest
 	| ExecuteOperationRequest
+	| GetOperationsRequest
+	| ClearOperationsRequest
+	| SaveOperationMetadataRequest
 	| SaveConfigRequest
 	| GetSavedConfigRequest
-	| DeleteSavedConfigRequest;
+	| DeleteSavedConfigRequest
+	| ExportOPFSRequest
+	| ImportOPFSRequest;
 
 // ── Response types (worker -> main, correlated by requestId) ────────────────
 
@@ -380,4 +412,14 @@ export interface InitResult {
 	fallbackReason: FallbackReason;
 	hasExistingData: boolean;
 	initLog: InitLogEntry[];
+}
+
+// ── Operation metadata record (persisted in DuckDB operations table) ────────
+
+export interface OperationRecord {
+	output_id: string;
+	type: string;
+	inputs_json: string;
+	params_json: string | null;
+	exec_order: number;
 }

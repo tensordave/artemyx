@@ -86,6 +86,8 @@ export interface DatasetConfig {
 	paginate?: boolean | { maxPages?: number };
 	/** Explicit source CRS override (e.g. 'EPSG:3005'). Takes priority over file-detected CRS and map.crs. */
 	crs?: string;
+	/** Original filename for file-uploaded datasets (preserved through YAML round-trips since comments are stripped) */
+	sourceFile?: string;
 }
 
 import type { ConfigFormat } from '../loaders/types';

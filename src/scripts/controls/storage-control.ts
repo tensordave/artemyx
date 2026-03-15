@@ -1,6 +1,6 @@
 import maplibregl from 'maplibre-gl';
-import { databaseIcon, crosshairIcon, trashIcon } from '../icons';
-import { getStorageMode, getFallbackReason, clearOPFS, clearCachedViewport, getCachedViewport } from '../db';
+import { databaseIcon, crosshairIcon, trashIcon, downloadSimpleIcon, fileArrowUpIcon } from '../icons';
+import { getStorageMode, getFallbackReason, clearOPFS, exportOPFS, importOPFS, clearCachedViewport, getCachedViewport } from '../db';
 import type { FallbackReason } from '../db';
 
 function formatBytes(bytes: number): string {
@@ -241,6 +241,11 @@ export class StorageControl implements maplibregl.IControl {
 		divider.className = 'storage-divider';
 		this.panel.appendChild(divider);
 
+		// Export/Import row (OPFS active only)
+		if (mode === 'opfs' && !isError) {
+			this.addExportImportRow();
+		}
+
 		// Clear Session button (OPFS or error state — not for disabled/demo maps)
 		if (reason !== 'disabled') {
 			if (isError) {
@@ -271,6 +276,122 @@ export class StorageControl implements maplibregl.IControl {
 		} catch {
 			el.textContent = 'Storage estimate unavailable';
 		}
+	}
+
+	/**
+	 * Add Import/Export row for OPFS database portability.
+	 */
+	private addExportImportRow(): void {
+		if (!this.panel) return;
+
+		const row = document.createElement('div');
+		row.className = 'storage-action-row';
+
+		// ── Import button ──
+		const importBtn = document.createElement('button');
+		importBtn.className = 'storage-action-btn';
+		importBtn.innerHTML = `${fileArrowUpIcon} Import`;
+		importBtn.title = 'Import a database file to restore a session';
+
+		let pendingFile: File | null = null;
+		let confirmPending = false;
+		let fileLabel: HTMLDivElement | null = null;
+
+		const showFileLabel = (name: string) => {
+			removeFileLabel();
+			fileLabel = document.createElement('div');
+			fileLabel.className = 'storage-detail storage-import-filename';
+			fileLabel.textContent = name;
+			row.parentNode?.insertBefore(fileLabel, row);
+		};
+
+		const removeFileLabel = () => {
+			if (fileLabel) {
+				fileLabel.remove();
+				fileLabel = null;
+			}
+		};
+
+		importBtn.addEventListener('click', () => {
+			if (confirmPending && pendingFile) {
+				// Second click: execute import
+				importBtn.textContent = 'Importing...';
+				importBtn.disabled = true;
+				removeFileLabel();
+				pendingFile.arrayBuffer().then((buffer) => {
+					importOPFS(buffer); // reloads page
+				}).catch((err) => {
+					console.warn('[Storage] Import failed:', err);
+					importBtn.disabled = false;
+					resetImportBtn();
+				});
+				return;
+			}
+
+			// First click: open file picker
+			const input = document.createElement('input');
+			input.type = 'file';
+			input.accept = '.db';
+			input.addEventListener('change', () => {
+				const file = input.files?.[0];
+				if (!file) return;
+
+				pendingFile = file;
+				confirmPending = true;
+				showFileLabel(file.name);
+				importBtn.innerHTML = `${fileArrowUpIcon} Replace`;
+				importBtn.classList.add('storage-action-btn--confirm');
+
+				setTimeout(() => {
+					if (confirmPending) {
+						confirmPending = false;
+						pendingFile = null;
+						resetImportBtn();
+					}
+				}, 10000);
+			});
+			input.click();
+		});
+
+		const resetImportBtn = () => {
+			importBtn.innerHTML = `${fileArrowUpIcon} Import`;
+			importBtn.classList.remove('storage-action-btn--confirm');
+			removeFileLabel();
+		};
+
+		row.appendChild(importBtn);
+
+		// ── Export button ──
+		const exportBtn = document.createElement('button');
+		exportBtn.className = 'storage-action-btn';
+		exportBtn.innerHTML = `${downloadSimpleIcon} Export`;
+		exportBtn.title = 'Export database file for backup or transfer';
+
+		exportBtn.addEventListener('click', async () => {
+			exportBtn.textContent = 'Exporting...';
+			exportBtn.disabled = true;
+			try {
+				const bytes = await exportOPFS();
+				const date = new Date().toISOString().slice(0, 10);
+				const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/octet-stream' });
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = `artemyx-${date}.db`;
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			} catch (err) {
+				console.warn('[Storage] Export failed:', err);
+			} finally {
+				exportBtn.innerHTML = `${downloadSimpleIcon} Export`;
+				exportBtn.disabled = false;
+			}
+		});
+
+		row.appendChild(exportBtn);
+		this.panel.appendChild(row);
 	}
 
 	/**

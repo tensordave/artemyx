@@ -47,6 +47,16 @@
 	gap: 6px;
 }
 
+.storage-import-filename {
+	font-style: italic;
+	word-break: break-all;
+	margin-bottom: 6px;
+}
+
+.storage-action-row + .storage-action-row {
+	margin-top: 6px;
+}
+
 .storage-action-row .storage-action-btn {
 	flex: 1;
 }
@@ -62,6 +72,9 @@
 	font-size: 12px;
 	font-family: inherit;
 	transition: background-color 0.15s ease, border-color 0.15s ease;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .maplibregl-ctrl .storage-action-btn:hover {
@@ -73,6 +86,12 @@
 	background-color: #d32f2f;
 	border-color: #b71c1c;
 	color: #fff;
+	animation: confirm-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes confirm-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.7; }
 }
 
 .maplibregl-ctrl .storage-action-btn--confirm:hover {
@@ -107,6 +126,14 @@
 .maplibregl-ctrl .storage-action-btn--icon:hover svg,
 .maplibregl-ctrl .storage-action-btn--icon.storage-action-btn--confirm svg {
 	fill: #fff;
+}
+
+.maplibregl-ctrl .storage-action-btn svg {
+	width: 14px;
+	height: 14px;
+	fill: currentColor;
+	vertical-align: -2px;
+	flex-shrink: 0;
 }
 
 .maplibregl-ctrl .storage-action-btn:disabled {

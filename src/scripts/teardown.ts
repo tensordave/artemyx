@@ -4,7 +4,7 @@
  */
 
 import type { Map } from 'maplibre-gl';
-import { getDatasets, deleteAllDatasets } from './db';
+import { getDatasets, deleteAllDatasets, deleteDataset } from './db';
 import { getLayersBySource, getSourceId } from './layers';
 import { clearAllFeatureHandlers } from './controls/popup';
 import type { ProgressControl } from './controls/progress-control';
@@ -15,17 +15,19 @@ export interface TeardownOptions {
 	progressControl: ProgressControl;
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
+	/** When true, file-uploaded datasets (file:// source) are kept in DuckDB. */
+	preserveFileUploads?: boolean;
 }
 
 export async function teardownAll(options: TeardownOptions): Promise<void> {
-	const { map, progressControl, layerToggleControl, loadedDatasets } = options;
+	const { map, progressControl, layerToggleControl, loadedDatasets, preserveFileUploads } = options;
 
 	progressControl.updateProgress('teardown', 'processing', 'Clearing all data...');
 
 	// 1. Get all datasets before deleting from DB
 	const datasets = await getDatasets();
 
-	// 2. Remove all MapLibre layers and sources for each dataset
+	// 2. Remove all MapLibre layers and sources for every dataset (clean visual slate)
 	for (const dataset of datasets) {
 		const sourceId = getSourceId(dataset.id);
 		const layers = getLayersBySource(map, sourceId);
@@ -40,10 +42,20 @@ export async function teardownAll(options: TeardownOptions): Promise<void> {
 	// 3. Clear all hover/click handler registrations
 	clearAllFeatureHandlers();
 
-	// 4. Delete all data from DuckDB (single bulk operation)
-	await deleteAllDatasets();
+	// 4. Delete datasets from DuckDB
+	if (preserveFileUploads) {
+		// Selectively delete only non-file datasets; file uploads stay in DB
+		for (const dataset of datasets) {
+			const src: string | null = dataset.source_url;
+			if (!src || !src.startsWith('file://')) {
+				await deleteDataset(dataset.id);
+			}
+		}
+	} else {
+		await deleteAllDatasets();
+	}
 
-	// 5. Clear the loadedDatasets tracking set
+	// 5. Clear the loadedDatasets tracking set (preserved uploads re-added during restore)
 	loadedDatasets.clear();
 
 	// 6. Refresh layer panel to show empty state

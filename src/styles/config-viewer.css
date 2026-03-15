@@ -163,8 +163,13 @@
 .config-viewer-highlight {
 	position: absolute;
 	inset: 0;
-	overflow: hidden;
+	overflow: auto;
 	pointer-events: none;
+	scrollbar-width: none;
+}
+
+.config-viewer-highlight::-webkit-scrollbar {
+	display: none;
 }
 
 .config-viewer-highlight pre {
@@ -208,6 +213,12 @@
 	overflow-wrap: normal;
 	word-wrap: normal;
 	overflow-x: auto;
+	overflow-y: auto;
+}
+
+.config-viewer-textarea::selection {
+	background: rgba(56, 136, 255, 0.35);
+	-webkit-text-fill-color: transparent;
 }
 
 @media (max-width: 767px) {

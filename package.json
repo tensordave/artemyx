@@ -1,7 +1,7 @@
 {
   "name": "artemyx",
   "type": "module",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
@@ -14,7 +14,8 @@
     "@duckdb/duckdb-wasm": "^1.33.1-dev18.0",
     "@maplibre/maplibre-gl-style-spec": "^24.6.0",
     "@types/js-yaml": "^4.0.9",
-    "astro": "^5.18.0",
+    "astro": "^6.0.4",
+    "fflate": "^0.8.2",
     "js-yaml": "^4.1.1",
     "maplibre-gl": "^5.17.0"
   },

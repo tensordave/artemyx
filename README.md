@@ -17,12 +17,12 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - Interactive mapping with switchable basemaps (CARTO, Satellite)
 - Multi-dataset support with layer management UI (visibility, color, rename, delete, per-layer style panel with labels)
 - Auto-generated legend from active layer styles (color swatches, gradient ramps, category entries)
-- YAML-driven configuration with in-browser editor (live syntax highlighting, edit/run/clear/import)
+- YAML-driven configuration with in-browser editor (live syntax highlighting, edit/run/clear/import/generate/export)
 - Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
 - Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays) with paginated fetching
 - Local file upload via drag-and-drop or file picker
 - CRS detection and automatic reprojection to WGS84
-- OPFS persistence - sessions survive page refresh, with viewport restore
+- OPFS persistence - sessions survive page refresh, with viewport restore and database export/import for portable sessions
 - Multi-geometry rendering (Point, LineString, Polygon, Multi* variants)
 - Address search via Photon geocoding (OSM data, no API key)
 - Scale bar (metric/imperial) and mouse coordinate display (decimal degrees / DMS toggle)
@@ -46,6 +46,9 @@ src/scripts/
 │   ├── validators/    # Domain-specific validation (datasets, operations, layers, shared)
 │   ├── operations-graph.ts  # Dependency resolution, topological sort
 │   ├── executor.ts    # Spatial operation execution
+│   ├── generator.ts   # Generate YAML config from current session state
+│   ├── export-config.ts    # Export config as YAML file download
+│   ├── export-viewer.ts    # Export viewer-ready ZIP (config + data files)
 │   └── operations/    # One file per operation (buffer, intersection, union, ...) + shared render.ts
 ├── db/                # DuckDB-WASM (runs in Web Worker)
 │   ├── worker.ts      # Module worker entry point, message dispatch, full load pipeline
@@ -78,16 +81,16 @@ src/scripts/
 │   ├── layers.ts      # addLayerFromConfig, executeLayersFromConfig
 │   └── sources.ts     # Source management
 ├── layer-actions/     # Layer control UI handlers
-│   ├── color.ts, style.ts, labels.ts, visibility.ts, delete.ts  # Action handlers
+│   ├── color.ts, style.ts, labels.ts, visibility.ts, delete.ts, export.ts  # Action handlers
 │   ├── context-menu.ts, context-menu-items.ts         # Context menu
 │   └── layer-row.ts   # Row DOM, inline rename
 ├── controls/          # MapLibre custom map controls
 │   ├── data-control.ts       # Load data from URL with advanced options (CRS, format, columns)
 │   ├── upload-control.ts     # Local file upload (drag-and-drop, file picker)
-│   ├── config-control.ts     # Config editor (edit, run, clear, import) with live Shiki highlighting
+│   ├── config-control.ts     # Config editor (edit, run, clear, import, generate, export) with live Shiki highlighting
 │   ├── layer-control.ts      # Layer visibility, color, rename, delete, reorder
 │   ├── legend-control.ts     # Auto-generated legend from active layer styles
-│   ├── storage-control.ts    # OPFS status and session management
+│   ├── storage-control.ts    # OPFS status, session management, database export/import
 │   ├── geocoding-control.ts  # Address search via Photon geocoding
 │   ├── basemap-control.ts    # Basemap switcher
 │   ├── scale-control.ts      # Scale bar, coordinate display (DD/DMS)

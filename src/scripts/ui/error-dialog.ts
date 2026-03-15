@@ -156,6 +156,103 @@ export function showCrsPromptDialog(): Promise<string | null> {
 }
 
 /**
+ * Show a file picker dialog for a missing local dataset.
+ * Returns the selected File, or null if skipped.
+ */
+export function showFilePromptDialog(
+	datasetName: string,
+	filenameHint?: string
+): Promise<File | null> {
+	return new Promise((resolve) => {
+		const overlay = document.createElement('div');
+		overlay.className = 'dialog-overlay';
+
+		const dialog = document.createElement('div');
+		dialog.className = 'dialog-box';
+
+		const titleEl = document.createElement('div');
+		titleEl.className = 'dialog-title dialog-title--warn';
+		titleEl.textContent = 'Missing Dataset';
+		dialog.appendChild(titleEl);
+
+		const messageEl = document.createElement('div');
+		messageEl.className = 'dialog-message';
+		const hint = filenameHint ? ` (${filenameHint})` : '';
+		messageEl.textContent = `The dataset "${datasetName}" requires a local file${hint}. Select the file to load it, or skip to continue without it.`;
+		dialog.appendChild(messageEl);
+
+		// Selected file display
+		const fileLabel = document.createElement('div');
+		fileLabel.className = 'dialog-file-label';
+		dialog.appendChild(fileLabel);
+
+		// Hidden file input
+		const fileInput = document.createElement('input');
+		fileInput.type = 'file';
+		fileInput.accept = '.geojson,.json,.csv,.parquet,.geoparquet';
+		fileInput.style.display = 'none';
+		dialog.appendChild(fileInput);
+
+		const buttonRow = document.createElement('div');
+		buttonRow.className = 'dialog-button-row';
+
+		const skipButton = document.createElement('button');
+		skipButton.className = 'dialog-btn';
+		skipButton.textContent = 'Skip';
+
+		const chooseButton = document.createElement('button');
+		chooseButton.className = 'dialog-btn dialog-btn--primary';
+		chooseButton.textContent = 'Choose File';
+
+		let selectedFile: File | null = null;
+
+		const close = (result: File | null) => {
+			document.removeEventListener('keydown', handleKeydown);
+			document.body.removeChild(overlay);
+			resolve(result);
+		};
+
+		skipButton.addEventListener('click', () => close(null));
+
+		chooseButton.addEventListener('click', () => {
+			if (selectedFile) {
+				close(selectedFile);
+			} else {
+				fileInput.click();
+			}
+		});
+
+		fileInput.addEventListener('change', () => {
+			const file = fileInput.files?.[0];
+			if (file) {
+				selectedFile = file;
+				fileLabel.textContent = file.name;
+				chooseButton.textContent = 'Load';
+			}
+		});
+
+		const handleKeydown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				close(null);
+			}
+		};
+		document.addEventListener('keydown', handleKeydown);
+
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) close(null);
+		});
+
+		buttonRow.appendChild(skipButton);
+		buttonRow.appendChild(chooseButton);
+		dialog.appendChild(buttonRow);
+		overlay.appendChild(dialog);
+		document.body.appendChild(overlay);
+
+		chooseButton.focus();
+	});
+}
+
+/**
  * Show a styled confirmation dialog as a modal overlay.
  * Returns true if the user confirms, false if they cancel.
  */

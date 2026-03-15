@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.6.2 - 2026-03-14
+
+### Config Generation
+
+- **Generate config from session** (`config/generator.ts`): MagicWand button in ConfigControl toolbar reads current map state and serializes to YAML; reads map center/zoom/basemap, all datasets from DuckDB with metadata (color, style, hidden, CRS), diffs each dataset's style against `DEFAULT_STYLE` to emit only non-default fields; populates the config editor textarea in edit mode so users can review, tweak, and re-run
+- **Generate layers from expressions** (`config/generator.ts`): when the session has explicit or expression-driven MapLibre layers, the generator emits a `layers:` section with paint/layout/filter/tooltip/zoom properties read back from MapLibre's runtime style; default auto-generated layers (fill/line/circle) with only flat values are omitted since they're covered by the dataset `style:` key; datasets fully covered by explicit layers have their `style:` key suppressed to avoid redundancy; default geometry-type filters stripped from output for cleanliness; tooltip fields recovered from the hover registry via new `getTooltipFields()` export in `popup.ts`
+- **Operations data reconstruction** (`db/core.ts`, `db/worker.ts`, `config/generator.ts`, `config/executor.ts`): new `operations` table in DuckDB (schema version bumped to `4`) persists operation metadata (type, params, inputs, exec_order) when operations execute; centralized write in `workerExecuteOperation()` after the compute switch so individual operation files are untouched; config generator reads the operations table to reconstruct the full `operations:` YAML section with correct unary/binary input keys, excluding operation outputs from the `datasets:` section; operation color/style read from the `datasets` table (not the operations table) so runtime GUI changes are reflected in generated configs; `clearOperations()` resets ordering at the start of each config pipeline run; `saveOperationMetadata()` re-populates the table on OPFS restore (where operations skip recomputation)
+- **File upload and operation output handling**: file-uploaded datasets (`file://` source URLs) emitted with `url: ""` and a YAML comment showing the original filename; operation outputs excluded from datasets section entirely (moved to `operations:`)
+- **File upload source comments** (`config/generator.ts`): replaced fragile `indexOf`-based comment insertion with a line-based approach; walks YAML lines to find `- id:` then scans forward for the matching `url: ""` line within the same block; handles both quoted and unquoted ID values
+- **Style round-trip**: stored `StyleConfig` JSON from DuckDB used as authoritative source for user-modified styles (opacity, width, radius, labels, zoom ranges); only non-default values serialized to keep generated YAML clean
+- **Basemap getter** (`map.ts`): `getBasemapId` callback wired from `BasemapControl.getCurrentBasemapId()` into `ConfigControlOptions` so the generator can read the active basemap
+
+### Prompt for Missing Local Datasets
+
+- **File prompt dialog** (`ui/error-dialog.ts`): new `showFilePromptDialog()` prompts users to provide a local file when a config references a dataset that isn't available in the current session; shows dataset name and original filename hint; user can pick a file or skip to continue without it
+- **Local dataset detection** (`data-actions/load-config.ts`): broadened the file-upload placeholder check to also catch relative paths (`./data/...`) from viewer config exports; both `url: ""` and `url: ./data/file.geojson` now trigger the file prompt instead of silently skipping or failing validation
+- **Relative path validation** (`config/validators/datasets.ts`): `./` and `../` relative paths are now accepted as valid URL values, allowing viewer config exports to pass validation when imported standalone
+- **sourceFile field** (`config/types.ts`, `config/generator.ts`): new optional `sourceFile` field on `DatasetConfig` preserves the original filename through YAML round-trips (since YAML comments are stripped by parsers); emitted by the config generator for file-uploaded datasets
+- **Enhanced loadDataFromFile** (`data-actions/load-file.ts`): wired `skipFitBounds`, `hidden`, and `skipErrorDialog` options so file loading can be used from the config pipeline with the same controls as URL loading
+
+### Preserve Local Datasets on Re-Run
+
+- **Selective teardown** (`teardown.ts`): `preserveFileUploads` option on `TeardownOptions`; when true, removes all MapLibre layers/sources (clean visual slate) but only deletes non-`file://` datasets from DuckDB; file-uploaded datasets survive in the database for re-rendering; ConfigControl's Run uses selective teardown, Clear still wipes everything
+- **DuckDB restore for empty-URL datasets** (`data-actions/load-config.ts`): datasets with `url: ""` (file-upload placeholders) attempt DuckDB restore via the existing `datasetExists()` path before skipping; handles both re-run (data preserved by selective teardown) and page refresh (data in OPFS)
+- **Empty URL validation** (`config/validators/datasets.ts`): parser now accepts `url: ""` as valid, allowing generated configs with file-upload placeholders to be re-run without validation errors
+- **Shared restore helper** (`map.ts`): extracted `restoreNonConfigDatasets(config)` from the former `restoreManualDatasets()`; accepts config as a parameter; reused for both OPFS session restore at startup and post-re-run file-upload restore
+
+### OPFS Restore Improvements
+
+- **Operation style from OPFS** (`config/executor.ts`): OPFS restore path for operations now reads color and style from the DuckDB `datasets` table (via `parseDatasetStyle`) instead of the config's `op.style`; runtime GUI changes to operation output styling survive page refresh
+- **Paint restoration sweep** (`layers/layers.ts`, `map.ts`): new `restoreStoredPaint()` function re-applies OPFS-stored color, opacity, line width, and point radius to all MapLibre layers after `executeLayersFromConfig()` creates explicit layers from config; skips expression-driven paint properties; called in the post-pipeline sweep alongside visibility and label restoration
+
+### Dependency Updates
+
+- **Astro v6** (`package.json`): upgraded from Astro v5.18 to v6.0.4
+
+### Export and Portability
+
+- **Export/import OPFS database** (`db/core.ts`, `db/worker.ts`, `db/client.ts`, `controls/storage-control.ts`): Import and Export buttons in the StorageControl panel (OPFS mode only); Export checkpoints the WAL and reads the raw `gis_app.db` file from OPFS, triggers a browser download as `artemyx-YYYY-MM-DD.db`; Import opens a file picker, shows the selected filename above the buttons, and confirms with a pulsing red "Replace" button (10s auto-revert); on confirm, the worker closes the current DB, writes the uploaded file to OPFS, and the page reloads - `tryOpenOPFS()` handles schema validation on reinit; enables portable sessions across browsers, machines, or cleared storage; zero-copy Transferable buffer for both directions via worker RPC
+- **Export GeoJSON from layer menu** (`layer-actions/export.ts`, `layer-actions/context-menu-items.ts`, `controls/layer-control.ts`): download icon in the layer context menu exports any dataset (source or operation result) as a `.geojson` file; queries DuckDB via existing `getFeaturesAsGeoJSON()` worker RPC, creates a Blob download with sanitized filename; progress feedback via ProgressControl
+- **Export config and viewer config** (`config/export-config.ts`, `config/export-viewer.ts`, `controls/config-control.ts`): new export button in ConfigControl toolbar with a dropdown menu offering two actions; "Export Config" downloads the current panel YAML as a `.yaml` file; "Export Viewer (.zip)" builds a flattened config (datasets + layers, no operations section) bundled with GeoJSON data files for all operation results and file-uploaded datasets; operation outputs become regular dataset entries with `url: ./data/<name>.geojson`; file-uploaded sources included in the zip so the bundle is self-contained; hidden source datasets excluded unless referenced by an explicit layer; uses `fflate` for client-side zip creation; dropdown reuses existing context-menu CSS styling
+
+### Config Editor UX
+
+- **Edit mode scroll sync** (`config-viewer.css`, `config-control.ts`): highlight layer changed from `overflow: hidden` to `overflow: auto` with hidden scrollbars so programmatic scroll sync works on a genuinely scrollable container; textarea gets explicit `overflow-y: auto` for consistent cross-browser behavior; scroll sync uses proportional scrolling so the textarea and highlight layer reach their bottom simultaneously, fixing an off-by-one-row misalignment caused by Shiki's `<pre><code>` having a slightly different scrollHeight
+- **Edit mode text selection** (`config-viewer.css`): added `::selection` pseudo-element to the transparent textarea with a semi-transparent blue background (`rgba(56, 136, 255, 0.35)`), making text selection visible over the syntax-highlighted layer; previously selection was invisible because both text color and fill were transparent
+- **Import/generate auto-expand** (`config-control.ts`): `autoExpandPanel()` now accepts a `maxRatio` parameter (default 0.6); import and generate operations pass 0.85, allowing the panel to expand up to 85vh for large configs instead of capping at 60vh; panel repositions upward when expansion would overflow below the viewport
+- **Button tooltip**: main control button tooltip changed from "View config" to "Config Editor"
+
+### Bug Fixes
+
+- **File upload dataset name** (`data-actions/load-file.ts`): file uploads now pass the stripped filename as the dataset name to the worker; previously the name fell back to `extractDatasetName()` on a synthetic `file://` URL, which parsed the filename as a hostname and included the extension
+- **Local file format detection** (`loaders/detect.ts`, `db/worker.ts`): `workerLoadFromBuffer` was calling URL-based `detectFormat()` on bare filenames (e.g. `data.parquet`); `new URL()` threw on non-URL strings, all detection paths failed silently, and format fell through to `geojson` default - causing `JSON.parse` on binary parquet data; added `detectFormatFromFilename()` for extension-based detection without URL parsing
+
 ## v0.6.1 - 2026-03-11
 
 ### Config Control

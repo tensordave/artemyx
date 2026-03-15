@@ -1,7 +1,10 @@
 import type { Map, IControl } from 'maplibre-gl';
 import type { Highlighter } from 'shiki';
 import { getSingletonHighlighter } from 'shiki';
-import { codeBlockIcon, playIcon, pencilIcon, eraserIcon, trashIcon, fileArrowUpIcon } from '../icons';
+import { codeBlockIcon, playIcon, pencilIcon, eraserIcon, trashIcon, fileArrowUpIcon, magicWandIcon, exportIcon, fileCodeIcon, downloadSimpleIcon } from '../icons';
+import { generateConfigYaml } from '../config/generator';
+import { exportConfigYaml } from '../config/export-config';
+import { exportViewerZip } from '../config/export-viewer';
 
 let highlighterPromise: Promise<Highlighter> | null = null;
 let highlighterInstance: Highlighter | null = null;
@@ -33,6 +36,7 @@ async function highlightAsync(yaml: string): Promise<string> {
 export interface ConfigControlOptions {
 	onRun?: (yamlText?: string) => Promise<void>;
 	onClear?: () => Promise<void>;
+	getBasemapId?: () => string;
 }
 
 /**
@@ -55,6 +59,10 @@ export class ConfigControl implements IControl {
 
 	private editBtn: HTMLButtonElement | null = null;
 	private importBtn: HTMLButtonElement | null = null;
+	private generateBtn: HTMLButtonElement | null = null;
+	private exportBtn: HTMLButtonElement | null = null;
+	private exportDropdown: HTMLDivElement | null = null;
+	private exportDropdownCloseHandler: ((e: MouseEvent) => void) | null = null;
 	private runBtn: HTMLButtonElement | null = null;
 	private clearBtn: HTMLButtonElement | null = null;
 	private bodyEl: HTMLDivElement | null = null;
@@ -128,7 +136,7 @@ export class ConfigControl implements IControl {
 		const btn = document.createElement('button');
 		btn.type = 'button';
 		btn.className = 'control-btn';
-		btn.title = 'View config';
+		btn.title = 'Config Editor';
 		btn.innerHTML = codeBlockIcon;
 		btn.addEventListener('click', () => this.toggle());
 		this.container.appendChild(btn);
@@ -147,6 +155,7 @@ export class ConfigControl implements IControl {
 		if (this.highlightRafId) cancelAnimationFrame(this.highlightRafId);
 		if (this.boundPointerMove) document.removeEventListener('pointermove', this.boundPointerMove);
 		if (this.boundPointerUp) document.removeEventListener('pointerup', this.boundPointerUp);
+		this.closeExportDropdown();
 		this.panel?.remove();
 		this.container?.remove();
 		this.map = null;
@@ -154,6 +163,8 @@ export class ConfigControl implements IControl {
 		this.panel = null;
 		this.editBtn = null;
 		this.importBtn = null;
+		this.generateBtn = null;
+		this.exportBtn = null;
 		this.runBtn = null;
 		this.clearBtn = null;
 		this.bodyEl = null;
@@ -209,6 +220,24 @@ export class ConfigControl implements IControl {
 		this.fileInput.style.display = 'none';
 		this.fileInput.addEventListener('change', () => this.handleImport());
 		panel.appendChild(this.fileInput);
+
+		// Generate button
+		this.generateBtn = document.createElement('button');
+		this.generateBtn.type = 'button';
+		this.generateBtn.className = 'config-viewer-action-btn';
+		this.generateBtn.title = 'Generate config from session';
+		this.generateBtn.innerHTML = magicWandIcon;
+		this.generateBtn.addEventListener('click', () => this.handleGenerate());
+		actions.appendChild(this.generateBtn);
+
+		// Export button (dropdown: export config / export viewer zip)
+		this.exportBtn = document.createElement('button');
+		this.exportBtn.type = 'button';
+		this.exportBtn.className = 'config-viewer-action-btn';
+		this.exportBtn.title = 'Export';
+		this.exportBtn.innerHTML = exportIcon;
+		this.exportBtn.addEventListener('click', () => this.toggleExportDropdown());
+		actions.appendChild(this.exportBtn);
 
 		// Run button
 		this.runBtn = document.createElement('button');
@@ -274,8 +303,124 @@ export class ConfigControl implements IControl {
 	private setButtonsDisabled(disabled: boolean): void {
 		if (this.editBtn) this.editBtn.disabled = disabled;
 		if (this.importBtn) this.importBtn.disabled = disabled;
+		if (this.generateBtn) this.generateBtn.disabled = disabled;
+		if (this.exportBtn) this.exportBtn.disabled = disabled;
 		if (this.runBtn) this.runBtn.disabled = disabled;
 		if (this.clearBtn) this.clearBtn.disabled = disabled;
+	}
+
+	private async handleGenerate(): Promise<void> {
+		if (this.isExecuting || !this.map) return;
+		this.setButtonsDisabled(true);
+		try {
+			const basemapId = this.options.getBasemapId?.() ?? 'carto-dark';
+			const yaml = await generateConfigYaml(this.map, basemapId);
+			this.updateConfig(yaml);
+			if (!this.isEditing) this.enterEditMode();
+			const textarea = this.bodyEl?.querySelector('textarea');
+			if (textarea) this.autoExpandPanel(textarea as HTMLTextAreaElement, 0.85);
+		} finally {
+			this.setButtonsDisabled(false);
+		}
+	}
+
+	private toggleExportDropdown(): void {
+		if (this.isExecuting) return;
+		if (this.exportDropdown) {
+			this.closeExportDropdown();
+			return;
+		}
+
+		const dropdown = document.createElement('div');
+		dropdown.className = 'context-menu';
+
+		// Export Config item
+		const configItem = document.createElement('div');
+		configItem.className = 'context-menu-item';
+		const configIconEl = document.createElement('span');
+		configIconEl.className = 'context-menu-icon';
+		configIconEl.innerHTML = fileCodeIcon;
+		configItem.appendChild(configIconEl);
+		configItem.appendChild(document.createTextNode('Export Config'));
+		configItem.addEventListener('click', () => {
+			this.closeExportDropdown();
+			const filenameEl = this.panel?.querySelector('.config-viewer-filename');
+			const name = filenameEl?.textContent?.replace(/\.yaml$/, '') || 'config';
+			exportConfigYaml(this.rawYaml, name);
+		});
+		dropdown.appendChild(configItem);
+
+		// Export Viewer (.zip) item
+		const viewerItem = document.createElement('div');
+		viewerItem.className = 'context-menu-item';
+		const viewerIconEl = document.createElement('span');
+		viewerIconEl.className = 'context-menu-icon';
+		viewerIconEl.innerHTML = downloadSimpleIcon;
+		viewerItem.appendChild(viewerIconEl);
+		viewerItem.appendChild(document.createTextNode('Export Viewer (.zip)'));
+		viewerItem.addEventListener('click', () => {
+			this.closeExportDropdown();
+			this.handleExportViewer();
+		});
+		dropdown.appendChild(viewerItem);
+
+		// Position below the export button
+		document.body.appendChild(dropdown);
+		this.exportDropdown = dropdown;
+
+		requestAnimationFrame(() => {
+			if (!this.exportBtn || !this.exportDropdown) return;
+			const btnRect = this.exportBtn.getBoundingClientRect();
+			const menuRect = this.exportDropdown.getBoundingClientRect();
+
+			let left = btnRect.left;
+			let top = btnRect.bottom + 4;
+
+			// Keep within viewport
+			if (left + menuRect.width > window.innerWidth) {
+				left = btnRect.right - menuRect.width;
+			}
+			if (top + menuRect.height > window.innerHeight) {
+				top = btnRect.top - menuRect.height - 4;
+			}
+
+			this.exportDropdown.style.left = `${left}px`;
+			this.exportDropdown.style.top = `${top}px`;
+		});
+
+		// Click-outside to close (delayed to avoid immediate closure)
+		this.exportDropdownCloseHandler = (e: MouseEvent) => {
+			if (!this.exportDropdown?.contains(e.target as Node)) {
+				this.closeExportDropdown();
+			}
+		};
+		setTimeout(() => {
+			if (this.exportDropdownCloseHandler) {
+				document.addEventListener('click', this.exportDropdownCloseHandler);
+			}
+		}, 10);
+	}
+
+	private closeExportDropdown(): void {
+		if (this.exportDropdown) {
+			this.exportDropdown.remove();
+			this.exportDropdown = null;
+		}
+		if (this.exportDropdownCloseHandler) {
+			document.removeEventListener('click', this.exportDropdownCloseHandler);
+			this.exportDropdownCloseHandler = null;
+		}
+	}
+
+	private async handleExportViewer(): Promise<void> {
+		if (this.isExecuting || !this.map) return;
+		this.setButtonsDisabled(true);
+		try {
+			const basemapId = this.options.getBasemapId?.() ?? 'carto-dark';
+			await exportViewerZip(this.map, basemapId);
+		} finally {
+			this.setButtonsDisabled(false);
+		}
 	}
 
 	private handleImport(): void {
@@ -294,11 +439,13 @@ export class ConfigControl implements IControl {
 				if (textarea) {
 					textarea.value = text;
 					this.updateHighlight(text);
-					this.autoExpandPanel(textarea);
+					this.autoExpandPanel(textarea, 0.85);
 				}
 			} else {
 				// Enter edit mode with imported content
 				this.enterEditMode();
+				const ta = this.bodyEl?.querySelector('textarea');
+				if (ta) this.autoExpandPanel(ta as HTMLTextAreaElement, 0.85);
 			}
 		};
 		reader.readAsText(file);
@@ -346,10 +493,20 @@ export class ConfigControl implements IControl {
 		textarea.value = this.rawYaml;
 		textarea.spellcheck = false;
 
-		// Sync scroll from textarea to highlight layer
+		// Sync scroll from textarea to highlight layer (proportional vertical
+		// scroll so highlight and textarea reach the bottom at the same time,
+		// even if Shiki's <pre> has a slightly different scrollHeight)
 		textarea.addEventListener('scroll', () => {
 			if (this.highlightEl) {
-				this.highlightEl.scrollTop = textarea.scrollTop;
+				const tMax = textarea.scrollHeight - textarea.clientHeight;
+				const hMax = this.highlightEl.scrollHeight - this.highlightEl.clientHeight;
+				if (tMax <= 0) {
+					this.highlightEl.scrollTop = 0;
+				} else if (tMax === hMax) {
+					this.highlightEl.scrollTop = textarea.scrollTop;
+				} else {
+					this.highlightEl.scrollTop = (textarea.scrollTop / tMax) * hMax;
+				}
 				this.highlightEl.scrollLeft = textarea.scrollLeft;
 			}
 		});
@@ -384,9 +541,9 @@ export class ConfigControl implements IControl {
 		});
 	}
 
-	private autoExpandPanel(textarea: HTMLTextAreaElement): void {
+	private autoExpandPanel(textarea: HTMLTextAreaElement, maxRatio = 0.6): void {
 		if (!this.panel || !this.bodyEl) return;
-		const normalMax = window.innerHeight * 0.6;
+		const normalMax = window.innerHeight * maxRatio;
 		const panelRect = this.panel.getBoundingClientRect();
 		if (panelRect.height >= normalMax) return;
 
@@ -395,6 +552,13 @@ export class ConfigControl implements IControl {
 		if (neededPanelHeight > panelRect.height) {
 			const newHeight = Math.min(neededPanelHeight, normalMax);
 			this.panel.style.height = `${newHeight}px`;
+
+			// Shift panel up if it would overflow below the viewport
+			const overflow = panelRect.top + newHeight - window.innerHeight;
+			if (overflow > 0) {
+				const newTop = Math.max(0, panelRect.top - overflow);
+				this.panel.style.top = `${newTop}px`;
+			}
 		}
 	}
 

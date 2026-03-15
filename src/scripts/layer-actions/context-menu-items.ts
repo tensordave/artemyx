@@ -5,7 +5,7 @@
  * Callbacks are provided by the caller to handle actions.
  */
 
-import { trashIcon, pencilIcon } from '../icons';
+import { trashIcon, pencilIcon, downloadIcon } from '../icons';
 
 /**
  * Create a generic menu item with icon and label
@@ -51,6 +51,13 @@ export function createMenuDivider(): HTMLDivElement {
  */
 export function createRenameItem(onRename: () => void): HTMLDivElement {
 	return createMenuItem(pencilIcon, 'Rename', onRename);
+}
+
+/**
+ * Create an export GeoJSON menu item
+ */
+export function createExportItem(onExport: () => void): HTMLDivElement {
+	return createMenuItem(downloadIcon, 'Export GeoJSON', onExport);
 }
 
 /**

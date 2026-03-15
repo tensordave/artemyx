@@ -28,7 +28,9 @@ export async function loadDataFromFile(
 	const MAX_SIZE_MB = 100;
 	const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 	if (file.size > MAX_SIZE_BYTES) {
-		await showErrorDialog('File Too Large', `File exceeds the ${MAX_SIZE_MB}MB limit (${formatBytes(file.size)}).`);
+		if (!options.skipErrorDialog) {
+			await showErrorDialog('File Too Large', `File exceeds the ${MAX_SIZE_MB}MB limit (${formatBytes(file.size)}).`);
+		}
 		return false;
 	}
 
@@ -36,9 +38,9 @@ export async function loadDataFromFile(
 		return false;
 	}
 
-	// Strip extension for display name
-	const dotIndex = file.name.lastIndexOf('.');
-	const displayName = dotIndex !== -1 ? file.name.slice(0, dotIndex) : file.name;
+	// Use config override name if available, otherwise strip extension for display name
+	const displayName = options.configOverrides?.name
+		?? (file.name.lastIndexOf('.') !== -1 ? file.name.slice(0, file.name.lastIndexOf('.')) : file.name);
 
 	try {
 		logger.progress(displayName, 'loading');
@@ -54,8 +56,15 @@ export async function loadDataFromFile(
 			lngColumn: options.lngColumn,
 			geoColumn: options.geoColumn,
 			crs: options.crs,
-			configOverrides: options.configOverrides,
+			configOverrides: { name: displayName, ...options.configOverrides },
 		});
+
+		// Hidden datasets: stored in DuckDB but not rendered
+		if (options.hidden) {
+			loadedDatasets.add(result.datasetId);
+			logger.progress(displayName, 'success', `Loaded (hidden)`);
+			return true;
+		}
 
 		// Render on main thread
 		const layerIds = addDatasetToMap(map, result.datasetId, result.color, result.style, result.geoJson);
@@ -67,7 +76,7 @@ export async function loadDataFromFile(
 		const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: displayName });
 		attachFeatureClickHandlers(map, layerIds, hoverPopup);
 
-		if (result.bounds) fitMapToBounds(map, result.bounds);
+		if (result.bounds && !options.skipFitBounds) fitMapToBounds(map, result.bounds);
 		layerToggleControl.refreshPanel();
 
 		logger.scheduleIdle(3000);
@@ -76,7 +85,9 @@ export async function loadDataFromFile(
 	} catch (error) {
 		const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 		logger.progress(displayName, 'error', errorMsg);
-		await showErrorDialog('Failed to Load File', errorMsg);
+		if (!options.skipErrorDialog) {
+			await showErrorDialog('Failed to Load File', errorMsg);
+		}
 		logger.scheduleIdle(5000);
 		return false;
 	}

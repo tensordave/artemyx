@@ -5,22 +5,13 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.6.2 - Config Generation and Export
-
-Goal: round-trip config workflow - generate configs from session state, export configs and data for external use.
-
-- **Generate config from session** - "Generate" button in the config editor toolbar; reads current map state (datasets, styles, operations, layers) and serializes to YAML; populates the editor textarea so the user can review, tweak, and re-run; file-uploaded datasets emit a placeholder comment since they have no URL to reference; reads paint properties back from MapLibre via `getPaintProperty()` for manually adjusted styles
-- **Preserve local datasets on re-run** - When the config pipeline tears down and re-runs, file-uploaded datasets (no URL) are kept in DuckDB untouched; teardown skips them, and the pipeline treats them as already-loaded (same `datasetExists()` check used for OPFS restore); the placeholder comment in generated YAML is cosmetic only and does not affect the running session
-- **Export config** - Generate reproducible YAML from current session state; exported config uses the full author schema (datasets, operations, layers); this is the same config the CLI consumes
-- **Export viewer config** - Generate a viewer-only YAML from current session: datasets pointing to exported files + layer definitions; no operations or outputs (data is pre-baked); pairs with CLI's `--viewer-config` output for the same purpose
-- **Export data** - Export datasets as GeoJSON, CSV, or Parquet
-
 ### v0.6.3 - Operations Builder
 
 Goal: form-based UI for running spatial operations without writing YAML. Dedicated control (top-right, alongside DataControl and ConfigControl) with a Phosphor icon.
 
 - **Operation form** - Dropdown for operation type; input dropdown(s) populated from loaded datasets (one for unary ops, two for binary); type-specific parameter fields (distance + unit for buffer, mode for intersection, etc.); output name text input; "Run" button executes via existing operation pipeline; add to landing page controls grid
 - **Generated YAML preview** - Show the equivalent YAML snippet below the form as a learning aid; users see the config syntax for what they just built visually
+- **Rename Layer Move** - Context menu rename location is awkward to use, makes more sense to have it in the layer styling panel; double-click the name of the layer in the subpanel and type in-place.
 
 ### v0.7.0 - PMTiles Support
 
@@ -189,10 +180,14 @@ Items worth building eventually but not yet assigned to a version:
   - `load-config.ts` and `executor.ts` OPFS restore paths: same guard logic
   - `loadedDatasets.add()` still called so operations can reference skipped datasets
   - Progress message: "Skipped rendering (N features, M already rendered). Data available for operations."
+- **Export format conversion** - Extend data export beyond GeoJSON to support CSV and GeoParquet downloads; CSV needs geometry-type-aware flattening (lat/lng columns for points, WKT for complex geometries); GeoParquet needs `COPY ... TO ... (FORMAT PARQUET)` with file buffer round-trip through the worker; more natural as a CLI feature (`outputs:` config section) but could also surface in the browser as a format picker in the export context menu
 - **Native Apple Authoring (Swift)** - native macOS/iOS authoring app for the full spatial operations pipeline on Apple devices, where Safari's memory constraints make browser-based authoring unviable.
 
 
 ## Completed
+
+### v0.6.2 - Config Generation and Export
+- Config generation from session state (datasets, operations, layers, expressions); export config and viewer config (zipped with data files); per-layer GeoJSON export; OPFS database export/import for portable sessions; file-upload preservation on re-run with missing-file prompts; operations table (schema v4) for metadata persistence and config reconstruction; config editor UX fixes (scroll sync, selection visibility, auto-expand on import/generate)
 
 ### v0.6.1 - Config Editor and Safari Compatibility
 - Interactive config editor with live Shiki highlighting, edit/run/clear/import buttons, draggable+resizable panel, OPFS config persistence, clean teardown for re-runs; Safari browser gate with dismissible warning (DuckDB skipped), worker message batching, COI bundle skip on Safari/mobile, memory fixes for paginated loads

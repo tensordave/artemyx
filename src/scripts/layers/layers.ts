@@ -450,3 +450,67 @@ export function applyZoomRange(
 		map.setLayerZoomRange(layer.id, minzoom, maxzoom);
 	}
 }
+
+// ── OPFS style restoration ──────────────────────────────────────────
+
+/** Maps layer types to their primary color paint property. */
+const COLOR_PROP: Record<string, string> = {
+	fill: 'fill-color',
+	line: 'line-color',
+	circle: 'circle-color',
+	symbol: 'text-color',
+	heatmap: 'heatmap-color',
+	'fill-extrusion': 'fill-extrusion-color'
+};
+
+/** Maps style config keys to their target layer type and paint property. */
+const STYLE_PROP: Record<string, { layerType: string; paintProperty: string }> = {
+	fillOpacity: { layerType: 'fill', paintProperty: 'fill-opacity' },
+	lineOpacity: { layerType: 'line', paintProperty: 'line-opacity' },
+	pointOpacity: { layerType: 'circle', paintProperty: 'circle-opacity' },
+	lineWidth: { layerType: 'line', paintProperty: 'line-width' },
+	pointRadius: { layerType: 'circle', paintProperty: 'circle-radius' }
+};
+
+/**
+ * Re-apply OPFS-stored color and style to all layers for a dataset.
+ * Skips expression-driven paint properties (user can't override those via GUI).
+ * Called after executeLayersFromConfig() so explicit layers reflect runtime changes.
+ */
+export function restoreStoredPaint(
+	map: maplibregl.Map,
+	datasetId: string,
+	color: string,
+	style: import('../db/constants').StyleConfig
+): void {
+	const sourceId = getSourceId(datasetId);
+	const layers = getLayersBySource(map, sourceId);
+
+	for (const layer of layers) {
+		// Color
+		const colorProp = COLOR_PROP[layer.type];
+		if (colorProp) {
+			const current = layer.paint[colorProp];
+			if (current !== undefined && !Array.isArray(current) && current !== color) {
+				map.setPaintProperty(layer.id, colorProp, color);
+			}
+		}
+
+		// Style properties (opacity, width, radius)
+		for (const [key, mapping] of Object.entries(STYLE_PROP)) {
+			if (layer.type !== mapping.layerType) continue;
+			const current = layer.paint[mapping.paintProperty];
+			if (current !== undefined && !Array.isArray(current)) {
+				const stored = style[key as keyof typeof style] as number;
+				if (current !== stored) {
+					map.setPaintProperty(layer.id, mapping.paintProperty, stored);
+				}
+			}
+		}
+
+		// Zoom range
+		if (style.minzoom > 0 || style.maxzoom < 24) {
+			map.setLayerZoomRange(layer.id, style.minzoom, style.maxzoom);
+		}
+	}
+}

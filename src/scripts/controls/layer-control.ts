@@ -5,7 +5,8 @@ import { progressControl } from '../map';
 import { toggleLayerVisibility } from '../layer-actions/visibility';
 import { showDeleteConfirmation, deleteDatasetWithLayers } from '../layer-actions/delete';
 import { createContextMenu, type ContextMenuHandle } from '../layer-actions/context-menu';
-import { createRenameItem, createDeleteItem, createMenuDivider } from '../layer-actions/context-menu-items';
+import { createRenameItem, createExportItem, createDeleteItem, createMenuDivider } from '../layer-actions/context-menu-items';
+import { exportDatasetAsGeoJSON } from '../layer-actions/export';
 import { buildStyleView, savePendingStyle } from '../layer-actions/style';
 import { createLayerRow, startRenameEdit, type Dataset } from '../layer-actions/layer-row';
 import { resyncLayerOrder } from '../layers';
@@ -219,6 +220,20 @@ export class LayerToggleControl implements maplibregl.IControl {
 			});
 		});
 		menu.appendChild(renameItem);
+
+		// Add export item
+		const exportItem = createExportItem(async () => {
+			this.closeContextMenu();
+			progressControl.updateProgress(`Exporting "${dataset.name}"...`, 'processing');
+			try {
+				await exportDatasetAsGeoJSON(dataset.id, dataset.name);
+				progressControl.updateProgress(`Exported "${dataset.name}"`, 'success');
+			} catch (err) {
+				console.error('Export failed:', err);
+				progressControl.updateProgress('Export failed', 'error');
+			}
+		});
+		menu.appendChild(exportItem);
 
 		// Add divider before delete
 		menu.appendChild(createMenuDivider());

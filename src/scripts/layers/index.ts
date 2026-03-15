@@ -21,7 +21,8 @@ export {
 	addLabelLayer,
 	removeLabelLayer,
 	updateLabelProperty,
-	restoreLabelIfConfigured
+	restoreLabelIfConfigured,
+	restoreStoredPaint
 } from './layers';
 
 export type { LayerExecutionResult } from './layers';
