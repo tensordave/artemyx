@@ -253,6 +253,10 @@ export async function updateDatasetName(datasetId: string, name: string): Promis
 	return rpc<boolean>('updateDatasetName', { datasetId, name });
 }
 
+export async function renameDatasetId(oldId: string, newId: string, newName: string): Promise<boolean> {
+	return rpc<boolean>('renameDatasetId', { oldId, newId, newName });
+}
+
 export async function updateDatasetVisible(datasetId: string, visible: boolean): Promise<boolean> {
 	return rpc<boolean>('updateDatasetVisible', { datasetId, visible });
 }

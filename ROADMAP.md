@@ -5,14 +5,6 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.6.3 - Operations Builder
-
-Goal: form-based UI for running spatial operations without writing YAML. Dedicated control (top-right, alongside DataControl and ConfigControl) with a Phosphor icon.
-
-- **Operation form** - Dropdown for operation type; input dropdown(s) populated from loaded datasets (one for unary ops, two for binary); type-specific parameter fields (distance + unit for buffer, mode for intersection, etc.); output name text input; "Run" button executes via existing operation pipeline; add to landing page controls grid
-- **Generated YAML preview** - Show the equivalent YAML snippet below the form as a learning aid; users see the config syntax for what they just built visually
-- **Rename Layer Move** - Context menu rename location is awkward to use, makes more sense to have it in the layer styling panel; double-click the name of the layer in the subpanel and type in-place.
-
 ### v0.7.0 - PMTiles Support
 
 Goal: load externally hosted PMTiles files and generate PMTiles archives directly in the browser, enabling MapLibre to render large datasets as tiled vector sources rather than monolithic GeoJSON; zoom-level simplification and viewport streaming come for free via the tile protocol.
@@ -33,6 +25,7 @@ Goal: load externally hosted PMTiles files and generate PMTiles archives directl
 
 Goal: establish the full deck.gl integration path using GeoJsonLayer as the initial renderer type, handling all geometry types (polygon, line, point) in parallel with the existing MapLibre pipeline.
 
+- **Arrow binary data path** - `getFeaturesAsArrow()` in `features.ts` returns the raw Arrow table from DuckDB, bypassing `ST_AsGeoJSON` string serialization; coordinate columns extracted as `Float64Array` for direct consumption by deck.gl binary input format; eliminates the GeoJSON round-trip for large datasets; deck.gl optional renderer is to use this instead of GeoJSON round trips
 - **`MapboxOverlay` manager** - Singleton `DeckGLManager` (`src/scripts/deckgl/manager.ts`) holds the `MapboxOverlay` instance added to the map on load; exposes `addLayer`, `removeLayer`, `updateLayer`; composites all deck.gl layers into a single WebGL context; deck.gl loaded via dynamic `import()` only when first deck.gl layer is requested to avoid bundling cost when unused
 - **Config schema: `renderer` field** - Optional `renderer: maplibre | deckgl` on `LayerConfig` (defaults to `maplibre`); `deckProps` passthrough for raw deck.gl layer props (color accessors, radius scale, etc.) that have no MapLibre paint equivalent; parser validation rejects deck.gl-only `type` values when `renderer: maplibre` and vice versa
 - **Layer creation branch** - `executeLayersFromConfig` in `layers.ts` branches on `renderer`: MapLibre path unchanged; deck.gl path constructs a `GeoJsonLayer` spec and calls the manager; both paths feed data from `getFeaturesAsGeoJSON` initially
@@ -127,7 +120,6 @@ Goal: a minimal map app that renders pre-processed data without DuckDB, operatio
 ### v0.10.0 - Sharing and Additional Render Types
 
 - **URL state sharing** - Serialize session (datasets, layers, paint, operations) into URL parameters for shareable links without needing a repo or exported YAML
-- **Arrow binary data path** - `getFeaturesAsArrow()` in `features.ts` returns the raw Arrow table from DuckDB, bypassing `ST_AsGeoJSON` string serialization; coordinate columns extracted as `Float64Array` for direct consumption by deck.gl binary input format; eliminates the GeoJSON round-trip for large datasets
 - **`ScatterplotLayer`** - deck.gl large point cloud rendering with radius scale and fill/stroke color accessors; suited for transit stops, parcel centroids, and other high-count point datasets
 - **`HeatmapLayer`** - deck.gl GPU-accelerated continuous density; distinct from MapLibre's `heatmap` type, operates entirely on the deck.gl pipeline
 - **`HexagonLayer`** - deck.gl aggregation hexbins; count or sum of features per cell; configurable radius and elevation scale
@@ -185,6 +177,9 @@ Items worth building eventually but not yet assigned to a version:
 
 
 ## Completed
+
+### v0.6.3 - Operation Builder
+- Operation Builder control (draggable/resizable panel, dynamic inputs for unary/binary ops, type-specific params, live YAML preview snippet); config editor button reorganization (authoring/download/execution groups with color-coded run/clear); rename layer moved to style panel (double-click in-place); dataset ID cascading rename on layer rename; generate config respects layer visibility; topology exception robustness improvements; config editor edit mode alignment fix; operation status auto-clear on interaction
 
 ### v0.6.2 - Config Generation and Export
 - Config generation from session state (datasets, operations, layers, expressions); export config and viewer config (zipped with data files); per-layer GeoJSON export; OPFS database export/import for portable sessions; file-upload preservation on re-run with missing-file prompts; operations table (schema v4) for metadata persistence and config reconstruction; config editor UX fixes (scroll sync, selection visibility, auto-expand on import/generate)

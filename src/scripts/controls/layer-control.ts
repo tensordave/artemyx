@@ -1,14 +1,15 @@
 import maplibregl from 'maplibre-gl';
-import { getDatasets, updateDatasetName, updateDatasetVisible, swapLayerOrder } from '../db';
+import { getDatasets, updateDatasetVisible, swapLayerOrder } from '../db';
+import { renameDataset } from '../layer-actions/rename';
 import { stackIcon } from '../icons';
 import { progressControl } from '../map';
 import { toggleLayerVisibility } from '../layer-actions/visibility';
 import { showDeleteConfirmation, deleteDatasetWithLayers } from '../layer-actions/delete';
 import { createContextMenu, type ContextMenuHandle } from '../layer-actions/context-menu';
-import { createRenameItem, createExportItem, createDeleteItem, createMenuDivider } from '../layer-actions/context-menu-items';
+import { createExportItem, createDeleteItem, createMenuDivider } from '../layer-actions/context-menu-items';
 import { exportDatasetAsGeoJSON } from '../layer-actions/export';
 import { buildStyleView, savePendingStyle } from '../layer-actions/style';
-import { createLayerRow, startRenameEdit, type Dataset } from '../layer-actions/layer-row';
+import { createLayerRow, type Dataset } from '../layer-actions/layer-row';
 import { resyncLayerOrder } from '../layers';
 
 /**
@@ -106,6 +107,20 @@ export class LayerToggleControl implements maplibregl.IControl {
 				if (header) {
 					header.style.borderLeftColor = newColor;
 				}
+			},
+			async (newName: string) => {
+				progressControl.updateProgress(`Renaming to "${newName}"...`, 'processing');
+				const result = await renameDataset(this.map!, dataset.id, newName, progressControl);
+				if (result.success) {
+					dataset.id = result.newId;
+					dataset.name = newName;
+					progressControl.updateProgress(`Renamed to "${newName}"`, 'success');
+					progressControl.scheduleIdle(3000);
+					this.showListView();
+				} else {
+					progressControl.updateProgress('Failed to rename dataset', 'error');
+					progressControl.scheduleIdle(5000);
+				}
 			}
 		);
 	}
@@ -194,32 +209,6 @@ export class LayerToggleControl implements maplibregl.IControl {
 		});
 
 		const { menu } = this.contextMenuHandle;
-
-		// Add rename item
-		const renameItem = createRenameItem(() => {
-			this.closeContextMenu();
-
-			// Find the row element for this dataset
-			const rowElement = this.panel?.querySelector(
-				`[data-dataset-id="${dataset.id}"]`
-			) as HTMLDivElement | null;
-
-			if (!rowElement) return;
-
-			// Start inline edit mode
-			startRenameEdit(rowElement, dataset as Dataset, async (newName) => {
-				progressControl.updateProgress(`Renaming to "${newName}"...`, 'processing');
-				const success = await updateDatasetName(dataset.id, newName);
-				if (success) {
-					progressControl.updateProgress(`Renamed to "${newName}"`, 'success');
-					this.refreshPanel();
-				} else {
-					progressControl.updateProgress('Failed to rename dataset', 'error');
-					this.refreshPanel();
-				}
-			});
-		});
-		menu.appendChild(renameItem);
 
 		// Add export item
 		const exportItem = createExportItem(async () => {

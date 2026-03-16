@@ -3,7 +3,7 @@ import Header from '../components/Header.astro';
 import { highlightConfigYaml } from '../scripts/utils/highlight-config';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../styles/global.css';
-import { cloudArrowDownIcon, fileArrowUpIcon, codeBlockIcon, stackIcon, databaseIcon, mapTrifoldIcon, magnifyingGlassIcon, listIcon, circleIcon } from '../scripts/icons';
+import { cloudArrowDownIcon, fileArrowUpIcon, gitMergeIcon, codeBlockIcon, stackIcon, databaseIcon, mapTrifoldIcon, magnifyingGlassIcon, listIcon, circleIcon } from '../scripts/icons';
 
 const configFile = 'demo-config.yaml';
 const highlightedYaml = await highlightConfigYaml(configFile);
@@ -52,6 +52,11 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 					<div class="control-card-icon" set:html={fileArrowUpIcon} />
 					<div class="feature-card-title">Upload file</div>
 					<p class="feature-card-body">Drag and drop or pick a local file to load it directly onto the map.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={gitMergeIcon} />
+					<div class="feature-card-title">Operations</div>
+					<p class="feature-card-body">Run spatial operations like buffer, intersect, and union with a form-based builder.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={codeBlockIcon} />

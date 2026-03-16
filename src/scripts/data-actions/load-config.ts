@@ -1,5 +1,5 @@
 import type maplibregl from 'maplibre-gl';
-import { getFeaturesAsGeoJSON, getDatasetById, datasetExists } from '../db';
+import { getFeaturesAsGeoJSON, getDatasetById, datasetExists, updateDatasetVisible } from '../db';
 import type { LoadGeoJSONOptions as DBLoadOptions } from '../db/constants';
 import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
@@ -106,6 +106,7 @@ export async function loadDatasetsFromConfig(
 					layerToggleControl.refreshPanel();
 
 					logger.progress(displayName, 'success', `Restored from session (${featureCount} features)`);
+					if (dataset.visible === false) await updateDatasetVisible(dataset.id, false);
 					result.loaded++;
 					continue;
 				}
@@ -155,6 +156,7 @@ export async function loadDatasetsFromConfig(
 			});
 
 			if (success) {
+				if (dataset.visible === false) await updateDatasetVisible(dataset.id, false);
 				result.loaded++;
 			} else {
 				result.failed++;
@@ -195,6 +197,7 @@ export async function loadDatasetsFromConfig(
 		});
 
 		if (success) {
+			if (dataset.visible === false) await updateDatasetVisible(dataset.id, false);
 			result.loaded++;
 		} else {
 			result.failed++;

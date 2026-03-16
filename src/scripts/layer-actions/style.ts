@@ -11,7 +11,7 @@ import { ProgressControl } from '../controls/progress-control';
 import { getLayersBySource, applyZoomRange, type SourceLayerInfo } from '../layers/layers';
 import { buildLabelSection } from './labels';
 import { getSourceId } from '../layers/sources';
-import { arrowLeftIcon } from '../icons';
+import { arrowLeftIcon, pencilIcon } from '../icons';
 import { isColorPickerEnabled, getDisplayColor, updateLayerColor } from './color';
 import type { Dataset } from './layer-row';
 
@@ -341,7 +341,8 @@ export async function buildStyleView(
 	panelElement: HTMLDivElement,
 	progressControl: ProgressControl,
 	onBack: () => void,
-	onColorChanged: (newColor: string) => void
+	onColorChanged: (newColor: string) => void,
+	onRenamed: (newName: string) => void
 ): Promise<void> {
 	// Get current style from database
 	const currentStyle = await getDatasetStyle(dataset.id);
@@ -350,7 +351,7 @@ export async function buildStyleView(
 	// Clear panel
 	panelElement.innerHTML = '';
 
-	// Header with back arrow and layer name
+	// Header with back arrow, layer name, and rename button
 	const header = document.createElement('div');
 	header.className = 'style-view-header';
 	header.style.borderLeftColor = dataset.color || '#3388ff';
@@ -365,8 +366,88 @@ export async function buildStyleView(
 	title.className = 'style-view-title';
 	title.textContent = dataset.name;
 
+	const renameBtn = document.createElement('button');
+	renameBtn.type = 'button';
+	renameBtn.className = 'style-rename-btn';
+	renameBtn.innerHTML = pencilIcon;
+	renameBtn.title = 'Rename layer';
+
+	let isEditing = false;
+
+	const startRename = () => {
+		if (isEditing) return;
+		isEditing = true;
+
+		const currentName = title.textContent || dataset.name;
+
+		const input = document.createElement('input');
+		input.type = 'text';
+		input.className = 'style-rename-input';
+		input.value = currentName;
+
+		// Switch pencil to green confirm mode
+		renameBtn.classList.add('style-rename-btn--confirm');
+		renameBtn.title = 'Confirm rename';
+
+		let hasExited = false;
+		const exitEdit = (save: boolean) => {
+			if (hasExited) return;
+			hasExited = true;
+			isEditing = false;
+
+			const newName = input.value.trim();
+			if (save && newName && newName !== currentName) {
+				title.textContent = newName;
+				onRenamed(newName);
+			}
+
+			input.replaceWith(title);
+			renameBtn.classList.remove('style-rename-btn--confirm');
+			renameBtn.title = 'Rename layer';
+		};
+
+		input.addEventListener('keydown', (ke) => {
+			if (ke.key === 'Enter') {
+				ke.preventDefault();
+				exitEdit(true);
+			} else if (ke.key === 'Escape') {
+				ke.preventDefault();
+				exitEdit(false);
+			}
+		});
+
+		input.addEventListener('blur', (e) => {
+			// Don't save on blur if the user clicked the confirm button (it handles save itself)
+			if (e.relatedTarget === renameBtn) return;
+			exitEdit(true);
+		});
+
+		title.replaceWith(input);
+		input.focus();
+		input.select();
+	};
+
+	renameBtn.addEventListener('click', (e) => {
+		e.stopPropagation();
+		if (isEditing) {
+			// Confirm rename
+			const input = header.querySelector('.style-rename-input') as HTMLInputElement | null;
+			if (input) {
+				input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+			}
+		} else {
+			startRename();
+		}
+	});
+
+	title.addEventListener('dblclick', (e) => {
+		e.stopPropagation();
+		startRename();
+	});
+
 	header.appendChild(backBtn);
 	header.appendChild(title);
+	header.appendChild(renameBtn);
 	panelElement.appendChild(header);
 
 	// Content area

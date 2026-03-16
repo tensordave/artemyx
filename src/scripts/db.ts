@@ -11,7 +11,7 @@ export { startInit, ensureInit, getStorageMode, getFallbackReason, setFallbackRe
 export type { FallbackReason } from './db/core';
 
 // Dataset CRUD operations (via worker RPC)
-export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, updateDatasetColor, updateDatasetName, updateDatasetVisible, deleteDataset, deleteAllDatasets, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, checkpoint, vacuum } from './db/client';
+export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, deleteDataset, deleteAllDatasets, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, checkpoint, vacuum } from './db/client';
 
 // Feature query operations (via worker RPC)
 export { getFeaturesAsGeoJSON, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './db/client';
@@ -24,7 +24,7 @@ export { setEventHandler } from './db/client';
 export type { WorkerEventHandler } from './db/client';
 
 // Utility functions (pure, no DB access - stay on main thread)
-export { generateDatasetId, extractDatasetName } from './db/utils';
+export { generateDatasetId, extractDatasetName, slugifyDatasetId } from './db/utils';
 
 // Viewport persistence (localStorage, main-thread only)
 export { saveViewport, getCachedViewport, clearCachedViewport } from './db/constants';

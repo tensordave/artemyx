@@ -151,7 +151,7 @@ export async function exportViewerZip(map: Map, basemapId: string): Promise<void
 
 	// Create zip and trigger download
 	const zipData = zipSync(files);
-	const blob = new Blob([zipData], { type: 'application/zip' });
+	const blob = new Blob([new Uint8Array(zipData)], { type: 'application/zip' });
 	const url = URL.createObjectURL(blob);
 
 	const a = document.createElement('a');

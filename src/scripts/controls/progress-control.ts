@@ -121,13 +121,23 @@ export class ProgressControl implements IControl {
    * Update the progress display with current operation status
    */
   updateProgress(operation: string, status: ProgressState['status'], message?: string, iconOverride?: string): void {
-    // Cancel any pending idle - new work is coming in
+    const timestamp = Date.now();
+
+    // When idle is already scheduled, stale batched 'processing' messages from the
+    // worker may still arrive. Log them to history but don't update the displayed
+    // state or re-render the icon — the pipeline has already completed.
+    if (this._idleTimeout && status === 'processing') {
+      this.history.push({ operation, status, message, timestamp });
+      if (this.history.length > this.MAX_HISTORY) this.history.shift();
+      if (this.isExpanded) this.renderHistory();
+      return;
+    }
+
+    // Cancel any pending idle — new terminal event means fresh work completing
     if (this._idleTimeout) {
       clearTimeout(this._idleTimeout);
       this._idleTimeout = undefined;
     }
-
-    const timestamp = Date.now();
 
     this.state = {
       operation,

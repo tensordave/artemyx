@@ -5,7 +5,7 @@
  * Callbacks are provided by the caller to handle actions.
  */
 
-import { trashIcon, pencilIcon, downloadIcon } from '../icons';
+import { trashIcon, downloadIcon } from '../icons';
 
 /**
  * Create a generic menu item with icon and label
@@ -42,15 +42,6 @@ export function createMenuDivider(): HTMLDivElement {
 	const divider = document.createElement('div');
 	divider.className = 'context-menu-divider';
 	return divider;
-}
-
-/**
- * Create a rename dataset menu item
- *
- * Calls onRename when clicked to trigger inline edit mode.
- */
-export function createRenameItem(onRename: () => void): HTMLDivElement {
-	return createMenuItem(pencilIcon, 'Rename', onRename);
 }
 
 /**

@@ -485,8 +485,12 @@ export function restoreStoredPaint(
 ): void {
 	const sourceId = getSourceId(datasetId);
 	const layers = getLayersBySource(map, sourceId);
+	const defaultIds = getLayerIds(datasetId);
+	const defaultIdSet = new Set([defaultIds.fill, defaultIds.line, defaultIds.point]);
 
 	for (const layer of layers) {
+		// Skip config-defined layers — they have explicit paint from YAML
+		if (!defaultIdSet.has(layer.id)) continue;
 		// Color
 		const colorProp = COLOR_PROP[layer.type];
 		if (colorProp) {

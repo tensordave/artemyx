@@ -68,6 +68,13 @@ export function validateDataset(dataset: unknown, index: number): string[] {
 		}
 	}
 
+	// Optional: visible (boolean, defaults to true)
+	if ('visible' in d && d.visible !== undefined) {
+		if (typeof d.visible !== 'boolean') {
+			errors.push(`${prefix}.visible: must be a boolean`);
+		}
+	}
+
 	// Optional: fitBounds (boolean, defaults to true)
 	if ('fitBounds' in d && d.fitBounds !== undefined) {
 		if (typeof d.fitBounds !== 'boolean') {

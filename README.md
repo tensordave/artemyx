@@ -18,6 +18,7 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - Multi-dataset support with layer management UI (visibility, color, rename, delete, per-layer style panel with labels)
 - Auto-generated legend from active layer styles (color swatches, gradient ramps, category entries)
 - YAML-driven configuration with in-browser editor (live syntax highlighting, edit/run/clear/import/generate/export)
+- Visual operation builder UI for constructing spatial operations without editing YAML directly
 - Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
 - Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays) with paginated fetching
 - Local file upload via drag-and-drop or file picker
@@ -83,11 +84,13 @@ src/scripts/
 ├── layer-actions/     # Layer control UI handlers
 │   ├── color.ts, style.ts, labels.ts, visibility.ts, delete.ts, export.ts  # Action handlers
 │   ├── context-menu.ts, context-menu-items.ts         # Context menu
-│   └── layer-row.ts   # Row DOM, inline rename
+│   ├── layer-row.ts   # Row DOM, inline rename
+│   └── rename.ts      # Dataset ID cascading rename
 ├── controls/          # MapLibre custom map controls
 │   ├── data-control.ts       # Load data from URL with advanced options (CRS, format, columns)
 │   ├── upload-control.ts     # Local file upload (drag-and-drop, file picker)
 │   ├── config-control.ts     # Config editor (edit, run, clear, import, generate, export) with live Shiki highlighting
+│   ├── operation-builder-control.ts  # Visual operation builder with live YAML preview
 │   ├── layer-control.ts      # Layer visibility, color, rename, delete, reorder
 │   ├── legend-control.ts     # Auto-generated legend from active layer styles
 │   ├── storage-control.ts    # OPFS status, session management, database export/import

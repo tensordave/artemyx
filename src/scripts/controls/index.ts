@@ -1,6 +1,7 @@
 export { BasemapControl } from './basemap-control';
 export { ConfigControl } from './config-control';
 export { DataControl } from './data-control';
+export { OperationBuilderControl } from './operation-builder-control';
 export { GeocodingControl } from './geocoding-control';
 export { LayerToggleControl } from './layer-control';
 export { LegendControl } from './legend-control';

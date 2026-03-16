@@ -2,7 +2,8 @@ import maplibregl from 'maplibre-gl';
 import {
 	LayerToggleControl, ProgressControl, DataControl, UploadControl,
 	StorageControl, BasemapControl, GeocodingControl, ScaleBarControl,
-	ConfigControl, LegendControl, attachFeatureClickHandlers, attachFeatureHoverHandlers,
+	ConfigControl, LegendControl, OperationBuilderControl,
+	attachFeatureClickHandlers, attachFeatureHoverHandlers,
 } from './controls';
 import { getBasemap, getDefaultBasemap } from './basemaps';
 import { loadConfig, parseConfig, getDefaultMapSettings } from './config/parser';
@@ -219,14 +220,23 @@ const configControl = new ConfigControl({
 	},
 });
 
+const operationBuilderControl = new OperationBuilderControl({
+	map,
+	logger,
+	layerToggleControl,
+	loadedDatasets,
+});
+
 // Right-hand controls: only one panel open at a time
-dataControl.setOnPanelOpen(() => { uploadControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
-uploadControl.setOnPanelOpen(() => { dataControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
-configControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); storageControl.closePanel(); });
-storageControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); configControl.closePanel(); });
+dataControl.setOnPanelOpen(() => { uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
+uploadControl.setOnPanelOpen(() => { dataControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
+operationBuilderControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
+configControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); storageControl.closePanel(); });
+storageControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); });
 
 map.addControl(dataControl, 'top-right');
 map.addControl(uploadControl, 'top-right');
+map.addControl(operationBuilderControl, 'top-right');
 map.addControl(configControl, 'top-right');
 map.addControl(storageControl, 'top-right');
 map.addControl(layerToggleControl, 'top-left');

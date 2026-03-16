@@ -3,6 +3,19 @@
  */
 
 /**
+ * Convert a display name to a valid dataset ID (slug).
+ * Lowercase, non-alphanumeric → underscores, collapsed, trimmed.
+ */
+export function slugifyDatasetId(name: string): string {
+	const slug = name
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '_')
+		.replace(/^_+|_+$/g, '')
+		.slice(0, 60);
+	return slug || `dataset_${Date.now().toString(16)}`;
+}
+
+/**
  * Generate a dataset ID from a source URL
  */
 export function generateDatasetId(sourceUrl: string): string {

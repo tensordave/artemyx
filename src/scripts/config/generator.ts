@@ -357,6 +357,9 @@ export async function generateConfigYaml(map: Map, basemapId: string): Promise<s
 			if (ds.hidden) {
 				entry.hidden = true;
 			}
+			if (!ds.visible) {
+				entry.visible = false;
+			}
 			if (ds.source_crs) {
 				entry.crs = ds.source_crs;
 			}
@@ -412,6 +415,9 @@ export async function generateConfigYaml(map: Map, basemapId: string): Promise<s
 				}
 				if (ds.color && ds.color !== DEFAULT_COLOR) {
 					entry.color = ds.color;
+				}
+				if (!ds.visible) {
+					entry.visible = false;
 				}
 				if (!coveredDatasetIds.has(ds.id)) {
 					const styleDiff = diffStyle(parseStyleJson(ds.style));

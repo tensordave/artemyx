@@ -6,7 +6,7 @@
 
 import type { MainMessage, WorkerRequest, CrsPromptResponse, InitResult, LoadPipelineRawResult, OperationPipelineRawResult } from './worker-types';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog, getConnection, getDB, checkpoint, vacuum, exportOPFSFile, importOPFSFile } from './core';
-import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, updateDatasetColor, updateDatasetName, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, getOperations, clearOperations, saveOperationMetadata, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
+import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, getOperations, clearOperations, saveOperationMetadata, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
 import type { StyleConfig } from './datasets';
 import { getFeaturesAsGeoJSONString, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './features';
 import type { OperationConfig } from '../config/types';
@@ -681,6 +681,12 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 				break;
 			}
 
+			case 'renameDatasetId': {
+				const ok = await renameDatasetId(req.oldId, req.newId, req.newName);
+				respond(requestId, ok);
+				break;
+			}
+
 			case 'updateDatasetVisible': {
 				const ok = await updateDatasetVisible(req.datasetId, req.visible);
 				respond(requestId, ok);
@@ -843,6 +849,10 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 
 			case 'executeOperation': {
 				const result = await workerExecuteOperation(req.op, req.execOrder);
+				// Flush any pending batched progress events before responding,
+				// so all progress messages arrive before the result on the main thread.
+				if (batchTimer !== null) { clearTimeout(batchTimer); batchTimer = null; }
+				flushEvents();
 				const transfer = result.geoJsonBuffer ? [result.geoJsonBuffer.buffer] : [];
 				respondTransfer(requestId, result, transfer);
 				break;

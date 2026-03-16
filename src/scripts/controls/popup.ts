@@ -311,3 +311,11 @@ export function clearAllFeatureHandlers(): void {
 export function getTooltipFields(layerId: string): string[] | undefined {
 	return hoverRegistry.get(layerId)?.fields;
 }
+
+/**
+ * Read the full hover tooltip options for a layer.
+ * Used by the rename orchestrator to capture and re-register handlers.
+ */
+export function getHoverOptions(layerId: string): HoverTooltipOptions | undefined {
+	return hoverRegistry.get(layerId);
+}

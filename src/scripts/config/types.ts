@@ -66,6 +66,8 @@ export interface DatasetConfig {
 	style?: StyleConfigPartial;
 	/** When true, dataset is loaded into DuckDB but not rendered or shown in layer panel (source-only for operations) */
 	hidden?: boolean;
+	/** When false, dataset layers start with visibility off (defaults to true) */
+	visible?: boolean;
 	/** When false, this dataset's geometry is excluded from the initial fitBounds calculation (default: true) */
 	fitBounds?: boolean;
 	/** Explicit format override when URL or Content-Type is ambiguous */

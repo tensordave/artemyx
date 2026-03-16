@@ -61,20 +61,63 @@ export async function computeBuffer(
 		const distanceDegrees = metersToDegreesAtLatitude(distanceMeters, crs.latitude);
 
 		if (dissolve) {
-			const simplifyTolerance = distanceDegrees * 0.05;
-			const insertDissolved = await connection.prepare(`
-				INSERT INTO features (dataset_id, source_url, geometry, properties)
-				SELECT
-					?,
-					'operation:buffer',
-					ST_Union_Agg(ST_MakeValid(ST_Simplify(ST_Buffer(geometry, ?, CAST(? AS INTEGER)), ?))),
-					'{"dissolved": true}'
-				FROM features
-				WHERE dataset_id = ?
-				AND geometry IS NOT NULL
-			`);
-			await insertDissolved.query(outputId, distanceDegrees, quadSegs, simplifyTolerance, inputId);
-			await insertDissolved.close();
+			// Chunked union: group buffered features into chunks of 500 before final union.
+			// Reduces per-call GEOS sweep complexity and prevents TopologyException on dense datasets.
+			// Retry with escalating simplification tolerance if TopologyException still occurs.
+			const toleranceMultipliers = [0.05, 0.15, 0.40];
+			let dissolved = false;
+			for (let attempt = 0; attempt < toleranceMultipliers.length; attempt++) {
+				const simplifyTolerance = distanceDegrees * toleranceMultipliers[attempt];
+				if (attempt > 0) {
+					callbacks?.onWarn?.('Buffer', `TopologyException on attempt ${attempt}, retrying dissolve with ${(toleranceMultipliers[attempt] * 100).toFixed(0)}% simplify tolerance`);
+					const del = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+					try { await del.query(outputId); } finally { await del.close(); }
+				}
+				const stmt = await connection.prepare(`
+					WITH numbered AS (
+						SELECT
+							ROW_NUMBER() OVER () AS rn,
+							ST_MakeValid(ST_Simplify(ST_Buffer(geometry, ?, CAST(? AS INTEGER)), ?)) AS geom
+						FROM features
+						WHERE dataset_id = ?
+						AND geometry IS NOT NULL
+					),
+					chunk_unions AS (
+						SELECT ST_Union_Agg(geom) AS geom
+						FROM numbered
+						GROUP BY CAST(FLOOR((rn - 1) / 500) AS INTEGER)
+					)
+					INSERT INTO features (dataset_id, source_url, geometry, properties)
+					SELECT ?, 'operation:buffer', ST_Union_Agg(ST_MakeValid(geom)), '{"dissolved": true}'
+					FROM chunk_unions
+				`);
+				try {
+					await stmt.query(distanceDegrees, quadSegs, simplifyTolerance, inputId, outputId);
+					dissolved = true;
+					break;
+				} catch (err) {
+					if (err instanceof Error && err.message.includes('TopologyException') && attempt < toleranceMultipliers.length - 1) {
+						continue;
+					}
+					if (err instanceof Error && err.message.includes('TopologyException')) {
+						break; // fall through to non-dissolve fallback
+					}
+					throw err;
+				} finally {
+					await stmt.close();
+				}
+			}
+			if (!dissolved) {
+				callbacks?.onWarn?.('Buffer', 'Could not dissolve after all retries: returning individual buffers');
+				const del = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+				try { await del.query(outputId); } finally { await del.close(); }
+				const fallback = await connection.prepare(`
+					INSERT INTO features (dataset_id, source_url, geometry, properties)
+					SELECT ?, 'operation:buffer', ST_Buffer(geometry, ?, CAST(? AS INTEGER)), properties
+					FROM features WHERE dataset_id = ?
+				`);
+				try { await fallback.query(outputId, distanceDegrees, quadSegs, inputId); } finally { await fallback.close(); }
+			}
 		} else {
 			const insertBuffered = await connection.prepare(`
 				INSERT INTO features (dataset_id, source_url, geometry, properties)
@@ -90,30 +133,80 @@ export async function computeBuffer(
 			await insertBuffered.close();
 		}
 	} else if (dissolve) {
-		// Projected CRS dissolve: flip → reproject → buffer → simplify → make valid → union → reproject back → flip
+		// Projected CRS dissolve: flip → reproject → buffer → simplify → make valid → chunk union → reproject back → flip
 		// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)
-		// ST_Simplify (5% of buffer distance) reduces vertices, ST_MakeValid repairs topology
-		// to prevent TopologyException during union.
-		const simplifyTolerance = distanceMeters * 0.05;
-		const insertDissolved = await connection.prepare(`
-			INSERT INTO features (dataset_id, source_url, geometry, properties)
-			SELECT
-				?,
-				'operation:buffer',
-				ST_FlipCoordinates(ST_Transform(
-					ST_Union_Agg(ST_MakeValid(ST_Simplify(
+		// Chunked union (500 features/chunk) reduces per-call GEOS sweep complexity, preventing
+		// TopologyException on dense datasets (e.g., 66k water mains) where adjacent buffer rings
+		// have near-coincident edges. Retry with escalating simplification tolerance as safety net.
+		callbacks?.onInfo?.('Buffer', 'Using chunked dissolve (500 features/chunk)');
+		const toleranceMultipliers = [0.05, 0.15, 0.40];
+		let dissolved = false;
+		for (let attempt = 0; attempt < toleranceMultipliers.length; attempt++) {
+			const simplifyTolerance = distanceMeters * toleranceMultipliers[attempt];
+			if (attempt > 0) {
+				callbacks?.onWarn?.('Buffer', `TopologyException on attempt ${attempt}, retrying dissolve with ${(toleranceMultipliers[attempt] * 100).toFixed(0)}% simplify tolerance`);
+				const del = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+				try { await del.query(outputId); } finally { await del.close(); }
+			}
+			const stmt = await connection.prepare(`
+				WITH numbered AS (
+					SELECT
+						ROW_NUMBER() OVER () AS rn,
+						ST_MakeValid(ST_Simplify(
+							ST_Buffer(ST_Transform(ST_FlipCoordinates(geometry), 'EPSG:4326', ?), ?, CAST(? AS INTEGER)),
+							?
+						)) AS geom
+					FROM features
+					WHERE dataset_id = ?
+					AND geometry IS NOT NULL
+				),
+				chunk_unions AS (
+					SELECT ST_Union_Agg(geom) AS geom
+					FROM numbered
+					GROUP BY CAST(FLOOR((rn - 1) / 500) AS INTEGER)
+				)
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
+				SELECT
+					?,
+					'operation:buffer',
+					ST_FlipCoordinates(ST_Transform(ST_Union_Agg(ST_MakeValid(geom)), ?, 'EPSG:4326')),
+					'{"dissolved": true}'
+				FROM chunk_unions
+			`);
+			try {
+				await stmt.query(crs.epsg, distanceMeters, quadSegs, simplifyTolerance, inputId, outputId, crs.epsg);
+				dissolved = true;
+				break;
+			} catch (err) {
+				if (err instanceof Error && err.message.includes('TopologyException') && attempt < toleranceMultipliers.length - 1) {
+					continue;
+				}
+				if (err instanceof Error && err.message.includes('TopologyException')) {
+					break; // fall through to non-dissolve fallback
+				}
+				throw err;
+			} finally {
+				await stmt.close();
+			}
+		}
+		if (!dissolved) {
+			callbacks?.onWarn?.('Buffer', 'Could not dissolve after all retries: returning individual buffers');
+			const del = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+			try { await del.query(outputId); } finally { await del.close(); }
+			const fallback = await connection.prepare(`
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
+				SELECT
+					?,
+					'operation:buffer',
+					ST_FlipCoordinates(ST_Transform(
 						ST_Buffer(ST_Transform(ST_FlipCoordinates(geometry), 'EPSG:4326', ?), ?, CAST(? AS INTEGER)),
-						?
-					))),
-					?, 'EPSG:4326'
-				)),
-				'{"dissolved": true}'
-			FROM features
-			WHERE dataset_id = ?
-			AND geometry IS NOT NULL
-		`);
-		await insertDissolved.query(outputId, crs.epsg, distanceMeters, quadSegs, simplifyTolerance, crs.epsg, inputId);
-		await insertDissolved.close();
+						?, 'EPSG:4326'
+					)),
+					properties
+				FROM features WHERE dataset_id = ?
+			`);
+			try { await fallback.query(outputId, crs.epsg, distanceMeters, quadSegs, crs.epsg, inputId); } finally { await fallback.close(); }
+		}
 	} else {
 		// Projected CRS: flip → reproject → buffer → reproject back → flip
 		// ST_FlipCoordinates needed because EPSG:4326 axis order is (lat,lng) but we store (lng,lat)

@@ -72,25 +72,70 @@ export async function computeUnion(
 		await insertMerged.query(...queryParams);
 		await insertMerged.close();
 	} else {
-		// Dissolve mode: merge all geometries from all inputs into a single feature
-		// ST_MakeValid repairs invalid/degenerate geometries (self-intersections,
-		// non-noded intersections, zero-length segments) before ST_Union_Agg.
-		// ST_Buffer(geom, 0) alone can throw TopologyException on these inputs.
+		// Dissolve mode: merge all geometries from all inputs into a single feature.
+		// Chunked union (500 features/chunk) reduces per-call GEOS sweep complexity to prevent
+		// TopologyException on large/dense datasets. Retry escalates to ST_Buffer(geom, 0) per
+		// feature as a stronger topology repair before chunking. Final fallback: merge mode.
 		const placeholders = op.inputs.map(() => '?').join(', ');
 
-		const insertDissolved = await connection.prepare(`
-			INSERT INTO features (dataset_id, source_url, geometry, properties)
-			SELECT
-				?,
-				'operation:union',
-				ST_Union_Agg(ST_MakeValid(geometry)),
-				'{"dissolved": true}'
-			FROM features
-			WHERE dataset_id IN (${placeholders})
-			AND geometry IS NOT NULL
-		`);
-		await insertDissolved.query(outputId, ...op.inputs);
-		await insertDissolved.close();
+		// Attempt 1: ST_MakeValid per feature, chunked union
+		// Attempt 2: ST_Buffer(ST_MakeValid(geometry), 0) per feature, chunked union
+		const repairExprs = [
+			'ST_MakeValid(geometry)',
+			'ST_Buffer(ST_MakeValid(geometry), 0)',
+		];
+		let dissolved = false;
+		for (let attempt = 0; attempt < repairExprs.length; attempt++) {
+			if (attempt > 0) {
+				callbacks?.onWarn?.('Union', `TopologyException on attempt ${attempt}, retrying dissolve with stronger topology repair`);
+				const del = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+				try { await del.query(outputId); } finally { await del.close(); }
+			}
+			const stmt = await connection.prepare(`
+				WITH numbered AS (
+					SELECT
+						ROW_NUMBER() OVER () AS rn,
+						${repairExprs[attempt]} AS geom
+					FROM features
+					WHERE dataset_id IN (${placeholders})
+					AND geometry IS NOT NULL
+				),
+				chunk_unions AS (
+					SELECT ST_Union_Agg(geom) AS geom
+					FROM numbered
+					GROUP BY CAST(FLOOR((rn - 1) / 500) AS INTEGER)
+				)
+				INSERT INTO features (dataset_id, source_url, geometry, properties)
+				SELECT ?, 'operation:union', ST_Union_Agg(ST_MakeValid(geom)), '{"dissolved": true}'
+				FROM chunk_unions
+			`);
+			try {
+				await stmt.query(...op.inputs, outputId);
+				dissolved = true;
+				break;
+			} catch (err) {
+				if (err instanceof Error && err.message.includes('TopologyException') && attempt < repairExprs.length - 1) {
+					continue;
+				}
+				if (err instanceof Error && err.message.includes('TopologyException')) {
+					break; // fall through to merge fallback
+				}
+				throw err;
+			} finally {
+				await stmt.close();
+			}
+		}
+		if (!dissolved) {
+			callbacks?.onWarn?.('Union', 'Could not dissolve after all retries: returning merged features');
+			const del = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
+			try { await del.query(outputId); } finally { await del.close(); }
+			const selects = op.inputs.map(() =>
+				`SELECT ?, 'operation:union', geometry, properties FROM features WHERE dataset_id = ?`
+			).join(' UNION ALL ');
+			const fallback = await connection.prepare(`INSERT INTO features (dataset_id, source_url, geometry, properties) ${selects}`);
+			const queryParams = op.inputs.flatMap(inputId => [outputId, inputId]);
+			try { await fallback.query(...queryParams); } finally { await fallback.close(); }
+		}
 	}
 
 	// Get feature count

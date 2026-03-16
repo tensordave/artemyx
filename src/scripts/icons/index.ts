@@ -38,6 +38,9 @@ export { listIcon } from './list';
 // Safari gate
 export { warningIcon } from './warning';                     // Safari unsupported banner
 
+// Operation builder
+export { gitMergeIcon } from './git-merge';                  // operation builder button
+
 // Config control
 export { playIcon } from './play';                           // run config button
 export { eraserIcon } from './eraser';                       // clear all data button

@@ -84,6 +84,13 @@ export interface UpdateDatasetNameRequest extends RequestBase {
 	name: string;
 }
 
+export interface RenameDatasetIdRequest extends RequestBase {
+	type: 'renameDatasetId';
+	oldId: string;
+	newId: string;
+	newName: string;
+}
+
 export interface UpdateDatasetVisibleRequest extends RequestBase {
 	type: 'updateDatasetVisible';
 	datasetId: string;
@@ -275,6 +282,7 @@ export type WorkerRequest =
 	| DeleteAllDatasetsRequest
 	| UpdateDatasetColorRequest
 	| UpdateDatasetNameRequest
+	| RenameDatasetIdRequest
 	| UpdateDatasetVisibleRequest
 	| SwapLayerOrderRequest
 	| SetLayerOrdersRequest

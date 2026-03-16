@@ -1,37 +1,9 @@
 import type { Map, IControl } from 'maplibre-gl';
-import type { Highlighter } from 'shiki';
-import { getSingletonHighlighter } from 'shiki';
 import { codeBlockIcon, playIcon, pencilIcon, eraserIcon, trashIcon, fileArrowUpIcon, magicWandIcon, exportIcon, fileCodeIcon, downloadSimpleIcon } from '../icons';
 import { generateConfigYaml } from '../config/generator';
 import { exportConfigYaml } from '../config/export-config';
 import { exportViewerZip } from '../config/export-viewer';
-
-let highlighterPromise: Promise<Highlighter> | null = null;
-let highlighterInstance: Highlighter | null = null;
-
-function getHighlighter(): Promise<Highlighter> {
-	if (highlighterInstance) return Promise.resolve(highlighterInstance);
-	if (!highlighterPromise) {
-		highlighterPromise = getSingletonHighlighter({
-			themes: ['github-dark'],
-			langs: ['yaml'],
-		}).then((hl) => {
-			highlighterInstance = hl;
-			return hl;
-		});
-	}
-	return highlighterPromise;
-}
-
-function highlightSync(yaml: string): string | null {
-	if (!highlighterInstance) return null;
-	return highlighterInstance.codeToHtml(yaml, { lang: 'yaml', theme: 'github-dark' });
-}
-
-async function highlightAsync(yaml: string): Promise<string> {
-	const hl = await getHighlighter();
-	return hl.codeToHtml(yaml, { lang: 'yaml', theme: 'github-dark' });
-}
+import { highlightSync, highlightAsync } from '../utils/shiki';
 
 export interface ConfigControlOptions {
 	onRun?: (yamlText?: string) => Promise<void>;
@@ -195,23 +167,25 @@ export class ConfigControl implements IControl {
 		const actions = document.createElement('div');
 		actions.className = 'config-viewer-actions';
 
-		// Edit button
+		// Authoring group (edit, import, generate)
+		const authoringGroup = document.createElement('div');
+		authoringGroup.className = 'config-viewer-btn-group';
+
 		this.editBtn = document.createElement('button');
 		this.editBtn.type = 'button';
 		this.editBtn.className = 'config-viewer-action-btn';
 		this.editBtn.title = 'Edit config';
 		this.editBtn.innerHTML = pencilIcon;
 		this.editBtn.addEventListener('click', () => this.toggleEdit());
-		actions.appendChild(this.editBtn);
+		authoringGroup.appendChild(this.editBtn);
 
-		// Import button
 		this.importBtn = document.createElement('button');
 		this.importBtn.type = 'button';
 		this.importBtn.className = 'config-viewer-action-btn';
 		this.importBtn.title = 'Import config file';
 		this.importBtn.innerHTML = fileArrowUpIcon;
 		this.importBtn.addEventListener('click', () => this.fileInput?.click());
-		actions.appendChild(this.importBtn);
+		authoringGroup.appendChild(this.importBtn);
 
 		// Hidden file input for import
 		this.fileInput = document.createElement('input');
@@ -221,41 +195,61 @@ export class ConfigControl implements IControl {
 		this.fileInput.addEventListener('change', () => this.handleImport());
 		panel.appendChild(this.fileInput);
 
-		// Generate button
 		this.generateBtn = document.createElement('button');
 		this.generateBtn.type = 'button';
 		this.generateBtn.className = 'config-viewer-action-btn';
 		this.generateBtn.title = 'Generate config from session';
 		this.generateBtn.innerHTML = magicWandIcon;
 		this.generateBtn.addEventListener('click', () => this.handleGenerate());
-		actions.appendChild(this.generateBtn);
+		authoringGroup.appendChild(this.generateBtn);
 
-		// Export button (dropdown: export config / export viewer zip)
+		actions.appendChild(authoringGroup);
+
+		// Divider
+		const divider1 = document.createElement('span');
+		divider1.className = 'config-viewer-divider';
+		actions.appendChild(divider1);
+
+		// Download group (export)
+		const downloadGroup = document.createElement('div');
+		downloadGroup.className = 'config-viewer-btn-group';
+
 		this.exportBtn = document.createElement('button');
 		this.exportBtn.type = 'button';
 		this.exportBtn.className = 'config-viewer-action-btn';
 		this.exportBtn.title = 'Export';
 		this.exportBtn.innerHTML = exportIcon;
 		this.exportBtn.addEventListener('click', () => this.toggleExportDropdown());
-		actions.appendChild(this.exportBtn);
+		downloadGroup.appendChild(this.exportBtn);
 
-		// Run button
+		actions.appendChild(downloadGroup);
+
+		// Divider
+		const divider2 = document.createElement('span');
+		divider2.className = 'config-viewer-divider';
+		actions.appendChild(divider2);
+
+		// Execution group (run, clear)
+		const executionGroup = document.createElement('div');
+		executionGroup.className = 'config-viewer-btn-group';
+
 		this.runBtn = document.createElement('button');
 		this.runBtn.type = 'button';
-		this.runBtn.className = 'config-viewer-action-btn';
+		this.runBtn.className = 'config-viewer-action-btn config-viewer-action-btn--run';
 		this.runBtn.title = 'Run config';
 		this.runBtn.innerHTML = playIcon;
 		this.runBtn.addEventListener('click', () => this.handleRun());
-		actions.appendChild(this.runBtn);
+		executionGroup.appendChild(this.runBtn);
 
-		// Clear button (double-click confirm)
 		this.clearBtn = document.createElement('button');
 		this.clearBtn.type = 'button';
-		this.clearBtn.className = 'config-viewer-action-btn';
+		this.clearBtn.className = 'config-viewer-action-btn config-viewer-action-btn--clear';
 		this.clearBtn.title = 'Clear all data';
 		this.clearBtn.innerHTML = eraserIcon;
 		this.clearBtn.addEventListener('click', () => this.handleClear());
-		actions.appendChild(this.clearBtn);
+		executionGroup.appendChild(this.clearBtn);
+
+		actions.appendChild(executionGroup);
 
 		header.appendChild(actions);
 
@@ -493,29 +487,12 @@ export class ConfigControl implements IControl {
 		textarea.value = this.rawYaml;
 		textarea.spellcheck = false;
 
-		// Sync scroll from textarea to highlight layer (proportional vertical
-		// scroll so highlight and textarea reach the bottom at the same time,
-		// even if Shiki's <pre> has a slightly different scrollHeight)
-		textarea.addEventListener('scroll', () => {
-			if (this.highlightEl) {
-				const tMax = textarea.scrollHeight - textarea.clientHeight;
-				const hMax = this.highlightEl.scrollHeight - this.highlightEl.clientHeight;
-				if (tMax <= 0) {
-					this.highlightEl.scrollTop = 0;
-				} else if (tMax === hMax) {
-					this.highlightEl.scrollTop = textarea.scrollTop;
-				} else {
-					this.highlightEl.scrollTop = (textarea.scrollTop / tMax) * hMax;
-				}
-				this.highlightEl.scrollLeft = textarea.scrollLeft;
-			}
-		});
-
-		// Re-highlight on input, batched to next animation frame; auto-expand up to 60vh
+		// Re-highlight on input, batched to next animation frame; auto-grow and expand panel
 		textarea.addEventListener('input', () => {
 			if (this.highlightRafId) cancelAnimationFrame(this.highlightRafId);
 			this.highlightRafId = requestAnimationFrame(() => {
 				this.updateHighlight(textarea.value);
+				this.autoGrow(textarea);
 				this.autoExpandPanel(textarea);
 			});
 		});
@@ -534,11 +511,18 @@ export class ConfigControl implements IControl {
 		textarea.focus();
 		textarea.setSelectionRange(0, 0);
 
-		// Defer scroll restore - textarea needs a frame to compute its scrollHeight
+		// Defer until layout settles: auto-grow textarea and restore body scroll
 		requestAnimationFrame(() => {
-			textarea.scrollTop = savedScroll;
-			if (this.highlightEl) this.highlightEl.scrollTop = savedScroll;
+			this.autoGrow(textarea);
+			if (this.bodyEl) this.bodyEl.scrollTop = savedScroll;
 		});
+	}
+
+	private autoGrow(textarea: HTMLTextAreaElement): void {
+		const savedScroll = this.bodyEl?.scrollTop ?? 0;
+		textarea.style.height = 'auto';
+		textarea.style.height = `${textarea.scrollHeight}px`;
+		if (this.bodyEl) this.bodyEl.scrollTop = savedScroll;
 	}
 
 	private autoExpandPanel(textarea: HTMLTextAreaElement, maxRatio = 0.6): void {
@@ -586,11 +570,10 @@ export class ConfigControl implements IControl {
 
 		// Capture textarea content, scroll position, and clean up highlight state
 		const textarea = this.bodyEl.querySelector('textarea');
-		let savedScroll = 0;
+		const savedScroll = this.bodyEl.scrollTop;
 		if (textarea) {
 			this.rawYaml = textarea.value;
 			this.hasBeenEdited = true;
-			savedScroll = textarea.scrollTop;
 		}
 		if (this.highlightRafId) cancelAnimationFrame(this.highlightRafId);
 		this.highlightRafId = null;

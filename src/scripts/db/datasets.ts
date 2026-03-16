@@ -382,6 +382,53 @@ export async function updateDatasetColor(datasetId: string, color: string): Prom
 }
 
 /**
+ * Rename a dataset's primary key (id) across all tables.
+ * Updates datasets.id, features.dataset_id, and operations references.
+ * Also sets the display name to the new name.
+ */
+export async function renameDatasetId(oldId: string, newId: string, newName: string): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+
+		// Update features foreign key
+		const updateFeatures = await connection.prepare('UPDATE features SET dataset_id = ? WHERE dataset_id = ?');
+		await updateFeatures.query(newId, oldId);
+		await updateFeatures.close();
+
+		// Update datasets primary key + display name
+		const updateDatasets = await connection.prepare('UPDATE datasets SET id = ?, name = ? WHERE id = ?');
+		await updateDatasets.query(newId, newName, oldId);
+		await updateDatasets.close();
+
+		// Update operations table: output_id
+		const updateOpOutput = await connection.prepare('UPDATE operations SET output_id = ? WHERE output_id = ?');
+		await updateOpOutput.query(newId, oldId);
+		await updateOpOutput.close();
+
+		// Update operations table: inputs_json references
+		const opsResult = await connection.query('SELECT output_id, inputs_json FROM operations');
+		const ops = opsResult.toArray();
+		for (const op of ops) {
+			const inputsJson = op.inputs_json as string;
+			if (inputsJson.includes(oldId)) {
+				const inputs: string[] = JSON.parse(inputsJson);
+				const updated = inputs.map((id: string) => id === oldId ? newId : id);
+				const stmt = await connection.prepare('UPDATE operations SET inputs_json = ? WHERE output_id = ?');
+				await stmt.query(JSON.stringify(updated), op.output_id);
+				await stmt.close();
+			}
+		}
+
+		console.log(`[DuckDB] Renamed dataset ${oldId} -> ${newId} ("${newName}")`);
+		await checkpoint();
+		return true;
+	} catch (error) {
+		console.error('Failed to rename dataset ID:', error);
+		return false;
+	}
+}
+
+/**
  * Update the name/alias for a specific dataset
  */
 export async function updateDatasetName(datasetId: string, name: string): Promise<boolean> {
