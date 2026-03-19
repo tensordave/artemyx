@@ -11,6 +11,7 @@ import { exportDatasetAsGeoJSON } from '../layer-actions/export';
 import { buildStyleView, savePendingStyle } from '../layer-actions/style';
 import { createLayerRow, type Dataset } from '../layer-actions/layer-row';
 import { resyncLayerOrder } from '../layers';
+import type { OperationBuilderControl } from './operation-builder-control';
 
 /**
  * Custom control for toggling layer visibility
@@ -29,12 +30,30 @@ export class LayerToggleControl implements maplibregl.IControl {
 	private currentView: 'list' | 'style' = 'list';
 	/** Dataset ID of the currently displayed style view */
 	private currentStyleDatasetId: string | undefined;
+	/** Global tracker of loaded dataset IDs on the map */
+	private loadedDatasets?: Set<string>;
+	/** Operation Builder control, notified on dataset rename/delete */
+	private operationBuilderControl?: OperationBuilderControl;
 
 	/**
 	 * Set the callback for when this panel opens (wired after both controls exist).
 	 */
 	setOnPanelOpen(cb: () => void): void {
 		this.onPanelOpen = cb;
+	}
+
+	/**
+	 * Set the loaded datasets tracker (wired after construction in map.ts).
+	 */
+	setLoadedDatasets(ds: Set<string>): void {
+		this.loadedDatasets = ds;
+	}
+
+	/**
+	 * Set the Operation Builder control reference for dataset change notifications.
+	 */
+	setOperationBuilderControl(obc: OperationBuilderControl): void {
+		this.operationBuilderControl = obc;
 	}
 
 	onAdd(map: maplibregl.Map) {
@@ -110,12 +129,22 @@ export class LayerToggleControl implements maplibregl.IControl {
 			},
 			async (newName: string) => {
 				progressControl.updateProgress(`Renaming to "${newName}"...`, 'processing');
-				const result = await renameDataset(this.map!, dataset.id, newName, progressControl);
+				const oldId = dataset.id;
+				const result = await renameDataset(this.map!, oldId, newName, progressControl);
 				if (result.success) {
+					if (this.loadedDatasets) {
+						this.loadedDatasets.delete(oldId);
+						this.loadedDatasets.add(result.newId);
+					}
 					dataset.id = result.newId;
 					dataset.name = newName;
+					// Resync MapLibre layer order from DB (layer_order column
+					// is preserved during rename but may drift during the swap)
+					const allDatasets = await getDatasets();
+					resyncLayerOrder(this.map!, allDatasets.filter((d: any) => !d.hidden).map((d: any) => d.id));
 					progressControl.updateProgress(`Renamed to "${newName}"`, 'success');
 					progressControl.scheduleIdle(3000);
+					this.operationBuilderControl?.refreshDatasets();
 					this.showListView();
 				} else {
 					progressControl.updateProgress('Failed to rename dataset', 'error');
@@ -247,7 +276,10 @@ export class LayerToggleControl implements maplibregl.IControl {
 				dataset.id,
 				dataset.name,
 				progressControl,
-				() => this.refreshPanel()
+				() => {
+					this.refreshPanel();
+					this.operationBuilderControl?.refreshDatasets();
+				}
 			);
 		});
 		menu.appendChild(deleteItem);

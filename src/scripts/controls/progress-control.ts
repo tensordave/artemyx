@@ -175,6 +175,7 @@ export class ProgressControl implements IControl {
       timestamp: e.timestamp,
     }));
     this.history.unshift(...mapped);
+    this.history.sort((a, b) => a.timestamp - b.timestamp);
 
     // Cap history
     if (this.history.length > this.MAX_HISTORY) {

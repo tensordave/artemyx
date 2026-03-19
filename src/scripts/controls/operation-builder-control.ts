@@ -1030,6 +1030,12 @@ export class OperationBuilderControl implements IControl {
 		}
 	}
 
+	/** Refresh dataset dropdowns (called externally after dataset rename/delete). */
+	refreshDatasets(): void {
+		if (!this.isOpen) return;
+		this.populateDatasetOptions().then(() => this.renderInputs());
+	}
+
 	// ── Form reset ──────────────────────────────────────────────────────
 
 	private resetForm(): void {

@@ -21,6 +21,7 @@ Goal: load externally hosted PMTiles files and generate PMTiles archives directl
 - **Keyboard shortcuts** - L (layer control), P (progress), Esc (close), Delete (remove feature), WASD for panning map, R/F to zoom in and out
 - **ARIA labels** - Accessibility improvements for `layer-control.ts`
 
+
 ### v0.8.0 - deck.gl Core Integration
 
 Goal: establish the full deck.gl integration path using GeoJsonLayer as the initial renderer type, handling all geometry types (polygon, line, point) in parallel with the existing MapLibre pipeline.
@@ -177,6 +178,9 @@ Items worth building eventually but not yet assigned to a version:
 
 
 ## Completed
+
+### v0.6.4 - Stability and Polish
+- Buffer dissolve quadSegs fix (sagitta-based tolerance), topology exception regression fix, dataset rename fixes (in-memory disappearance, layer order preservation), startup log message ordering fix (unified worker init log path), Operation Builder dropdown refresh on rename/delete, layer reorder fix for renamed operation layers (Arrow Proxy row conversion)
 
 ### v0.6.3 - Operation Builder
 - Operation Builder control (draggable/resizable panel, dynamic inputs for unary/binary ops, type-specific params, live YAML preview snippet); config editor button reorganization (authoring/download/execution groups with color-coded run/clear); rename layer moved to style panel (double-click in-place); dataset ID cascading rename on layer rename; generate config respects layer visibility; topology exception robustness improvements; config editor edit mode alignment fix; operation status auto-clear on interaction

@@ -246,11 +246,15 @@ export async function swapLayerOrder(idA: string, idB: string): Promise<boolean>
 		const result = await stmt.query(idA, idB);
 		await stmt.close();
 
-		const rows = result.toArray();
+		// Convert Arrow Proxy rows to plain objects for reliable comparison
+		const rows = result.toArray().map((r: any) => ({
+			id: String(r.id),
+			layer_order: Number(r.layer_order),
+		}));
 		if (rows.length !== 2) return false;
 
-		const orderA = Number(rows.find((r: any) => r.id === idA)!.layer_order);
-		const orderB = Number(rows.find((r: any) => r.id === idB)!.layer_order);
+		const orderA = rows.find(r => r.id === idA)!.layer_order;
+		const orderB = rows.find(r => r.id === idB)!.layer_order;
 
 		// Swap
 		const updateA = await connection.prepare('UPDATE datasets SET layer_order = ? WHERE id = ?');

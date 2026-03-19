@@ -269,6 +269,7 @@ function shouldUseCOI(): boolean {
 
 export async function initDB(useOPFS: boolean = false): Promise<void> {
 	try {
+		logInitStep('Initializing database...');
 		logInitStep('Resolving DuckDB bundle...');
 
 		// Workers are self-hosted; WASM loads from jsDelivr (files exceed Cloudflare's 25MB limit)

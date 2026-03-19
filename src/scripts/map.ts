@@ -14,7 +14,6 @@ import { executeOperations } from './config/executor';
 import { executeLayersFromConfig, resyncLayerOrder, restoreLabelIfConfigured, restoreStoredPaint } from './layers';
 import { toggleLayerVisibility } from './layer-actions/visibility';
 import { BrowserLogger } from './logger';
-import { databaseIcon } from './icons';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getDatasets, getDatasetBounds, getFeaturesAsGeoJSON, setLayerOrders, saveViewport, getCachedViewport, setEventHandler, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig } from './db';
 import { addOperationResultToMap } from './config/operations/render';
 import { DEFAULT_STYLE } from './db/constants';
@@ -147,6 +146,7 @@ progressControl = new ProgressControl();
 const basemapControl = new BasemapControl();
 const geocodingControl = new GeocodingControl();
 const storageControl = new StorageControl();
+layerToggleControl.setLoadedDatasets(loadedDatasets);
 layerToggleControl.setOnPanelOpen(() => { basemapControl.closePanel(); geocodingControl.closePanel(); });
 basemapControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); geocodingControl.closePanel(); });
 geocodingControl.setOnPanelOpen(() => { layerToggleControl.closePanel(); basemapControl.closePanel(); });
@@ -226,6 +226,8 @@ const operationBuilderControl = new OperationBuilderControl({
 	layerToggleControl,
 	loadedDatasets,
 });
+
+layerToggleControl.setOperationBuilderControl(operationBuilderControl);
 
 // Right-hand controls: only one panel open at a time
 dataControl.setOnPanelOpen(() => { uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
@@ -317,17 +319,12 @@ async function restoreNonConfigDatasets(config: MapConfig | null): Promise<void>
 	layerToggleControl.refreshPanel();
 }
 
-// Await DB init and show early progress
-progressControl.updateProgress('database', 'processing', 'Initializing database...', databaseIcon);
+// Await DB init — progress steps are logged inside the worker's initDB()
+// and replayed via the onInitLog callback when the RPC response arrives.
 await ensureInit();
-
-// Init log is replayed via the worker event handler (onInitLog callback)
-// which fires when the init RPC response arrives with the log entries.
 
 if (hasExistingOPFSData()) {
 	progressControl.updateProgress('session', 'processing', 'Restoring session from storage...');
-} else {
-	progressControl.updateProgress('database', 'success', 'Database ready');
 }
 
 // Restore saved config from OPFS (if user edited + ran in a prior session)

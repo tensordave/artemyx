@@ -34,6 +34,14 @@ export async function computeBuffer(
 	const distanceMeters = toMeters(params.distance, units);
 	const dissolve = params.dissolve ?? false;
 	const quadSegs = params.quadSegs ?? 32;
+	// Simplify tolerance must stay below the chord height (sagitta) of one buffer arc segment,
+	// otherwise ST_Simplify collapses the curve detail that quadSegs produces.
+	// Sagitta = r * (1 - cos(π / (2 * quadSegs))); we use half that as a safety margin.
+	const simplifyFraction = 0.5 * (1 - Math.cos(Math.PI / (2 * quadSegs)));
+	// For dissolve: sagitta can be extremely small at high quadSegs (0.06% at 32),
+	// but ST_Union_Agg needs enough simplification to clean near-coincident edges.
+	// Floor ensures topology repair even when curve preservation tolerance is tiny.
+	const dissolveSimplifyFraction = Math.max(simplifyFraction, 0.005);
 	const outputId = op.output;
 	const displayName = op.name || outputId;
 	const inputId = op.input;
@@ -64,12 +72,12 @@ export async function computeBuffer(
 			// Chunked union: group buffered features into chunks of 500 before final union.
 			// Reduces per-call GEOS sweep complexity and prevents TopologyException on dense datasets.
 			// Retry with escalating simplification tolerance if TopologyException still occurs.
-			const toleranceMultipliers = [0.05, 0.15, 0.40];
+			const toleranceMultipliers = [1, 8, 25];
 			let dissolved = false;
 			for (let attempt = 0; attempt < toleranceMultipliers.length; attempt++) {
-				const simplifyTolerance = distanceDegrees * toleranceMultipliers[attempt];
+				const simplifyTolerance = distanceDegrees * dissolveSimplifyFraction * toleranceMultipliers[attempt];
 				if (attempt > 0) {
-					callbacks?.onWarn?.('Buffer', `TopologyException on attempt ${attempt}, retrying dissolve with ${(toleranceMultipliers[attempt] * 100).toFixed(0)}% simplify tolerance`);
+					callbacks?.onWarn?.('Buffer', `TopologyException on attempt ${attempt}, retrying dissolve with ${toleranceMultipliers[attempt]}x simplify tolerance`);
 					const del = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
 					try { await del.query(outputId); } finally { await del.close(); }
 				}
@@ -139,12 +147,12 @@ export async function computeBuffer(
 		// TopologyException on dense datasets (e.g., 66k water mains) where adjacent buffer rings
 		// have near-coincident edges. Retry with escalating simplification tolerance as safety net.
 		callbacks?.onInfo?.('Buffer', 'Using chunked dissolve (500 features/chunk)');
-		const toleranceMultipliers = [0.05, 0.15, 0.40];
+		const toleranceMultipliers = [1, 8, 25];
 		let dissolved = false;
 		for (let attempt = 0; attempt < toleranceMultipliers.length; attempt++) {
-			const simplifyTolerance = distanceMeters * toleranceMultipliers[attempt];
+			const simplifyTolerance = distanceMeters * dissolveSimplifyFraction * toleranceMultipliers[attempt];
 			if (attempt > 0) {
-				callbacks?.onWarn?.('Buffer', `TopologyException on attempt ${attempt}, retrying dissolve with ${(toleranceMultipliers[attempt] * 100).toFixed(0)}% simplify tolerance`);
+				callbacks?.onWarn?.('Buffer', `TopologyException on attempt ${attempt}, retrying dissolve with ${toleranceMultipliers[attempt]}x simplify tolerance`);
 				const del = await connection.prepare('DELETE FROM features WHERE dataset_id = ?');
 				try { await del.query(outputId); } finally { await del.close(); }
 			}

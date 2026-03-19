@@ -5,7 +5,7 @@
  */
 
 import maplibregl from 'maplibre-gl';
-import { renameDatasetId, updateDatasetName, datasetExists } from '../db';
+import { renameDatasetId, updateDatasetName, datasetExists, getFeaturesAsGeoJSON } from '../db';
 import { slugifyDatasetId } from '../db/utils';
 import { getSourceId, addSource, removeSource } from '../layers/sources';
 import { getLayersBySource } from '../layers/layers';
@@ -97,23 +97,17 @@ export async function renameDataset(
 		}
 	}
 
-	// Capture source GeoJSON data
-	const source = map.getSource(oldSourceId) as maplibregl.GeoJSONSource | undefined;
-	let geoJsonData: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
-	if (source) {
-		// serialize() returns the source spec including data
-		const serialized = source.serialize();
-		if (serialized?.data && typeof serialized.data === 'object') {
-			geoJsonData = serialized.data as GeoJSON.FeatureCollection;
-		}
-	}
-
-	// 2. DB rename (atomic across tables) — do this before touching MapLibre
+	// 2. DB rename (atomic across tables) — do this before fetching data
 	const dbOk = await renameDatasetId(oldId, newId, newName);
 	if (!dbOk) {
 		progressControl.updateProgress('Failed to rename in database', 'error');
 		return { success: false, newId: oldId };
 	}
+
+	// Fetch GeoJSON from DuckDB (source of truth) using the new ID.
+	// Previous approach used MapLibre's source.serialize() which doesn't
+	// reliably return inline GeoJSON data across MapLibre versions.
+	const geoJsonData = await getFeaturesAsGeoJSON(newId);
 
 	// 3. Add new source + layers BEFORE removing old ones (flicker-free swap).
 	//    Insert each new layer directly before its old counterpart so it occupies
@@ -121,13 +115,15 @@ export async function renameDataset(
 	const newSourceId = getSourceId(newId);
 	addSource(map, newSourceId, geoJsonData);
 
-	const newLayerIds = addLayersBefore(map, captured, newSourceId, oldId, newId);
+	const { newLayerIds, handledOldIds } = addLayersBefore(map, captured, newSourceId, oldId, newId);
 
-	// 4. Remove old layers and source (new layers already visible)
+	// 4. Remove old layers and source (new layers already visible).
+	//    Skip layers already handled by addLayersBefore (explicit config layers
+	//    that were removed and re-added with the same ID).
 	const oldLayerIds = captured.map(l => l.id);
 	removeFeatureHandlers(oldLayerIds);
 	for (const layer of captured) {
-		if (map.getLayer(layer.id)) {
+		if (!handledOldIds.has(layer.id) && map.getLayer(layer.id)) {
 			map.removeLayer(layer.id);
 		}
 	}
@@ -141,7 +137,10 @@ export async function renameDataset(
 
 /**
  * Add new layers positioned directly before their old counterparts.
- * Both old and new layers coexist for one frame, preventing flicker.
+ * Default layers (dataset-<id>-fill etc.) get remapped IDs and coexist
+ * with old layers for one frame (flicker-free). Explicit config layers
+ * (user-defined IDs that don't match the dataset prefix) keep their ID
+ * and must be removed before re-adding with the new source.
  */
 function addLayersBefore(
 	map: maplibregl.Map,
@@ -149,8 +148,9 @@ function addLayersBefore(
 	sourceId: string,
 	oldDatasetId: string,
 	newDatasetId: string
-): string[] {
+): { newLayerIds: string[]; handledOldIds: Set<string> } {
 	const newLayerIds: string[] = [];
+	const handledOldIds = new Set<string>();
 
 	for (const layer of captured) {
 		const newLayerId = remapLayerId(layer.id, oldDatasetId, newDatasetId);
@@ -167,12 +167,26 @@ function addLayersBefore(
 		if (layer.minzoom !== undefined) spec.minzoom = layer.minzoom;
 		if (layer.maxzoom !== undefined) spec.maxzoom = layer.maxzoom;
 
-		// Insert directly before the old layer so it sits at the same z-position
-		map.addLayer(spec as maplibregl.LayerSpecification, layer.id);
+		if (newLayerId === layer.id) {
+			// Explicit config layer: same ID, can't coexist — remove then re-add.
+			// Capture the layer above to preserve z-position (addLayer without
+			// beforeId would place it on top of the stack).
+			const allLayers = map.getStyle()?.layers || [];
+			const idx = allLayers.findIndex(l => l.id === layer.id);
+			const beforeId = idx >= 0 && idx < allLayers.length - 1 ? allLayers[idx + 1].id : undefined;
+			if (map.getLayer(layer.id)) {
+				map.removeLayer(layer.id);
+			}
+			map.addLayer(spec as maplibregl.LayerSpecification, beforeId);
+			handledOldIds.add(layer.id);
+		} else {
+			// Default layer: insert before old for flicker-free swap
+			map.addLayer(spec as maplibregl.LayerSpecification, layer.id);
+		}
 		newLayerIds.push(newLayerId);
 	}
 
-	return newLayerIds;
+	return { newLayerIds, handledOldIds };
 }
 
 /**
