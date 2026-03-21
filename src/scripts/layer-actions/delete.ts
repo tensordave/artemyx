@@ -1,6 +1,6 @@
 import maplibregl from 'maplibre-gl';
 import { deleteDataset as deleteDatasetFromDB } from '../db';
-import { getLayersBySource, getSourceId } from '../layers';
+import { getLayersForDataset, getLayersBySource, getSourceId } from '../layers';
 import { removeFeatureHandlers } from '../controls/popup';
 import { ProgressControl } from '../controls/progress-control';
 import { showErrorDialog } from '../ui/error-dialog';
@@ -101,10 +101,8 @@ export async function deleteDatasetWithLayers(
 		return;
 	}
 
-	// Remove all MapLibre layers using this dataset's source
-	// (dynamic discovery — works with both default and config-defined layer IDs)
-	const sourceId = getSourceId(datasetId);
-	const layers = getLayersBySource(map, sourceId);
+	// Remove this dataset's MapLibre layers (scoped for PMTiles sub-layers)
+	const layers = getLayersForDataset(map, datasetId);
 
 	// Clean up hover/click handler registry before removing layers
 	removeFeatureHandlers(layers.map(l => l.id));
@@ -113,8 +111,11 @@ export async function deleteDatasetWithLayers(
 		map.removeLayer(layer.id);
 	}
 
-	// Remove MapLibre source
-	if (map.getSource(sourceId)) {
+	// Only remove the shared source if no other layers remain on it
+	// (PMTiles sub-layers share a single vector source)
+	const sourceId = getSourceId(datasetId);
+	const remainingLayers = getLayersBySource(map, sourceId);
+	if (remainingLayers.length === 0 && map.getSource(sourceId)) {
 		map.removeSource(sourceId);
 	}
 

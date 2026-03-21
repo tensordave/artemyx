@@ -3,17 +3,19 @@
  * Re-exports source and layer utilities for map rendering.
  */
 
-export { getSourceId, addSource, removeSource, updateSourceData } from './sources';
+export { getSourceId, addSource, addVectorSource, removeSource, updateSourceData } from './sources';
 
 export {
 	getLayerIds,
 	getLayersBySource,
+	getLayersForDataset,
 	removeLayer,
 	removeDefaultLayers,
 	addFillLayer,
 	addLineLayer,
 	addCircleLayer,
 	addDefaultLayers,
+	addDefaultVectorLayers,
 	addLayerFromConfig,
 	executeLayersFromConfig,
 	resyncLayerOrder,

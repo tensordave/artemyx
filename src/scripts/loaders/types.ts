@@ -4,10 +4,10 @@
  */
 
 /** Supported data formats for loading */
-export type DetectedFormat = 'geojson' | 'csv' | 'geoparquet' | 'json-array';
+export type DetectedFormat = 'geojson' | 'csv' | 'geoparquet' | 'json-array' | 'pmtiles';
 
 /** Formats that can be explicitly set in config (json-array is auto-detected only) */
-export type ConfigFormat = 'geojson' | 'csv' | 'geoparquet';
+export type ConfigFormat = 'geojson' | 'csv' | 'geoparquet' | 'pmtiles';
 
 /** Options passed to individual loaders */
 export interface LoaderOptions {

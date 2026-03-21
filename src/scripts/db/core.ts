@@ -100,6 +100,14 @@ async function initSchema(): Promise<void> {
 		ALTER TABLE datasets ADD COLUMN IF NOT EXISTS layer_order INTEGER DEFAULT 0
 	`);
 
+	// Migration: add format and source_layer columns for PMTiles support (non-destructive)
+	await conn.query(`
+		ALTER TABLE datasets ADD COLUMN IF NOT EXISTS format TEXT DEFAULT NULL
+	`);
+	await conn.query(`
+		ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_layer TEXT DEFAULT NULL
+	`);
+
 	// Backfill layer_order for existing rows that still have the default (0)
 	await conn.query(`
 		UPDATE datasets SET layer_order = sub.rn

@@ -14,11 +14,16 @@ import {
 	addDatasetToMap,
 	fitMapToBounds,
 } from './shared';
+import { loadPMTilesDataset } from './load-pmtiles';
+import { extractDatasetName } from '../db/utils';
 
 /**
  * Load data from a URL into DuckDB and display on map.
  * The full data pipeline (fetch, format detection, parsing, DuckDB insert, GeoJSON query)
  * runs in the Web Worker. This function handles pre-flight checks and MapLibre rendering.
+ *
+ * PMTiles URLs are intercepted early and routed to the vector source pipeline
+ * (no DuckDB involvement, no fetch/size check).
  */
 export async function loadDataFromUrl(
 	url: string,
@@ -30,6 +35,29 @@ export async function loadDataFromUrl(
 	const parsedUrl = await validateUrl(url);
 	if (!parsedUrl) {
 		return false;
+	}
+
+	// PMTiles: bypass the worker pipeline entirely (no fetch, no size check, no DuckDB)
+	const isPMTiles = options.format === 'pmtiles' || url.endsWith('.pmtiles');
+	if (isPMTiles) {
+		try {
+			return await loadPMTilesDataset({
+				id: options.configOverrides?.id || extractDatasetName(url),
+				url,
+				name: options.displayName,
+				color: options.configOverrides?.color,
+				style: options.configOverrides?.style,
+				hidden: options.hidden,
+				format: 'pmtiles',
+			}, { map, logger, layerToggleControl, loadedDatasets });
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+			logger.progress(options.displayName || 'PMTiles', 'error', errorMsg);
+			if (!skipErrorDialog) {
+				await showErrorDialog('Failed to Load PMTiles', errorMsg);
+			}
+			return false;
+		}
 	}
 
 	// Quota preflight (main thread - uses navigator.storage)

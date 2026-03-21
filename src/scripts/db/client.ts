@@ -241,6 +241,10 @@ export async function deleteDataset(datasetId: string): Promise<boolean> {
 	return rpc<boolean>('deleteDataset', { datasetId });
 }
 
+export async function deleteSubDatasets(parentId: string): Promise<void> {
+	await rpc<boolean>('deleteSubDatasets', { parentId });
+}
+
 export async function deleteAllDatasets(): Promise<void> {
 	await rpc<boolean>('deleteAllDatasets');
 }
@@ -279,6 +283,13 @@ export async function getDatasetStyle(datasetId: string): Promise<StyleConfig> {
 
 export async function updateDatasetStyle(datasetId: string, style: StyleConfig): Promise<boolean> {
 	return rpc<boolean>('updateDatasetStyle', { datasetId, style });
+}
+
+export async function createMetadataDataset(
+	id: string, sourceUrl: string, name: string, color: string,
+	style: StyleConfig, hidden: boolean, format: string, sourceLayer?: string
+): Promise<boolean> {
+	return rpc<boolean>('createMetadataDataset', { id, sourceUrl, name, color, style, hidden, format, sourceLayer });
 }
 
 export async function getFeaturesAsGeoJSON(datasetId?: string): Promise<GeoJSON.FeatureCollection> {

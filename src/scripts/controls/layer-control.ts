@@ -1,6 +1,9 @@
 import maplibregl from 'maplibre-gl';
-import { getDatasets, updateDatasetVisible, swapLayerOrder } from '../db';
+import { getDatasets, updateDatasetVisible, swapLayerOrder, updateDatasetName } from '../db';
 import { renameDataset } from '../layer-actions/rename';
+import type { LegendControl } from './legend-control';
+import { updateHoverLabel } from '../controls/popup';
+import { getLayersForDataset } from '../layers';
 import { stackIcon } from '../icons';
 import { progressControl } from '../map';
 import { toggleLayerVisibility } from '../layer-actions/visibility';
@@ -34,6 +37,8 @@ export class LayerToggleControl implements maplibregl.IControl {
 	private loadedDatasets?: Set<string>;
 	/** Operation Builder control, notified on dataset rename/delete */
 	private operationBuilderControl?: OperationBuilderControl;
+	/** Legend control, refreshed on PMTiles rename */
+	private legendControl?: LegendControl;
 
 	/**
 	 * Set the callback for when this panel opens (wired after both controls exist).
@@ -54,6 +59,13 @@ export class LayerToggleControl implements maplibregl.IControl {
 	 */
 	setOperationBuilderControl(obc: OperationBuilderControl): void {
 		this.operationBuilderControl = obc;
+	}
+
+	/**
+	 * Set the Legend control reference for refresh on PMTiles rename.
+	 */
+	setLegendControl(lc: LegendControl): void {
+		this.legendControl = lc;
 	}
 
 	onAdd(map: maplibregl.Map) {
@@ -129,6 +141,25 @@ export class LayerToggleControl implements maplibregl.IControl {
 			},
 			async (newName: string) => {
 				progressControl.updateProgress(`Renaming to "${newName}"...`, 'processing');
+
+				if (dataset.format === 'pmtiles') {
+					// PMTiles: display-name only (ID encodes parent/sourceLayer structure)
+					const ok = await updateDatasetName(dataset.id, newName);
+					if (ok) {
+						dataset.name = newName;
+						const layerInfos = getLayersForDataset(this.map!, dataset.id);
+						updateHoverLabel(layerInfos.map(l => l.id), newName);
+						this.legendControl?.refresh();
+						progressControl.updateProgress(`Renamed to "${newName}"`, 'success');
+						progressControl.scheduleIdle(3000);
+						this.showListView();
+					} else {
+						progressControl.updateProgress('Failed to rename dataset', 'error');
+						progressControl.scheduleIdle(5000);
+					}
+					return;
+				}
+
 				const oldId = dataset.id;
 				const result = await renameDataset(this.map!, oldId, newName, progressControl);
 				if (result.success) {
@@ -239,19 +270,21 @@ export class LayerToggleControl implements maplibregl.IControl {
 
 		const { menu } = this.contextMenuHandle;
 
-		// Add export item
-		const exportItem = createExportItem(async () => {
-			this.closeContextMenu();
-			progressControl.updateProgress(`Exporting "${dataset.name}"...`, 'processing');
-			try {
-				await exportDatasetAsGeoJSON(dataset.id, dataset.name);
-				progressControl.updateProgress(`Exported "${dataset.name}"`, 'success');
-			} catch (err) {
-				console.error('Export failed:', err);
-				progressControl.updateProgress('Export failed', 'error');
-			}
-		});
-		menu.appendChild(exportItem);
+		// Add export item (not available for PMTiles - no feature data in DuckDB)
+		if (dataset.format !== 'pmtiles') {
+			const exportItem = createExportItem(async () => {
+				this.closeContextMenu();
+				progressControl.updateProgress(`Exporting "${dataset.name}"...`, 'processing');
+				try {
+					await exportDatasetAsGeoJSON(dataset.id, dataset.name);
+					progressControl.updateProgress(`Exported "${dataset.name}"`, 'success');
+				} catch (err) {
+					console.error('Export failed:', err);
+					progressControl.updateProgress('Export failed', 'error');
+				}
+			});
+			menu.appendChild(exportItem);
+		}
 
 		// Add divider before delete
 		menu.appendChild(createMenuDivider());

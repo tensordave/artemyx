@@ -6,7 +6,7 @@
 
 import type { MainMessage, WorkerRequest, CrsPromptResponse, InitResult, LoadPipelineRawResult, OperationPipelineRawResult } from './worker-types';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog, getConnection, getDB, checkpoint, vacuum, exportOPFSFile, importOPFSFile } from './core';
-import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, getOperations, clearOperations, saveOperationMetadata, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
+import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, deleteSubDatasets, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, getOperations, clearOperations, saveOperationMetadata, createMetadataOnlyDataset, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
 import type { StyleConfig } from './datasets';
 import { getFeaturesAsGeoJSONString, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './features';
 import type { OperationConfig } from '../config/types';
@@ -527,7 +527,22 @@ async function workerExecuteOperation(op: OperationConfig, execOrder: number): P
 // ── clearOPFS (worker-side: teardown only, no location.reload) ──────────────
 
 async function workerClearOPFS(): Promise<void> {
-	// Close connection and database
+	postProgress('clear-session', 'processing', 'Clearing session data...');
+
+	// 1. Flush all data from tables so OPFS is empty even if file deletion fails.
+	//    database.terminate() may not synchronously release the OPFS access handle,
+	//    causing removeEntry() to silently fail. Clearing tables first ensures the
+	//    OPFS file contains an empty DB regardless.
+	try {
+		const connection = await getConnection();
+		await connection.query('DELETE FROM features');
+		await connection.query('DELETE FROM datasets');
+		await connection.query('DELETE FROM operations');
+		await connection.query('DELETE FROM meta');
+		await checkpoint();
+	} catch { /* DB might not be initialized */ }
+
+	// 2. Close connection and terminate database
 	try {
 		const connection = await getConnection();
 		await connection.close();
@@ -537,7 +552,7 @@ async function workerClearOPFS(): Promise<void> {
 		await database.terminate();
 	} catch { /* ignore */ }
 
-	// Delete the OPFS file
+	// 3. Delete OPFS file (best-effort — may fail if access handle lingers)
 	try {
 		const root = await navigator.storage.getDirectory();
 		await root.removeEntry('gis_app.db');
@@ -545,6 +560,12 @@ async function workerClearOPFS(): Promise<void> {
 	} catch (e) {
 		console.warn('[Worker] Could not delete OPFS file:', e);
 	}
+
+	// 4. Clean up WAL file if present
+	try {
+		const root = await navigator.storage.getDirectory();
+		await root.removeEntry('gis_app.db.wal');
+	} catch { /* may not exist */ }
 }
 
 // ── Style parsing helper ────────────────────────────────────────────────────
@@ -648,6 +669,21 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 			case 'deleteAllDatasets': {
 				await deleteAllDatasets();
 				respond(requestId, true);
+				break;
+			}
+
+			case 'deleteSubDatasets': {
+				await deleteSubDatasets(req.parentId);
+				respond(requestId, true);
+				break;
+			}
+
+			case 'createMetadataDataset': {
+				const ok = await createMetadataOnlyDataset(
+					req.id, req.sourceUrl, req.name, req.color,
+					req.style, req.hidden, req.format, req.sourceLayer
+				);
+				respond(requestId, ok);
 				break;
 			}
 

@@ -75,6 +75,28 @@ export function getLayersBySource(map: maplibregl.Map, sourceId: string): Source
 }
 
 /**
+ * Find all layers scoped to a specific dataset entry.
+ * For regular datasets, delegates to getLayersBySource.
+ * For PMTiles sub-layer entries (ID contains '/'), filters by the
+ * MapLibre `source-layer` property so only that sub-layer's layers are returned.
+ */
+export function getLayersForDataset(map: maplibregl.Map, datasetId: string): SourceLayerInfo[] {
+	const sourceId = getSourceId(datasetId);
+	const allLayers = getLayersBySource(map, sourceId);
+
+	const slashIdx = datasetId.lastIndexOf('/');
+	if (slashIdx < 0) return allLayers;
+
+	const sourceLayerName = datasetId.substring(slashIdx + 1);
+	const styleLayers = map.getStyle()?.layers || [];
+
+	return allLayers.filter(info => {
+		const spec = styleLayers.find(l => l.id === info.id);
+		return spec && 'source-layer' in spec && (spec as any)['source-layer'] === sourceLayerName;
+	});
+}
+
+/**
  * Remove a layer from the map.
  * No-op if layer doesn't exist.
  */
@@ -195,6 +217,65 @@ export function addDefaultLayers(
 }
 
 /**
+ * Add default layers (fill, line, point) for a vector tile dataset.
+ * Same triplet as addDefaultLayers() but with source-layer set for vector sources.
+ * When layerSuffix is provided, it's appended to layer IDs to avoid collisions
+ * when creating layers for multiple source-layers from the same PMTiles source.
+ */
+export function addDefaultVectorLayers(
+	map: maplibregl.Map,
+	sourceId: string,
+	datasetId: string,
+	color: string,
+	style: StyleConfig,
+	sourceLayer: string,
+	layerSuffix?: string
+): string[] {
+	const suffix = layerSuffix ? `-${layerSuffix}` : '';
+	const ids = {
+		fill: `dataset-${datasetId}${suffix}-fill`,
+		line: `dataset-${datasetId}${suffix}-line`,
+		point: `dataset-${datasetId}${suffix}-point`,
+	};
+
+	map.addLayer({
+		id: ids.fill,
+		type: 'fill',
+		source: sourceId,
+		'source-layer': sourceLayer,
+		filter: ['==', ['geometry-type'], 'Polygon'],
+		paint: { 'fill-color': color, 'fill-opacity': style.fillOpacity }
+	});
+
+	map.addLayer({
+		id: ids.line,
+		type: 'line',
+		source: sourceId,
+		'source-layer': sourceLayer,
+		filter: ['in', ['geometry-type'], ['literal', ['LineString', 'Polygon']]],
+		paint: { 'line-color': color, 'line-width': style.lineWidth, 'line-opacity': style.lineOpacity }
+	});
+
+	map.addLayer({
+		id: ids.point,
+		type: 'circle',
+		source: sourceId,
+		'source-layer': sourceLayer,
+		filter: ['==', ['geometry-type'], 'Point'],
+		paint: { 'circle-radius': style.pointRadius, 'circle-color': color, 'circle-opacity': style.pointOpacity }
+	});
+
+	const layerIds = [ids.fill, ids.line, ids.point];
+	if (style.minzoom > 0 || style.maxzoom < 24) {
+		for (const id of layerIds) {
+			map.setLayerZoomRange(id, style.minzoom, style.maxzoom);
+		}
+	}
+
+	return layerIds;
+}
+
+/**
  * Add a layer from explicit LayerConfig.
  * Translates config source ID to MapLibre source ID and creates the layer.
  *
@@ -221,6 +302,9 @@ export function addLayerFromConfig(map: maplibregl.Map, config: LayerConfig): vo
 	};
 
 	// Add optional properties
+	if (config['source-layer']) {
+		layerSpec['source-layer'] = config['source-layer'];
+	}
 	if (config.filter) {
 		layerSpec.filter = config.filter;
 	}
@@ -252,8 +336,7 @@ export function addLayerFromConfig(map: maplibregl.Map, config: LayerConfig): vo
 export function resyncLayerOrder(map: maplibregl.Map, orderedDatasetIds: string[]): void {
 	// Iterate in reverse: lowest order first (bottom of map) → moved to top first
 	for (let i = orderedDatasetIds.length - 1; i >= 0; i--) {
-		const sourceId = getSourceId(orderedDatasetIds[i]);
-		const layers = getLayersBySource(map, sourceId);
+		const layers = getLayersForDataset(map, orderedDatasetIds[i]);
 		for (const layer of layers) {
 			if (map.getLayer(layer.id)) {
 				map.moveLayer(layer.id);
@@ -444,8 +527,7 @@ export function applyZoomRange(
 	minzoom: number,
 	maxzoom: number
 ): void {
-	const sourceId = getSourceId(datasetId);
-	const layers = getLayersBySource(map, sourceId);
+	const layers = getLayersForDataset(map, datasetId);
 	for (const layer of layers) {
 		map.setLayerZoomRange(layer.id, minzoom, maxzoom);
 	}
@@ -483,15 +565,10 @@ export function restoreStoredPaint(
 	color: string,
 	style: import('../db/constants').StyleConfig
 ): void {
-	const sourceId = getSourceId(datasetId);
-	const layers = getLayersBySource(map, sourceId);
-	const defaultIds = getLayerIds(datasetId);
-	const defaultIdSet = new Set([defaultIds.fill, defaultIds.line, defaultIds.point]);
+	const layers = getLayersForDataset(map, datasetId);
 
 	for (const layer of layers) {
-		// Skip config-defined layers — they have explicit paint from YAML
-		if (!defaultIdSet.has(layer.id)) continue;
-		// Color
+		// Color — skip expression-driven paint (user can't override those via GUI)
 		const colorProp = COLOR_PROP[layer.type];
 		if (colorProp) {
 			const current = layer.paint[colorProp];

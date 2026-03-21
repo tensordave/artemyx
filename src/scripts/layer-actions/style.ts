@@ -8,9 +8,8 @@ import maplibregl from 'maplibre-gl';
 import { getDatasetStyle, updateDatasetStyle, getDistinctGeometryTypes } from '../db';
 import type { StyleConfig } from '../db/constants';
 import { ProgressControl } from '../controls/progress-control';
-import { getLayersBySource, applyZoomRange, type SourceLayerInfo } from '../layers/layers';
+import { getLayersForDataset, applyZoomRange, type SourceLayerInfo } from '../layers/layers';
 import { buildLabelSection } from './labels';
-import { getSourceId } from '../layers/sources';
 import { arrowLeftIcon, pencilIcon } from '../icons';
 import { isColorPickerEnabled, getDisplayColor, updateLayerColor } from './color';
 import type { Dataset } from './layer-row';
@@ -48,8 +47,7 @@ function getEditableProperties(
 	map: maplibregl.Map,
 	datasetId: string
 ): Record<GeometryStyleProperty, boolean> {
-	const sourceId = getSourceId(datasetId);
-	const layers = getLayersBySource(map, sourceId);
+	const layers = getLayersForDataset(map, datasetId);
 
 	const result: Record<GeometryStyleProperty, boolean> = {
 		fillOpacity: false,
@@ -81,10 +79,16 @@ function getEditableProperties(
 /**
  * Check which geometry types exist for a dataset by querying DuckDB.
  * Returns accurate results regardless of viewport state or render timing.
+ * PMTiles datasets have no features in DuckDB, so all three types are enabled
+ * (vector tiles can contain any geometry type and we create all 3 default layers).
  */
 async function getGeometryPresence(
-	datasetId: string
+	datasetId: string,
+	format?: string | null
 ): Promise<{ hasFill: boolean; hasLine: boolean; hasCircle: boolean }> {
+	if (format === 'pmtiles') {
+		return { hasFill: true, hasLine: true, hasCircle: true };
+	}
 	const types = await getDistinctGeometryTypes(datasetId);
 	return {
 		hasFill: types.has('POLYGON') || types.has('MULTIPOLYGON'),
@@ -169,8 +173,7 @@ function applyStyleToMap(
 	property: GeometryStyleProperty,
 	value: number
 ): boolean {
-	const sourceId = getSourceId(datasetId);
-	const layers = getLayersBySource(map, sourceId);
+	const layers = getLayersForDataset(map, datasetId);
 	const mapping = STYLE_PROPERTY_MAP[property];
 
 	let appliedCount = 0;
@@ -460,7 +463,7 @@ export async function buildStyleView(
 
 	// Check which properties are editable and which geometries exist
 	const editableProps = getEditableProperties(map, dataset.id);
-	const geometryPresence = await getGeometryPresence(dataset.id);
+	const geometryPresence = await getGeometryPresence(dataset.id, dataset.format);
 
 	// Debounced save: persists style to DB 500ms after the last slider change.
 	// Ensures OPFS persistence without waiting for the user to navigate away.
@@ -538,11 +541,13 @@ export async function buildStyleView(
 	const maxZoomSlider = maxZoomRow.querySelector('input') as HTMLInputElement;
 	const maxZoomDisplay = maxZoomRow.querySelector('.style-value') as HTMLSpanElement;
 
-	// ── Labels section ──────────────────────────────────────────────
+	// ── Labels section (skip for PMTiles - no property keys in DuckDB) ──
 
-	const geometryTypes = await getDistinctGeometryTypes(dataset.id);
-	const labelFragment = await buildLabelSection(map, dataset, workingStyle, currentStyle, geometryTypes, scheduleSave);
-	content.appendChild(labelFragment);
+	if (dataset.format !== 'pmtiles') {
+		const geometryTypes = await getDistinctGeometryTypes(dataset.id);
+		const labelFragment = await buildLabelSection(map, dataset, workingStyle, currentStyle, geometryTypes, scheduleSave);
+		content.appendChild(labelFragment);
+	}
 
 	panelElement.appendChild(content);
 

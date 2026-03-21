@@ -1,4 +1,5 @@
 import maplibregl from 'maplibre-gl';
+import { Protocol as PMTilesProtocol } from 'pmtiles';
 import {
 	LayerToggleControl, ProgressControl, DataControl, UploadControl,
 	StorageControl, BasemapControl, GeocodingControl, ScaleBarControl,
@@ -13,9 +14,11 @@ import { createExecutionPlan } from './config/operations-graph';
 import { executeOperations } from './config/executor';
 import { executeLayersFromConfig, resyncLayerOrder, restoreLabelIfConfigured, restoreStoredPaint } from './layers';
 import { toggleLayerVisibility } from './layer-actions/visibility';
+import { getDisplayColor } from './layer-actions/color';
 import { BrowserLogger } from './logger';
-import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getDatasets, getDatasetBounds, getFeaturesAsGeoJSON, setLayerOrders, saveViewport, getCachedViewport, setEventHandler, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig } from './db';
+import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getDatasets, getDatasetBounds, getFeaturesAsGeoJSON, setLayerOrders, saveViewport, getCachedViewport, setEventHandler, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig, updateDatasetColor, updateDatasetStyle } from './db';
 import { addOperationResultToMap } from './config/operations/render';
+import { resolveSubLayerStyle } from './data-actions/load-pmtiles';
 import { DEFAULT_STYLE } from './db/constants';
 import { isSafari } from './utils/safari-detect';
 import { showSafariBanner } from './ui/safari-banner';
@@ -91,6 +94,11 @@ if (useOPFS && !safariGated) {
 // Get basemap configuration (from config or default)
 const basemap = getBasemap(mapSettings.basemap) ?? getDefaultBasemap();
 
+// Register PMTiles protocol handler before map creation.
+// Must precede any source addition that uses pmtiles:// URLs.
+const pmtilesProtocol = new PMTilesProtocol();
+maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
+
 // Initialize the map with config settings
 const map = new maplibregl.Map({
 	container: 'map',
@@ -110,7 +118,7 @@ const map = new maplibregl.Map({
 // Attribution in bottom-right, below scale bar (added after scale bar below)
 const attributionControl = new maplibregl.AttributionControl({
 	compact: true,
-	customAttribution: '<a href="https://artemyx.org">Artemyx</a>'
+	customAttribution: '<a href="https://artemyx.org">Artemyx</a> | <a href="https://maplibre.org">MapLibre</a> | <a href="https://protomaps.com">Protomaps</a>'
 });
 
 // Attribution starts expanded by default (compact: true still opens on init).
@@ -244,7 +252,9 @@ map.addControl(storageControl, 'top-right');
 map.addControl(layerToggleControl, 'top-left');
 map.addControl(basemapControl, 'top-left');
 map.addControl(geocodingControl, 'top-left');
-map.addControl(new LegendControl(), 'bottom-right');
+const legendControl = new LegendControl();
+map.addControl(legendControl, 'bottom-right');
+layerToggleControl.setLegendControl(legendControl);
 map.addControl(new ScaleBarControl(), 'bottom-right');
 map.addControl(attributionControl, 'bottom-right');
 map.addControl(progressControl, 'bottom-left');
@@ -272,14 +282,55 @@ async function restoreNonConfigDatasets(config: MapConfig | null): Promise<void>
 		for (const op of config.operations) configIds.add(op.output);
 	}
 
-	// Restore datasets not covered by config
-	const manualDatasets = allDatasets.filter((d: any) => !configIds.has(d.id));
+	// Restore datasets not covered by config.
+	// Sub-layer entries (parentId/layer) are skipped if their parent is in config
+	// (the config pipeline's loadPMTilesDataset will recreate them).
+	const manualDatasets = allDatasets.filter((d: any) => {
+		if (configIds.has(d.id)) return false;
+		const slashIdx = d.id.lastIndexOf('/');
+		if (slashIdx >= 0 && configIds.has(d.id.substring(0, slashIdx))) return false;
+		return true;
+	});
 	if (manualDatasets.length === 0) return;
 
 	console.log(`[Restore] Restoring ${manualDatasets.length} non-config dataset(s)`);
 
 	for (const dataset of manualDatasets) {
 		try {
+			// PMTiles datasets: re-add vector source from persisted metadata
+			if (dataset.format === 'pmtiles' && dataset.source_url) {
+				const { getSourceId, addVectorSource, addDefaultVectorLayers } = await import('./layers');
+				const sourceId = getSourceId(dataset.id);
+
+				// Sub-layer entries share a source; only create it once
+				if (!map.getSource(sourceId)) {
+					addVectorSource(map, sourceId, dataset.source_url);
+				}
+
+				if (!dataset.hidden && dataset.source_layer) {
+					const color = dataset.color || '#3388ff';
+					const style = dataset.style ? JSON.parse(dataset.style) : { ...DEFAULT_STYLE };
+
+					// For sub-layer entries ({parentId}/{layer}), use parent ID for layer naming
+					const slashIdx = dataset.id.lastIndexOf('/');
+					const parentId = slashIdx >= 0 ? dataset.id.substring(0, slashIdx) : dataset.id;
+					const layerSuffix = slashIdx >= 0 ? dataset.source_layer : undefined;
+
+					const layerIds = addDefaultVectorLayers(map, sourceId, parentId, color, style, dataset.source_layer, layerSuffix);
+					if (layerIds.length > 0) {
+						const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: dataset.name || dataset.id });
+						attachFeatureClickHandlers(map, layerIds, hoverPopup);
+					}
+
+					if (!dataset.visible) {
+						toggleLayerVisibility(map, dataset.id, false);
+					}
+				}
+				loadedDatasets.add(dataset.id);
+				progressControl.updateProgress(dataset.name || dataset.id, 'success', 'Restored PMTiles from session');
+				continue;
+			}
+
 			const geoJsonData = await getFeaturesAsGeoJSON(dataset.id);
 			if (!geoJsonData.features || geoJsonData.features.length === 0) continue;
 
@@ -400,7 +451,10 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 	if (config.operations && config.operations.length > 0) {
 		console.log(`Executing ${config.operations.length} operation(s) from config...`);
 
-		const datasetIds = config.datasets.map((d) => d.id);
+		// Exclude PMTiles datasets from operation inputs (no feature data in DuckDB)
+		const datasetIds = config.datasets
+			.filter((d) => d.format !== 'pmtiles' && !(!d.format && d.url?.endsWith('.pmtiles')))
+			.map((d) => d.id);
 		const plan = createExecutionPlan(datasetIds, config.operations);
 
 		if (!plan.valid) {
@@ -432,10 +486,18 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 
 		const layerResult = executeLayersFromConfig(map, config.layers);
 
-		// Recompute layer_order so it matches the config's visual intent
+		// Recompute layer_order so it matches the config's visual intent.
+		// For PMTiles sub-entries, index by {source}/{source-layer} so each
+		// sub-entry gets its correct position from the config layer order.
 		const datasetTopIndex = new Map<string, number>();
 		for (let i = 0; i < config.layers.length; i++) {
-			datasetTopIndex.set(config.layers[i].source, i);
+			const lc = config.layers[i];
+			if (lc['source-layer']) {
+				datasetTopIndex.set(`${lc.source}/${lc['source-layer']}`, i);
+			}
+			if (!datasetTopIndex.has(lc.source)) {
+				datasetTopIndex.set(lc.source, i);
+			}
 		}
 		const visible = allDatasets.filter((d: any) => !d.hidden);
 		const referenced = visible.filter((d: any) => datasetTopIndex.has(d.id));
@@ -475,6 +537,45 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 				});
 				attachFeatureClickHandlers(map, [layerId], hoverPopup);
 			}
+		}
+	}
+
+	// Sync config layer paint colors back to DuckDB for datasets still at the default color.
+	// Without this, restoreStoredPaint() overwrites config-defined paint with #3388ff.
+	// Same pattern as resolveSubLayerColor() in load-pmtiles.ts for PMTiles datasets.
+	if (config.layers && config.layers.length > 0) {
+		try {
+			const allDs = await getDatasets();
+			const configSources = new Set(config.layers.map(l => l.source));
+			for (const ds of allDs) {
+				if (!configSources.has(ds.id)) continue;
+				if (ds.color && ds.color !== '#3388ff') continue;
+				const mapColor = getDisplayColor(map, ds.id, '#3388ff');
+				if (mapColor !== '#3388ff') {
+					await updateDatasetColor(ds.id, mapColor);
+				}
+			}
+		} catch (e) {
+			console.warn('Failed to sync config layer colors to DB:', e);
+		}
+
+		// Sync config layer style (opacity, width, radius) back to DuckDB.
+		// Without this, restoreStoredPaint() overwrites config paint with DEFAULT_STYLE.
+		// Same pattern as resolveSubLayerStyle() used for PMTiles.
+		try {
+			const allDsStyle = await getDatasets();
+			const configSourcesStyle = new Set(config.layers!.map(l => l.source));
+			for (const ds of allDsStyle) {
+				if (!configSourcesStyle.has(ds.id)) continue;
+				const styleOverrides = resolveSubLayerStyle(config.layers, ds.id);
+				if (Object.keys(styleOverrides).length > 0) {
+					const currentStyle = ds.style ? { ...DEFAULT_STYLE, ...JSON.parse(ds.style) } : { ...DEFAULT_STYLE };
+					const merged = { ...currentStyle, ...styleOverrides };
+					await updateDatasetStyle(ds.id, merged);
+				}
+			}
+		} catch (e) {
+			console.warn('Failed to sync config layer styles to DB:', e);
 		}
 	}
 

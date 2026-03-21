@@ -314,6 +314,8 @@ export async function getDatasetById(id: string): Promise<any | null> {
 			style: row.style,
 			source_crs: row.source_crs,
 			layer_order: Number(row.layer_order),
+			format: row.format ?? null,
+			source_layer: row.source_layer ?? null,
 		};
 	} catch (error) {
 		console.error('Failed to query dataset by ID:', error);
@@ -344,6 +346,8 @@ export async function getDatasets(): Promise<any[]> {
 			style: row.style,
 			source_crs: row.source_crs,
 			layer_order: Number(row.layer_order),
+			format: row.format ?? null,
+			source_layer: row.source_layer ?? null,
 		}));
 	} catch (error) {
 		console.error('Failed to query datasets:', error);
@@ -568,6 +572,64 @@ export async function updateDatasetStyle(datasetId: string, style: StyleConfig):
 	} catch (error) {
 		console.error('Failed to update dataset style:', error);
 		return false;
+	}
+}
+
+/**
+ * Create a metadata-only dataset entry (no features rows).
+ * Used for PMTiles and other formats that bypass the DuckDB data pipeline.
+ */
+export async function createMetadataOnlyDataset(
+	id: string,
+	sourceUrl: string,
+	name: string,
+	color: string,
+	style: StyleConfig,
+	hidden: boolean,
+	format: string,
+	sourceLayer?: string
+): Promise<boolean> {
+	try {
+		const connection = await getConnection();
+
+		// Delete existing entry if reloading
+		const del = await connection.prepare('DELETE FROM datasets WHERE id = ?');
+		await del.query(id);
+		await del.close();
+
+		// Get next layer order
+		const orderResult = await connection.query('SELECT COALESCE(MAX(layer_order), 0) + 1 AS next_order FROM datasets');
+		const nextOrder = Number(orderResult.toArray()[0].next_order);
+
+		const stmt = await connection.prepare(`
+			INSERT INTO datasets (id, source_url, name, color, visible, hidden, feature_count, loaded_at, style, format, source_layer, layer_order)
+			VALUES (?, ?, ?, ?, true, ?, 0, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+		`);
+		await stmt.query(id, sourceUrl, name, color, hidden, JSON.stringify(style), format, sourceLayer ?? null, nextOrder);
+		await stmt.close();
+
+		console.log(`[DuckDB] Created metadata-only dataset ${id} (format: ${format})`);
+		await checkpoint();
+		return true;
+	} catch (error) {
+		console.error('Failed to create metadata-only dataset:', error);
+		return false;
+	}
+}
+
+/**
+ * Delete all sub-layer dataset entries for a PMTiles parent.
+ * Sub-layer IDs follow the `{parentId}/{sourceLayer}` convention.
+ * Called before creating new sub-entries to handle reload/reconfig.
+ */
+export async function deleteSubDatasets(parentId: string): Promise<void> {
+	try {
+		const connection = await getConnection();
+		const stmt = await connection.prepare("DELETE FROM datasets WHERE id LIKE ? || '/%'");
+		await stmt.query(parentId);
+		await stmt.close();
+	} catch (error) {
+		console.error('Failed to delete sub-datasets:', error);
 	}
 }
 

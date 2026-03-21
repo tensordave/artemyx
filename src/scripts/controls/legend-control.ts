@@ -116,8 +116,12 @@ function buildLegendGroups(map: MaplibreMap, datasetNames: Record<string, string
 		const validTypes = ['fill', 'line', 'circle', 'fill-extrusion'];
 		if (!validTypes.includes(layer.type)) continue;
 
-		if (!sourceMap.has(layer.source)) sourceMap.set(layer.source, []);
-		sourceMap.get(layer.source)!.push({
+		// Group by source + source-layer so PMTiles sublayers get separate legend entries
+		const sourceLayer = ('source-layer' in layer) ? (layer as any)['source-layer'] as string : undefined;
+		const groupKey = sourceLayer ? `${layer.source}|${sourceLayer}` : layer.source;
+
+		if (!sourceMap.has(groupKey)) sourceMap.set(groupKey, []);
+		sourceMap.get(groupKey)!.push({
 			type: layer.type as SourceLayerInfo['type'],
 			paint: (layer.paint as Record<string, unknown>) || {}
 		});
@@ -125,8 +129,18 @@ function buildLegendGroups(map: MaplibreMap, datasetNames: Record<string, string
 
 	const groups: LegendGroup[] = [];
 
-	for (const [sourceId, layers] of sourceMap) {
-		const datasetId = sourceId.replace(/^dataset-/, '');
+	for (const [groupKey, layers] of sourceMap) {
+		// Parse composite key: "dataset-parent|sourceLayer" or plain "dataset-id"
+		const pipeIdx = groupKey.indexOf('|');
+		let datasetId: string;
+		if (pipeIdx >= 0) {
+			const sourceId = groupKey.substring(0, pipeIdx);
+			const sourceLayer = groupKey.substring(pipeIdx + 1);
+			const parentId = sourceId.replace(/^dataset-/, '');
+			datasetId = `${parentId}/${sourceLayer}`;
+		} else {
+			datasetId = groupKey.replace(/^dataset-/, '');
+		}
 		const label = datasetNames[datasetId] || datasetId;
 		const entries: LegendEntry[] = [];
 

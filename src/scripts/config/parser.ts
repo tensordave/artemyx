@@ -25,7 +25,7 @@ import { validateLayers } from './validators/layers';
 // --- Constants (exported for use by validators) ---
 
 /** Valid explicit format values for datasets */
-export const VALID_FORMATS: ConfigFormat[] = ['geojson', 'csv', 'geoparquet'];
+export const VALID_FORMATS: ConfigFormat[] = ['geojson', 'csv', 'geoparquet', 'pmtiles'];
 
 /** Valid basemap IDs (duplicated here for runtime validation) */
 export const VALID_BASEMAPS: BasemapId[] = ['carto-dark', 'carto-light', 'carto-voyager', 'esri-satellite'];

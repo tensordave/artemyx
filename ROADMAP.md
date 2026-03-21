@@ -5,21 +5,50 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.7.0 - PMTiles Support
+### v0.7.1 - Outputs Config Section
 
-Goal: load externally hosted PMTiles files and generate PMTiles archives directly in the browser, enabling MapLibre to render large datasets as tiled vector sources rather than monolithic GeoJSON; zoom-level simplification and viewport streaming come for free via the tile protocol.
+Goal: add `outputs:` top-level config section to `MapConfig`, establishing the output contract shared by the browser app, CLI, and viewer.
 
-- **External PMTiles loading** - Register the `pmtiles://` protocol handler on map init; allow `pmtiles://` URLs in `DatasetConfig` as a tiled vector source; enables loading externally hosted PMTiles files (open data portals, self-hosted, GitHub Pages); foundational for in-browser generation and the CLI/viewer pipeline
-- **`outputs:` config section** - Top-level `outputs:` key in `MapConfig` declaring dataset output formats; `format: geojson | csv | parquet | pmtiles` with format-specific options (PMTiles: `minzoom`, `maxzoom`, `layerName`); this is the contract between the full app, CLI, and viewer - the same config drives all three
-- **PMTiles export** - Download generated .pmtiles from OPFS via blob URL; surfaced in StorageControl alongside cache size display; enables local backup or manual deployment to R2/S3/Pages without CLI
-- **Tiling pipeline** - Worker-based pipeline off main thread: `getFeaturesAsGeoJSON()` -> `geojson-vt` (tiles and simplifies per zoom level) -> `vt-pbf` (encodes as MVT protobuf) -> `pmtiles` writer (packs archive); progress surfaced in ProgressControl during generation
-- **OPFS PMTiles cache** - Generated `.pmtiles` files persisted in OPFS alongside the DuckDB database; restored on session reload without regeneration; invalidated when source dataset changes; `StorageControl` panel updated to surface PMTiles cache size alongside DB size
-- **MapLibre vector source wiring** - Tiled datasets use a MapLibre `vector` source pointing to the OPFS `pmtiles://` path instead of a `geojson` source; layer config requires a `source-layer` matching the declared `layerName`
+- **`OutputConfig` type** - `{ source, format, filename? }` where `source` references a dataset or operation output ID, `format` is `geojson | csv | parquet`, and `filename` defaults to the source ID; separate `OutputFormat` type distinct from input `ConfigFormat`
+- **Validation** - New `validators/outputs.ts`; source must exist in known dataset/operation IDs; no duplicate filenames after defaults applied; PMTiles sources rejected (no feature data in DuckDB)
+- **Output execution** - New `output-executor.ts` runs after operations complete in `runConfigPipeline()`; GeoJSON via existing `getFeaturesAsGeoJSONString()`; CSV via DuckDB `COPY` with JSON property flattening to columns; Parquet via DuckDB `COPY TO` with `ST_AsWKB(geometry)` for GeoParquet-compatible output
+- **Worker RPCs** - New request types for CSV and Parquet export in the worker protocol; export functions in `features.ts`; results as `ArrayBuffer` transferred via Transferable
+- **Config generator** - `generator.ts` includes `outputs` section in generated YAML when present
 
-### v0.7.1 - Accessibility and Shortcuts
+### v0.7.2 - Outputs UI
 
-- **Keyboard shortcuts** - L (layer control), P (progress), Esc (close), Delete (remove feature), WASD for panning map, R/F to zoom in and out
-- **ARIA labels** - Accessibility improvements for `layer-control.ts`
+Goal: surface outputs as a downloadable results panel in ConfigControl, enabling users to test what their config will produce before using the CLI.
+
+- **Outputs button** - Phosphor `package` icon in the config editor download/export toolbar group (right of the existing Export dropdown); disabled when config has no `outputs:` section; click triggers output execution
+- **Results panel** - Dropdown below the button following the existing export dropdown pattern; per output row shows filename, format badge (colored pill), file size, and individual download button; "Download All" zips multiple outputs via `fflate` (already a dependency); errors shown inline per row
+- **Progress and state** - Each output generation step logged to ProgressControl; button shows loading state during execution; `OutputResult[]` stored from last execution, cleared on config re-run; old blob URLs revoked to prevent memory leaks
+
+### v0.7.3 - PMTiles Generation
+
+Goal: add `format: pmtiles` to the outputs section, enabling in-browser vector tile generation from any dataset or operation result.
+
+- **Output format expansion** - Add `pmtiles` to `OutputFormat`; new `PMTilesOutputParams` with `minzoom` (default 0), `maxzoom` (default 14), `layerName` (defaults to source ID); `OutputConfig` gains optional `params` field for format-specific options
+- **Tiling pipeline** - Worker-based: `getFeaturesAsGeoJSON()` -> `geojson-vt` (tiles and simplifies per zoom level) -> `vt-pbf` (encodes as MVT protobuf) -> `pmtiles` writer (packs archive); runs in the DuckDB worker thread; progress reported per zoom level via ProgressControl
+- **Dependencies** - `geojson-vt` for tile slicing (pure JS, worker-compatible), `vt-pbf` for MVT encoding; PMTiles writer from `pmtiles` package already installed in v0.7.0
+- **Preview on map** - After generation, optionally register the generated PMTiles as a viewable vector source via blob URL and the protocol handler for verifying output before downloading
+- **File upload** - `UploadControl` accepts `.pmtiles` files; uploaded files written to OPFS and served from there by the protocol handler for persistence across page refresh; enables round-trip testing of generated PMTiles output
+
+### v0.7.4 - OPFS PMTiles Cache
+
+Goal: persist generated PMTiles in OPFS so they survive page refresh without regeneration, extending the existing OPFS persistence model to tile archives.
+
+- **OPFS tile storage** - Generated `.pmtiles` files written to OPFS alongside the DuckDB database; keyed by output source ID and config hash; restored on session reload without re-running the tiling pipeline
+- **Cache invalidation** - Invalidate when source dataset changes (feature count or hash mismatch); re-generation triggered automatically or on-demand via Outputs button
+- **StorageControl updates** - Surface PMTiles cache size alongside DB size in the storage panel; include PMTiles files in OPFS export/import; clear PMTiles cache on "Clear Storage"
+- **MapLibre vector source wiring** - Cached PMTiles served via `pmtiles://` protocol from OPFS; auto-registered as vector sources on session restore; layers created from cached config
+
+### v0.7.5 - Accessibility and Shortcuts
+
+Goal: keyboard navigation and ARIA improvements for the core map controls. Polish release after feature work stabilizes.
+
+- **Keyboard shortcuts** - L (layer control), P (progress), Esc (close any panel), Delete (remove feature), WASD for panning, R/F for zoom in/out; shortcuts disabled when a text input or textarea is focused
+- **ARIA labels** - Role attributes on interactive elements, `aria-expanded` on panels, `aria-label` on icon-only buttons, screen reader announcements for state changes in `layer-control.ts`
+- **Focus management** - Trap focus within open panels (config editor, layer panel); return focus to trigger button on panel close
 
 
 ### v0.8.0 - deck.gl Core Integration
@@ -178,6 +207,9 @@ Items worth building eventually but not yet assigned to a version:
 
 
 ## Completed
+
+### v0.7.0 - PMTiles Loading
+- PMTiles vector tile support via `pmtiles://` protocol (bypasses DuckDB entirely); config format detection, multi-layer archive auto-detection with per-layer panel entries (visibility, color, style, rename, delete); URL loading from DataControl; config generation for multi-layer archives; legend grouping by source-layer; OPFS session restore for vector sources; clear session fix (OPFS flush before close), progress control current-status fix
 
 ### v0.6.4 - Stability and Polish
 - Buffer dissolve quadSegs fix (sagitta-based tolerance), topology exception regression fix, dataset rename fixes (in-memory disappearance, layer order preservation), startup log message ordering fix (unified worker init log path), Operation Builder dropdown refresh on rename/delete, layer reorder fix for renamed operation layers (Arrow Proxy row conversion)

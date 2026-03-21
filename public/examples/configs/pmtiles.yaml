@@ -1,0 +1,131 @@
+# Artemyx Example - PMTiles Vector Tiles
+# Protomaps worldwide vector tile basemap loaded as a PMTiles dataset.
+# Each source layer is styled independently with explicit layer configs.
+# PMTiles datasets bypass DuckDB entirely - MapLibre renders tiles directly
+# via HTTP range requests through the pmtiles:// protocol handler.
+
+map:
+  center: [-122.4194, 37.7749]  # San Francisco, CA
+  zoom: 13
+  basemap: carto-dark
+
+datasets:
+  - id: protomaps
+    url: "https://demo-bucket.protomaps.com/v4.pmtiles"
+    format: pmtiles
+    name: Protomaps
+
+layers:
+  # Earth - landmass base
+  - id: earth-fill
+    source: protomaps
+    type: fill
+    source-layer: earth
+    paint:
+      fill-color: "#1a1a2e"
+      fill-opacity: 0.4
+
+  # Water - oceans, lakes, rivers
+  - id: water-fill
+    source: protomaps
+    type: fill
+    source-layer: water
+    paint:
+      fill-color: "#193d5a"
+      fill-opacity: 0.8
+
+  # Landcover - natural areas
+  - id: landcover-fill
+    source: protomaps
+    type: fill
+    source-layer: landcover
+    paint:
+      fill-color: "#1a3a2a"
+      fill-opacity: 0.5
+
+  # Landuse - parks, residential, commercial zones
+  - id: landuse-fill
+    source: protomaps
+    type: fill
+    source-layer: landuse
+    paint:
+      fill-color: "#2a4a3a"
+      fill-opacity: 0.4
+
+  # Buildings - footprints
+  - id: buildings-fill
+    source: protomaps
+    type: fill
+    source-layer: buildings
+    minzoom: 13
+    paint:
+      fill-color: "#3a3a5c"
+      fill-opacity: 0.6
+
+  # Boundaries - admin borders
+  - id: boundaries-line
+    source: protomaps
+    type: line
+    source-layer: boundaries
+    paint:
+      line-color: "#6366f1"
+      line-width: 1.5
+      line-opacity: 0.5
+
+  # Roads - street network
+  - id: roads-line
+    source: protomaps
+    type: line
+    source-layer: roads
+    paint:
+      line-color: "#94a3b8"
+      line-width:
+        - interpolate
+        - ["exponential", 1.5]
+        - ["zoom"]
+        - 5
+        - 0.5
+        - 14
+        - 2
+        - 18
+        - 8
+      line-opacity: 0.7
+
+  # Places - city and town labels
+  - id: places-label
+    source: protomaps
+    type: symbol
+    source-layer: places
+    minzoom: 5
+    layout:
+      text-field: ["get", "name"]
+      text-size:
+        - interpolate
+        - ["linear"]
+        - ["zoom"]
+        - 5
+        - 10
+        - 12
+        - 14
+      text-font: ["Open Sans Regular"]
+      text-max-width: 8
+    paint:
+      text-color: "#e2e8f0"
+      text-halo-color: "#0f172a"
+      text-halo-width: 1.5
+
+  # POIs - points of interest
+  - id: pois-label
+    source: protomaps
+    type: symbol
+    source-layer: pois
+    minzoom: 15
+    layout:
+      text-field: ["get", "name"]
+      text-size: 11
+      text-font: ["Open Sans Regular"]
+      text-max-width: 8
+    paint:
+      text-color: "#a5b4fc"
+      text-halo-color: "#0f172a"
+      text-halo-width: 1

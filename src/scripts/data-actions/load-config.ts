@@ -7,6 +7,7 @@ import type { DatasetConfig, LayerConfig } from '../config/types';
 import { parseDatasetStyle, addDatasetToMap } from './shared';
 import { loadDataFromUrl } from './load-url';
 import { loadDataFromFile } from './load-file';
+import { loadPMTilesDataset } from './load-pmtiles';
 import { showFilePromptDialog } from '../ui/error-dialog';
 
 /** Options for loading datasets from config */
@@ -76,15 +77,71 @@ export async function loadDatasetsFromConfig(
 			continue;
 		}
 
+		// PMTiles datasets bypass the DuckDB/loader pipeline entirely
+		const isPMTiles = dataset.format === 'pmtiles' ||
+			(!dataset.format && dataset.url && dataset.url.endsWith('.pmtiles'));
+
+		if (isPMTiles) {
+			try {
+				const success = await loadPMTilesDataset(dataset, {
+					map, logger, layerToggleControl, loadedDatasets, layers
+				});
+				if (success) {
+					if (dataset.visible === false) await updateDatasetVisible(dataset.id, false);
+					result.loaded++;
+				} else {
+					result.failed++;
+					result.errors.push(`${dataset.id}: Failed to load PMTiles`);
+				}
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : 'Unknown error';
+				logger.progress(displayName, 'error', msg);
+				result.failed++;
+				result.errors.push(`${dataset.id}: ${msg}`);
+			}
+			continue;
+		}
+
 		// OPFS / DuckDB restore: if dataset already exists in DuckDB, render from persisted data.
 		// This handles both OPFS session restore and file-uploaded datasets (url: "")
 		// that were preserved during selective teardown.
 		if (await datasetExists(dataset.id)) {
 			try {
+				const meta = await getDatasetById(dataset.id);
+
+				// PMTiles datasets: re-add vector source from persisted metadata
+				if (meta?.format === 'pmtiles' && meta.source_url) {
+					const { getSourceId, addVectorSource, addDefaultVectorLayers } = await import('../layers');
+					const { attachFeatureClickHandlers, attachFeatureHoverHandlers } = await import('../controls/popup');
+
+					const sourceId = getSourceId(dataset.id);
+					addVectorSource(map, sourceId, meta.source_url);
+
+					if (!isHidden) {
+						const color = meta.color || dataset.color || '#3388ff';
+						const style = parseDatasetStyle(meta.style);
+						const restoredSourceLayer = meta.source_layer || dataset.sourceLayer;
+
+						if (restoredSourceLayer && !skipLayers) {
+							const layerIds = addDefaultVectorLayers(map, sourceId, dataset.id, color, style, restoredSourceLayer);
+							if (layerIds.length > 0) {
+								const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: displayName });
+								attachFeatureClickHandlers(map, layerIds, hoverPopup);
+							}
+						}
+					}
+
+					loadedDatasets.add(dataset.id);
+					layerToggleControl.refreshPanel();
+					logger.progress(displayName, 'success', 'Restored PMTiles from session');
+					if (dataset.visible === false) await updateDatasetVisible(dataset.id, false);
+					result.loaded++;
+					continue;
+				}
+
 				// Hidden datasets: already in DuckDB, no rendering needed - skip GeoJSON materialization entirely
 				if (isHidden) {
 					loadedDatasets.add(dataset.id);
-					const meta = await getDatasetById(dataset.id);
 					const count = meta?.feature_count ?? 0;
 					logger.progress(displayName, 'success', `Restored from session (${count} features, hidden)`);
 					result.loaded++;

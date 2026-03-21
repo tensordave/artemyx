@@ -143,6 +143,22 @@ export function validateDataset(dataset: unknown, index: number): string[] {
 		}
 	}
 
+	// Optional: sourceLayer (string, vector tile layer name for PMTiles)
+	if ('sourceLayer' in d && d.sourceLayer !== undefined) {
+		if (typeof d.sourceLayer !== 'string' || d.sourceLayer.trim() === '') {
+			errors.push(`${prefix}.sourceLayer: must be a non-empty string`);
+		}
+	}
+
+	// PMTiles-specific guards: reject options that are meaningless for vector tile sources
+	if (d.format === 'pmtiles') {
+		if (d.latColumn !== undefined) errors.push(`${prefix}.latColumn: not supported for PMTiles format`);
+		if (d.lngColumn !== undefined) errors.push(`${prefix}.lngColumn: not supported for PMTiles format`);
+		if (d.geoColumn !== undefined) errors.push(`${prefix}.geoColumn: not supported for PMTiles format`);
+		if (d.paginate !== undefined) errors.push(`${prefix}.paginate: not supported for PMTiles format`);
+		if (d.crs !== undefined) errors.push(`${prefix}.crs: not supported for PMTiles format`);
+	}
+
 	return errors;
 }
 

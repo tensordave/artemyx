@@ -98,6 +98,13 @@ export function validateLayer(layer: unknown, index: number): string[] {
 		}
 	}
 
+	// Optional: source-layer (non-empty string, for vector tile sources)
+	if ('source-layer' in l && l['source-layer'] !== undefined) {
+		if (typeof l['source-layer'] !== 'string' || l['source-layer'].trim() === '') {
+			errors.push(`${prefix}.source-layer: must be a non-empty string`);
+		}
+	}
+
 	// Optional: filter (must be array if present - MapLibre expression)
 	if ('filter' in l && l.filter !== undefined) {
 		if (!Array.isArray(l.filter)) {

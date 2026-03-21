@@ -12,6 +12,7 @@ const EXTENSION_MAP: Record<string, DetectedFormat> = {
 	'.tsv': 'csv',
 	'.parquet': 'geoparquet',
 	'.geoparquet': 'geoparquet',
+	'.pmtiles': 'pmtiles',
 };
 
 /**
@@ -24,6 +25,7 @@ const SEGMENT_MAP: Record<string, DetectedFormat> = {
 	'geojson': 'geojson',
 	'json': 'geojson',
 	'csv': 'csv',
+	'pmtiles': 'pmtiles',
 };
 
 /** Content-Type prefix-to-format mapping (checked with startsWith) */

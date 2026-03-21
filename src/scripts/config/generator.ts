@@ -23,7 +23,9 @@ interface PlaceholderInfo {
 interface GeneratedLayerConfig {
 	id: string;
 	source: string;
+	name?: string;
 	type: string;
+	'source-layer'?: string;
 	paint?: Record<string, unknown>;
 	layout?: Record<string, unknown>;
 	filter?: unknown[];
@@ -201,28 +203,39 @@ export function extractLayerConfigs(map: Map): LayerExtractionResult {
 		// Reverse source ID: dataset-{id} -> {id}
 		const logicalSource = layer.source.slice('dataset-'.length);
 
+		// Read source-layer (used by PMTiles vector tile layers)
+		const sourceLayer = ('source-layer' in layer)
+			? (layer as Record<string, unknown>)['source-layer'] as string | undefined
+			: undefined;
+
 		const paint = cleanPaint(layer.paint as Record<string, unknown> | undefined);
 		const layout = cleanLayout(layer.layout as Record<string, unknown> | undefined);
 
 		// Check if this is a default layer
 		const defaultInfo = parseDefaultLayerId(layer.id);
 		if (defaultInfo) {
-			// Track this default layer
-			if (!defaultLayersByDataset[defaultInfo.datasetId]) {
-				defaultLayersByDataset[defaultInfo.datasetId] = new Set();
-			}
-			defaultLayersByDataset[defaultInfo.datasetId].add(defaultInfo.geoType);
+			// For PMTiles layers, parseDefaultLayerId extracts a wrong datasetId
+			// (e.g. "protomaps-water" from "dataset-protomaps-water-fill").
+			// Use logicalSource (the parent) for coverage tracking when source-layer is present.
+			const trackingId = sourceLayer ? logicalSource : defaultInfo.datasetId;
 
-			// Default layer with only flat paint values - skip (covered by style:)
-			if (!hasAnyExpression(paint) && !hasAnyExpression(layout)) {
+			// Track this default layer
+			if (!defaultLayersByDataset[trackingId]) {
+				defaultLayersByDataset[trackingId] = new Set();
+			}
+			defaultLayersByDataset[trackingId].add(defaultInfo.geoType);
+
+			// Default layer with only flat paint values and no source-layer - skip (covered by style:)
+			// PMTiles layers with source-layer must always be emitted as explicit layer configs.
+			if (!hasAnyExpression(paint) && !hasAnyExpression(layout) && !sourceLayer) {
 				continue;
 			}
 
-			// Default layer with expressions - emit it
-			if (!emittedDefaultLayersByDataset[defaultInfo.datasetId]) {
-				emittedDefaultLayersByDataset[defaultInfo.datasetId] = new Set();
+			// Default layer being emitted (has expressions or source-layer)
+			if (!emittedDefaultLayersByDataset[trackingId]) {
+				emittedDefaultLayersByDataset[trackingId] = new Set();
 			}
-			emittedDefaultLayersByDataset[defaultInfo.datasetId].add(defaultInfo.geoType);
+			emittedDefaultLayersByDataset[trackingId].add(defaultInfo.geoType);
 		}
 
 		// Build the layer config entry
@@ -231,6 +244,16 @@ export function extractLayerConfigs(map: Map): LayerExtractionResult {
 			source: logicalSource,
 			type: layer.type,
 		};
+
+		// Add source-layer for PMTiles vector tile layers
+		if (sourceLayer) {
+			entry['source-layer'] = sourceLayer;
+			// Clean up auto-generated layer IDs: dataset-protomaps-water-fill -> water-fill
+			const prefix = `dataset-${logicalSource}-`;
+			if (entry.id.startsWith(prefix)) {
+				entry.id = entry.id.slice(prefix.length);
+			}
+		}
 
 		// Add tooltip if configured
 		const tooltip = getTooltipFields(layer.id);
@@ -308,6 +331,9 @@ export async function generateConfigYaml(map: Map, basemapId: string): Promise<s
 	// Extract layers before building config so we know which datasets are covered
 	const { layers: layerConfigs, coveredDatasetIds } = extractLayerConfigs(map);
 
+	// Map of PMTiles parent IDs to their display names (for layer name resolution)
+	const pmtilesParentNames: Record<string, string> = {};
+
 	// Build the config object
 	const config: Record<string, unknown> = {
 		map: {
@@ -325,11 +351,39 @@ export async function generateConfigYaml(map: Map, basemapId: string): Promise<s
 		// getDatasets() returns DESC, so reverse
 		const sorted = [...datasets].reverse();
 
+		// Collapse PMTiles sub-datasets (protomaps/water, protomaps/roads, etc.)
+		// into a single parent dataset entry (protomaps).
+		const pmtilesSubIds = new Set<string>();
+		const pmtilesParents: Record<string, { url: string; name: string }> = {};
+
+		for (const ds of sorted) {
+			if (ds.format === 'pmtiles' && ds.id.includes('/')) {
+				const parentId = ds.id.substring(0, ds.id.lastIndexOf('/'));
+				pmtilesSubIds.add(ds.id);
+				if (!(parentId in pmtilesParents)) {
+					// Derive parent name by stripping " - sourceLayer" suffix
+					const sourceLayer = ds.id.substring(ds.id.lastIndexOf('/') + 1);
+					const suffix = ` - ${sourceLayer}`;
+					const parentName = ds.name?.endsWith(suffix)
+						? ds.name.slice(0, -suffix.length)
+						: parentId;
+					pmtilesParents[parentId] = {
+						url: ds.source_url ?? '',
+						name: parentName,
+					};
+					pmtilesParentNames[parentId] = parentName;
+				}
+			}
+		}
+
 		const datasetEntries: Record<string, unknown>[] = [];
+		const emittedParentIds = new Set<string>();
 
 		for (const ds of sorted) {
 			// Skip operation outputs - they go in the operations: section
 			if (operationOutputIds.has(ds.id)) continue;
+			// Skip PMTiles sub-datasets - collapsed into parent entry
+			if (pmtilesSubIds.has(ds.id)) continue;
 
 			const entry: Record<string, unknown> = { id: ds.id };
 
@@ -363,6 +417,13 @@ export async function generateConfigYaml(map: Map, basemapId: string): Promise<s
 			if (ds.source_crs) {
 				entry.crs = ds.source_crs;
 			}
+			if (ds.format) {
+				entry.format = ds.format;
+			}
+			// Don't emit sourceLayer for parent PMTiles entries (layers handle this)
+			if (ds.source_layer && !(ds.format === 'pmtiles' && ds.id in pmtilesParents)) {
+				entry.sourceLayer = ds.source_layer;
+			}
 
 			// Omit style: when this dataset is fully covered by explicit layers
 			if (!coveredDatasetIds.has(ds.id)) {
@@ -372,6 +433,25 @@ export async function generateConfigYaml(map: Map, basemapId: string): Promise<s
 				}
 			}
 
+			datasetEntries.push(entry);
+			if (ds.id in pmtilesParents) {
+				emittedParentIds.add(ds.id);
+			}
+		}
+
+		// Emit synthetic parent entries for PMTiles archives that have no standalone DuckDB row
+		for (const parentId of Object.keys(pmtilesParents)) {
+			if (emittedParentIds.has(parentId)) continue;
+
+			const info = pmtilesParents[parentId];
+			const entry: Record<string, unknown> = {
+				id: parentId,
+				url: info.url,
+				format: 'pmtiles',
+			};
+			if (info.name !== parentId) {
+				entry.name = info.name;
+			}
 			datasetEntries.push(entry);
 		}
 
@@ -433,8 +513,25 @@ export async function generateConfigYaml(map: Map, basemapId: string): Promise<s
 		config.operations = operationEntries;
 	}
 
-	// Add layers section if non-default layers exist
+	// Enrich layer configs with display names from DuckDB sub-entries.
+	// For PMTiles layers with source-layer, look up the sub-dataset name and
+	// emit it if the user renamed it from the default "{parent} - {sourceLayer}".
 	if (layerConfigs.length > 0) {
+		for (const lc of layerConfigs) {
+			if (!lc['source-layer']) continue;
+			const subId = `${lc.source}/${lc['source-layer']}`;
+			const subDs = datasets.find(d => d.id === subId);
+			if (!subDs?.name) continue;
+
+			// Derive the default name pattern to detect user renames
+			const parentName = datasets.find(d => d.id === lc.source)?.name
+				|| pmtilesParentNames[lc.source]
+				|| lc.source;
+			const defaultName = `${parentName} - ${lc['source-layer']}`;
+			if (subDs.name !== defaultName) {
+				lc.name = subDs.name;
+			}
+		}
 		config.layers = layerConfigs;
 	}
 

@@ -319,3 +319,17 @@ export function getTooltipFields(layerId: string): string[] | undefined {
 export function getHoverOptions(layerId: string): HoverTooltipOptions | undefined {
 	return hoverRegistry.get(layerId);
 }
+
+/**
+ * Update the display label for existing hover tooltip entries.
+ * Used by PMTiles rename (display-name only) to update tooltips
+ * without removing and re-registering handlers.
+ */
+export function updateHoverLabel(layerIds: string[], newLabel: string): void {
+	for (const id of layerIds) {
+		const opts = hoverRegistry.get(id);
+		if (opts) {
+			hoverRegistry.set(id, { ...opts, label: newLabel });
+		}
+	}
+}

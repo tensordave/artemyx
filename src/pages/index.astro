@@ -34,8 +34,8 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 			<div id="map" data-config="/demo-config.yaml" data-persistence="false"></div>
 			<div id="config-highlighted" data-config-filename={configFile} hidden set:html={highlightedYaml} />
 			<p class="demo-caption">
-				Vancouver bikeways colored by distance to the nearest rapid transit station.
-				Green = close, amber = moderate, red = far.
+				Vancouver parks walkshed over a Protomaps vector basemap.
+				200m and 400m buffers with water masking via layer ordering.
 			</p>
 		</section>
 
@@ -46,7 +46,7 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={cloudArrowDownIcon} />
 					<div class="feature-card-title">Load data</div>
-					<p class="feature-card-body">Paste any GeoJSON, CSV, or GeoParquet URL to add a layer to the map. Advanced options for CRS, format, and column overrides.</p>
+					<p class="feature-card-body">Paste any GeoJSON, CSV, GeoParquet, or PMTiles URL to add a layer to the map. Advanced options for CRS, format, and column overrides.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={fileArrowUpIcon} />
@@ -86,7 +86,7 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={mapTrifoldIcon} />
 					<div class="feature-card-title">Basemap</div>
-					<p class="feature-card-body">Switch between CARTO Dark and satellite basemaps.</p>
+					<p class="feature-card-body">Switch between CARTO Dark, Light, Voyager, and satellite basemaps.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={circleIcon} />
@@ -104,7 +104,7 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 					<div class="feature-card-title">Declarative YAML config</div>
 					<p class="feature-card-body">
 						Define datasets, spatial operations, and layer styles in one file.
-						Point at any GeoJSON URL - municipal APIs, data portals, static files.
+						Point at any data URL or PMTiles archive - municipal APIs, data portals, static files.
 					</p>
 				</div>
 				<div class="feature-card">
@@ -134,7 +134,7 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 		<!-- CTA -->
 		<section class="cta-section">
 			<h2 class="cta-heading">Try it yourself</h2>
-			<p class="cta-sub">Load the full app and paste in any GeoJSON URL to get started.</p>
+			<p class="cta-sub">Load the full app and paste in any data URL to get started.</p>
 			<a href="/app" class="cta-btn">Open the app</a>
 		</section>
 

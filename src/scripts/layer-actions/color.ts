@@ -1,8 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import { updateDatasetColor } from '../db';
 import { ProgressControl } from '../controls/progress-control';
-import { getLayersBySource, type SourceLayerInfo } from '../layers/layers';
-import { getSourceId } from '../layers/sources';
+import { getLayersForDataset, type SourceLayerInfo } from '../layers/layers';
 
 /**
  * Maps layer types to their primary color paint property.
@@ -31,8 +30,7 @@ function isExpression(value: unknown): boolean {
  * Mirrors getEditableProperties() logic in style.ts.
  */
 export function isColorPickerEnabled(map: maplibregl.Map, datasetId: string): boolean {
-	const sourceId = getSourceId(datasetId);
-	const layers = getLayersBySource(map, sourceId);
+	const layers = getLayersForDataset(map, datasetId);
 
 	for (const layer of layers) {
 		const colorProp = COLOR_PROPERTY_MAP[layer.type];
@@ -57,8 +55,7 @@ export function getDisplayColor(
 	datasetId: string,
 	fallback: string
 ): string {
-	const sourceId = getSourceId(datasetId);
-	const layers = getLayersBySource(map, sourceId);
+	const layers = getLayersForDataset(map, datasetId);
 
 	// Priority order: fill is the most visually prominent
 	const typePriority: SourceLayerInfo['type'][] = ['fill', 'line', 'circle'];
@@ -97,8 +94,7 @@ export async function updateLayerColor(
 	await updateDatasetColor(datasetId, newColor);
 
 	// Find all layers for this dataset dynamically (works with both default and config layers)
-	const sourceId = getSourceId(datasetId);
-	const layers = getLayersBySource(map, sourceId);
+	const layers = getLayersForDataset(map, datasetId);
 
 	let appliedCount = 0;
 

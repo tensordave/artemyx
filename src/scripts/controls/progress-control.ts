@@ -124,13 +124,18 @@ export class ProgressControl implements IControl {
     const timestamp = Date.now();
 
     // When idle is already scheduled, stale batched 'processing' messages from the
-    // worker may still arrive. Log them to history but don't update the displayed
-    // state or re-render the icon — the pipeline has already completed.
+    // worker may still arrive for the same operation. Log them to history but don't
+    // update the displayed state. However, if a different operation is starting,
+    // cancel idle and let the message through — it's new work.
     if (this._idleTimeout && status === 'processing') {
-      this.history.push({ operation, status, message, timestamp });
-      if (this.history.length > this.MAX_HISTORY) this.history.shift();
-      if (this.isExpanded) this.renderHistory();
-      return;
+      if (operation === this.state.operation) {
+        this.history.push({ operation, status, message, timestamp });
+        if (this.history.length > this.MAX_HISTORY) this.history.shift();
+        if (this.isExpanded) this.renderHistory();
+        return;
+      }
+      clearTimeout(this._idleTimeout);
+      this._idleTimeout = undefined;
     }
 
     // Cancel any pending idle — new terminal event means fresh work completing

@@ -90,6 +90,8 @@ export interface DatasetConfig {
 	crs?: string;
 	/** Original filename for file-uploaded datasets (preserved through YAML round-trips since comments are stripped) */
 	sourceFile?: string;
+	/** Vector tile layer name within a PMTiles archive. Required for multi-layer archives, auto-detected for single-layer. */
+	sourceLayer?: string;
 }
 
 import type { ConfigFormat } from '../loaders/types';
@@ -289,6 +291,8 @@ export interface LayerConfig {
 	 * Must reference a valid dataset ID or operation output.
 	 */
 	source: string;
+	/** Display name for this layer in the panel. Overrides the dataset name for this layer's entry. */
+	name?: string;
 	/** MapLibre layer type */
 	type: LayerType;
 	/**
@@ -311,6 +315,8 @@ export interface LayerConfig {
 	minzoom?: number;
 	/** Maximum zoom level where layer is visible (0-24) */
 	maxzoom?: number;
+	/** Vector tile source layer name. Required when source is a PMTiles/vector dataset. */
+	'source-layer'?: string;
 	/**
 	 * Property field(s) to display in hover tooltip.
 	 * Single string or array of property names from the source GeoJSON.

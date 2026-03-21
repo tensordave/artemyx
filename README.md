@@ -10,7 +10,7 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 
 - **Mapping:** MapLibre GL JS with WebGL-based rendering for smooth panning/zooming
 - **Data Storage:** DuckDB-WASM with spatial extension for in-browser SQL queries
-- **Data Loading:** Fetch GeoJSON, CSV, GeoParquet, and JSON arrays from public API endpoints or local files, with paginated fetching and CRS auto-detection
+- **Data Loading:** Fetch GeoJSON, CSV, GeoParquet, JSON arrays, and PMTiles from public API endpoints or local files, with paginated fetching and CRS auto-detection
 
 ## Key Features
 
@@ -20,7 +20,8 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - YAML-driven configuration with in-browser editor (live syntax highlighting, edit/run/clear/import/generate/export)
 - Visual operation builder UI for constructing spatial operations without editing YAML directly
 - Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
-- Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays) with paginated fetching
+- Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays, PMTiles) with paginated fetching
+- PMTiles vector tile support with multi-layer archives, per-layer panel entries, and automatic style detection
 - Local file upload via drag-and-drop or file picker
 - CRS detection and automatic reprojection to WGS84
 - OPFS persistence - sessions survive page refresh, with viewport restore and database export/import for portable sessions
@@ -61,11 +62,14 @@ src/scripts/
 │   ├── constants.ts   # Pure constants, types, localStorage helpers (shared)
 │   └── utils.ts       # Hash generation, helpers
 ├── loaders/           # Format loader registry
+│   ├── index.ts       # Barrel re-export
+│   ├── types.ts       # Format types (ConfigFormat, DetectedFormat)
 │   ├── detect.ts      # Format detection (URL extension, path segment, Content-Type)
 │   ├── geojson.ts     # GeoJSON normalizer
 │   ├── csv.ts         # CSV parser, delimiter and coordinate auto-detection
 │   ├── geoparquet.ts  # GeoParquet via DuckDB registerFileBuffer
 │   ├── json-array.ts  # JSON array loader with geo column fallback
+│   ├── pmtiles.ts     # PMTiles header reader and vector layer metadata extraction
 │   ├── columns.ts     # Shared lat/lng column detection heuristics
 │   ├── crs.ts         # CRS parsing and detection utilities
 │   └── paginator.ts   # Paginated GeoJSON fetching (ArcGIS, Socrata, OGC)
@@ -74,13 +78,15 @@ src/scripts/
 │   ├── shared.ts      # Types, validation, quota check, map helpers
 │   ├── load-url.ts    # URL fetch pipeline with pagination
 │   ├── load-file.ts   # Local file loading
-│   └── load-config.ts # YAML config batch loading
+│   ├── load-config.ts # YAML config batch loading
+│   └── load-pmtiles.ts # PMTiles vector tile loading (header, layers, sources)
 ├── logger/            # Logging abstraction
 │   ├── types.ts       # Logger interface (progress, info, warn)
 │   └── browser.ts     # BrowserLogger wrapping ProgressControl
 ├── layers/            # MapLibre layer creation
+│   ├── index.ts       # Barrel re-export
 │   ├── layers.ts      # addLayerFromConfig, executeLayersFromConfig
-│   └── sources.ts     # Source management
+│   └── sources.ts     # Source management (GeoJSON and vector tile sources)
 ├── layer-actions/     # Layer control UI handlers
 │   ├── color.ts, style.ts, labels.ts, visibility.ts, delete.ts, export.ts  # Action handlers
 │   ├── context-menu.ts, context-menu-items.ts         # Context menu
@@ -159,6 +165,10 @@ datasets:
       lineWidth: 3
       fillOpacity: 0.3
       pointRadius: 6
+
+  - id: basemap                  # PMTiles vector tile source
+    url: "https://example.com/tiles.pmtiles"
+    format: pmtiles
 
 operations:
   - type: buffer

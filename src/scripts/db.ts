@@ -11,7 +11,7 @@ export { startInit, ensureInit, getStorageMode, getFallbackReason, setFallbackRe
 export type { FallbackReason } from './db/core';
 
 // Dataset CRUD operations (via worker RPC)
-export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, deleteDataset, deleteAllDatasets, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, checkpoint, vacuum } from './db/client';
+export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, deleteDataset, deleteAllDatasets, deleteSubDatasets, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, createMetadataDataset, checkpoint, vacuum } from './db/client';
 
 // Feature query operations (via worker RPC)
 export { getFeaturesAsGeoJSON, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './db/client';

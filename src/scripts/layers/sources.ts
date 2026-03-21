@@ -8,9 +8,15 @@ import type maplibregl from 'maplibre-gl';
 /**
  * Generate the standard source ID for a dataset.
  * Convention: `dataset-{datasetId}`
+ *
+ * For PMTiles sub-layer entries (ID format: `parentId/sourceLayer`),
+ * extracts the parent ID so all sub-layers resolve to the shared source.
+ * e.g. `protomaps/roads` → `dataset-protomaps`
  */
 export function getSourceId(datasetId: string): string {
-	return `dataset-${datasetId}`;
+	const slashIdx = datasetId.lastIndexOf('/');
+	const baseId = slashIdx >= 0 ? datasetId.substring(0, slashIdx) : datasetId;
+	return `dataset-${baseId}`;
 }
 
 /**
@@ -46,6 +52,25 @@ export function removeSource(map: maplibregl.Map, sourceId: string): void {
 	if (map.getSource(sourceId)) {
 		map.removeSource(sourceId);
 	}
+}
+
+/**
+ * Add a vector tile source (PMTiles) to the map.
+ * Uses the pmtiles:// protocol handler registered at map init.
+ */
+export function addVectorSource(
+	map: maplibregl.Map,
+	sourceId: string,
+	pmtilesUrl: string
+): void {
+	if (map.getSource(sourceId)) {
+		map.removeSource(sourceId);
+	}
+
+	map.addSource(sourceId, {
+		type: 'vector',
+		url: `pmtiles://${pmtilesUrl}`,
+	});
 }
 
 /**

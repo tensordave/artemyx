@@ -109,6 +109,14 @@ export const examples: Example[] = [
 		description: 'Vancouver cycling network filtered by infrastructure quality - safer routes via advanced SQL filter, protected lanes via structured filter, walkshed coverage buffered from the result.',
 		configPath: '/examples/configs/attribute.yaml',
 	},
+	// --- PMTiles ---
+	{
+		slug: 'pmtiles',
+		name: 'PMTiles Vector Tiles',
+		group: 'PMTiles',
+		description: 'Protomaps worldwide vector basemap loaded as a PMTiles dataset - nine source layers styled independently with explicit layer configs.',
+		configPath: '/examples/configs/pmtiles.yaml',
+	},
 ];
 
 /** Unique group names in display order. */

@@ -11,6 +11,7 @@ export interface Dataset {
 	color: string;
 	visible: boolean;
 	feature_count: number;
+	format?: string | null;
 }
 
 export interface LayerRowCallbacks {
@@ -52,7 +53,8 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 	// Label with dataset name and feature count
 	const label = document.createElement('label');
 	label.className = 'layer-label';
-	label.textContent = `${dataset.name} (${dataset.feature_count.toLocaleString()})`;
+	const countLabel = dataset.format === 'pmtiles' ? 'PMTiles' : dataset.feature_count.toLocaleString();
+	label.textContent = `${dataset.name} (${countLabel})`;
 
 	// Visibility toggle handler
 	visibilityBtn.addEventListener('click', (e) => {

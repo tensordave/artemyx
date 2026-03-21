@@ -251,6 +251,23 @@ export interface DeleteSavedConfigRequest extends RequestBase {
 	configPath: string;
 }
 
+export interface DeleteSubDatasetsRequest extends RequestBase {
+	type: 'deleteSubDatasets';
+	parentId: string;
+}
+
+export interface CreateMetadataDatasetRequest extends RequestBase {
+	type: 'createMetadataDataset';
+	id: string;
+	sourceUrl: string;
+	name: string;
+	color: string;
+	style: StyleConfig;
+	hidden: boolean;
+	format: string;
+	sourceLayer?: string;
+}
+
 export interface ExportOPFSRequest extends RequestBase {
 	type: 'exportOPFS';
 }
@@ -309,6 +326,8 @@ export type WorkerRequest =
 	| SaveConfigRequest
 	| GetSavedConfigRequest
 	| DeleteSavedConfigRequest
+	| DeleteSubDatasetsRequest
+	| CreateMetadataDatasetRequest
 	| ExportOPFSRequest
 	| ImportOPFSRequest;
 

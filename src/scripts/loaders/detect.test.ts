@@ -74,6 +74,10 @@ describe('detectFormat', () => {
 		expect(detectFormat('https://example.com/data.parquet', null)).toBe('geoparquet');
 	});
 
+	it('URL with .pmtiles extension -> pmtiles', () => {
+		expect(detectFormat('https://demo-bucket.protomaps.com/v4.pmtiles', null)).toBe('pmtiles');
+	});
+
 	it('URL extension parsed ignoring query params', () => {
 		expect(detectFormat('https://example.com/data.csv?token=abc&v=2', null)).toBe('csv');
 	});
