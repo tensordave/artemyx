@@ -5,40 +5,30 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.7.1 - Outputs Config Section
+### v0.7.2 - PMTiles Extraction
 
-Goal: add `outputs:` top-level config section to `MapConfig`, establishing the output contract shared by the browser app, CLI, and viewer.
+Goal: extract features from a remote `pmtiles://` source, decode MVT tiles, and retile into a new standalone `.pmtiles` file. Solves CORS issues with remote archives by producing a local copy. Introduces the tiling pipeline shared with v0.7.3.
 
-- **`OutputConfig` type** - `{ source, format, filename? }` where `source` references a dataset or operation output ID, `format` is `geojson | csv | parquet`, and `filename` defaults to the source ID; separate `OutputFormat` type distinct from input `ConfigFormat`
-- **Validation** - New `validators/outputs.ts`; source must exist in known dataset/operation IDs; no duplicate filenames after defaults applied; PMTiles sources rejected (no feature data in DuckDB)
-- **Output execution** - New `output-executor.ts` runs after operations complete in `runConfigPipeline()`; GeoJSON via existing `getFeaturesAsGeoJSONString()`; CSV via DuckDB `COPY` with JSON property flattening to columns; Parquet via DuckDB `COPY TO` with `ST_AsWKB(geometry)` for GeoParquet-compatible output
-- **Worker RPCs** - New request types for CSV and Parquet export in the worker protocol; export functions in `features.ts`; results as `ArrayBuffer` transferred via Transferable
-- **Config generator** - `generator.ts` includes `outputs` section in generated YAML when present
-
-### v0.7.2 - Outputs UI
-
-Goal: surface outputs as a downloadable results panel in ConfigControl, enabling users to test what their config will produce before using the CLI.
-
-- **Outputs button** - Phosphor `package` icon in the config editor download/export toolbar group (right of the existing Export dropdown); disabled when config has no `outputs:` section; click triggers output execution
-- **Results panel** - Dropdown below the button following the existing export dropdown pattern; per output row shows filename, format badge (colored pill), file size, and individual download button; "Download All" zips multiple outputs via `fflate` (already a dependency); errors shown inline per row
-- **Progress and state** - Each output generation step logged to ProgressControl; button shows loading state during execution; `OutputResult[]` stored from last execution, cleared on config re-run; old blob URLs revoked to prevent memory leaks
+- **Output format expansion** - Add `pmtiles` to `OutputFormat`; `OutputConfig` gains optional `params` field for format-specific options; `PMTilesOutputParams` with `minzoom` (default 0), `maxzoom` (default 14), `layerName` (defaults to source ID), optional `bbox` for spatial subsetting, optional `layers` array to filter specific source layers from multi-layer archives
+- **Source validation** - For extraction, source must be a PMTiles dataset (`format='pmtiles'` in DuckDB `datasets` table); opposite of GeoJSON/CSV/Parquet outputs which reject PMTiles sources
+- **Extraction pipeline** - Read tile metadata from remote archive via `pmtiles` library (already installed) to determine available tiles and zoom range; fetch relevant tiles as HTTP range requests via the existing protocol handler; decode MVT tiles using `@mapbox/vector-tile` + `pbf` (new dependencies, both pure JS and worker-compatible); reconstruct GeoJSON features from decoded tile data, deduplicating features that span multiple tiles
+- **Tiling pipeline** - Shared infrastructure for v0.7.3: `geojson-vt` for tile slicing and simplification per zoom level, `vt-pbf` for MVT protobuf encoding (both new dependencies, pure JS, worker-compatible), PMTiles archive writer from `pmtiles` package (already installed); runs in DuckDB worker thread; progress reported per zoom level; result is an `ArrayBuffer` surfaced in the v0.7.1 outputs UI
 
 ### v0.7.3 - PMTiles Generation
 
-Goal: add `format: pmtiles` to the outputs section, enabling in-browser vector tile generation from any dataset or operation result.
+Goal: generate `.pmtiles` vector tiles from any DuckDB dataset or operation result. Reuses the tiling pipeline from v0.7.2 -- this version wires DuckDB feature data as input.
 
-- **Output format expansion** - Add `pmtiles` to `OutputFormat`; new `PMTilesOutputParams` with `minzoom` (default 0), `maxzoom` (default 14), `layerName` (defaults to source ID); `OutputConfig` gains optional `params` field for format-specific options
-- **Tiling pipeline** - Worker-based: `getFeaturesAsGeoJSON()` -> `geojson-vt` (tiles and simplifies per zoom level) -> `vt-pbf` (encodes as MVT protobuf) -> `pmtiles` writer (packs archive); runs in the DuckDB worker thread; progress reported per zoom level via ProgressControl
-- **Dependencies** - `geojson-vt` for tile slicing (pure JS, worker-compatible), `vt-pbf` for MVT encoding; PMTiles writer from `pmtiles` package already installed in v0.7.0
+- **DuckDB-to-tiles path** - `getFeaturesAsGeoJSON()` feeds features from any dataset into the v0.7.2 tiling pipeline (`geojson-vt` -> `vt-pbf` -> pmtiles writer); no new dependencies beyond what v0.7.2 introduced
+- **Source validation** - Source must be a non-PMTiles dataset (has actual feature data in DuckDB); rejects PMTiles sources (use extraction path instead)
 - **Preview on map** - After generation, optionally register the generated PMTiles as a viewable vector source via blob URL and the protocol handler for verifying output before downloading
-- **File upload** - `UploadControl` accepts `.pmtiles` files; uploaded files written to OPFS and served from there by the protocol handler for persistence across page refresh; enables round-trip testing of generated PMTiles output
+- **Progress** - Per-zoom-level progress updates via ProgressControl; total feature count logged at start
 
 ### v0.7.4 - OPFS PMTiles Cache
 
-Goal: persist generated PMTiles in OPFS so they survive page refresh without regeneration, extending the existing OPFS persistence model to tile archives.
+Goal: persist generated and extracted PMTiles in OPFS so they survive page refresh without regeneration, extending the existing OPFS persistence model to tile archives.
 
-- **OPFS tile storage** - Generated `.pmtiles` files written to OPFS alongside the DuckDB database; keyed by output source ID and config hash; restored on session reload without re-running the tiling pipeline
-- **Cache invalidation** - Invalidate when source dataset changes (feature count or hash mismatch); re-generation triggered automatically or on-demand via Outputs button
+- **OPFS tile storage** - Generated `.pmtiles` files written to OPFS alongside the DuckDB database; keyed by output source ID and config hash; restored on session reload without re-running the tiling/extraction pipeline
+- **Cache invalidation** - Invalidate when source dataset changes (feature count or hash mismatch); re-generation triggered automatically or on-demand via outputs button
 - **StorageControl updates** - Surface PMTiles cache size alongside DB size in the storage panel; include PMTiles files in OPFS export/import; clear PMTiles cache on "Clear Storage"
 - **MapLibre vector source wiring** - Cached PMTiles served via `pmtiles://` protocol from OPFS; auto-registered as vector sources on session restore; layers created from cached config
 
@@ -202,11 +192,13 @@ Items worth building eventually but not yet assigned to a version:
   - `load-config.ts` and `executor.ts` OPFS restore paths: same guard logic
   - `loadedDatasets.add()` still called so operations can reference skipped datasets
   - Progress message: "Skipped rendering (N features, M already rendered). Data available for operations."
-- **Export format conversion** - Extend data export beyond GeoJSON to support CSV and GeoParquet downloads; CSV needs geometry-type-aware flattening (lat/lng columns for points, WKT for complex geometries); GeoParquet needs `COPY ... TO ... (FORMAT PARQUET)` with file buffer round-trip through the worker; more natural as a CLI feature (`outputs:` config section) but could also surface in the browser as a format picker in the export context menu
 - **Native Apple Authoring (Swift)** - native macOS/iOS authoring app for the full spatial operations pipeline on Apple devices, where Safari's memory constraints make browser-based authoring unviable.
 
 
 ## Completed
+
+### v0.7.1 - Outputs
+- Config-driven output execution (GeoJSON, CSV, Parquet) with worker RPCs, results dropdown with format badges and zip download, CSV geometry round-trip via WKT and GeoJSON string detection in the loader, demo config simplified to parks walksheds on carto-dark
 
 ### v0.7.0 - PMTiles Loading
 - PMTiles vector tile support via `pmtiles://` protocol (bypasses DuckDB entirely); config format detection, multi-layer archive auto-detection with per-layer panel entries (visibility, color, style, rename, delete); URL loading from DataControl; config generation for multi-layer archives; legend grouping by source-layer; OPFS session restore for vector sources; clear session fix (OPFS flush before close), progress control current-status fix

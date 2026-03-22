@@ -325,6 +325,19 @@ export interface LayerConfig {
 	tooltip?: string | string[];
 }
 
+/** Supported output formats (distinct from input ConfigFormat) */
+export type OutputFormat = 'geojson' | 'csv' | 'parquet';
+
+/** Output configuration for exporting datasets or operation results */
+export interface OutputConfig {
+	/** Source dataset or operation output ID */
+	source: string;
+	/** Export format */
+	format: OutputFormat;
+	/** Output filename (without extension). Defaults to source ID. */
+	filename?: string;
+}
+
 /**
  * Root configuration object.
  * Parsed from YAML config file (e.g., public/app-config.yaml)
@@ -341,6 +354,8 @@ export interface MapConfig {
 	 * When omitted, default fill/line/circle layers are created per dataset.
 	 */
 	layers?: LayerConfig[];
+	/** Output definitions for exporting datasets or operation results */
+	outputs?: OutputConfig[];
 }
 
 /** Result of config validation */

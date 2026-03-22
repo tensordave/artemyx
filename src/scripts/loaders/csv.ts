@@ -1,7 +1,7 @@
 /**
  * CSV format loader.
- * Parses CSV text, auto-detects delimiter and lat/lng columns,
- * builds GeoJSON Point FeatureCollection.
+ * Parses CSV text, auto-detects delimiter, lat/lng columns, and WKT geometry columns.
+ * Builds GeoJSON FeatureCollection (Point from lat/lng, any geometry from WKT).
  */
 
 import type { FormatLoader, LoaderData, LoaderOptions, LoaderResult } from './types';
@@ -247,6 +247,277 @@ function detectGeoColumn(
 	return null;
 }
 
+// ── Geometry string support (WKT and GeoJSON) ───────────────────────────────
+
+/** WKT geometry type prefixes (uppercased for matching) */
+const WKT_PREFIXES = [
+	'POINT', 'LINESTRING', 'POLYGON',
+	'MULTIPOINT', 'MULTILINESTRING', 'MULTIPOLYGON',
+	'GEOMETRYCOLLECTION',
+];
+
+/** GeoJSON geometry type names */
+const GEOJSON_GEOMETRY_TYPES = new Set([
+	'Point', 'MultiPoint', 'LineString', 'MultiLineString',
+	'Polygon', 'MultiPolygon', 'GeometryCollection',
+]);
+
+/** Common column names for geometry columns (matched case-insensitively) */
+const GEOMETRY_COLUMN_ALIASES = ['geometry', 'geom', 'wkt', 'the_geom', 'shape'];
+
+/**
+ * Check whether a string value looks like WKT geometry.
+ * Matches type prefix followed by space, '(', or 'EMPTY'.
+ */
+export function isWktValue(value: string): boolean {
+	const upper = value.trim().toUpperCase();
+	for (const prefix of WKT_PREFIXES) {
+		if (!upper.startsWith(prefix)) continue;
+		const rest = upper.slice(prefix.length);
+		// Allow optional Z/M/ZM suffix before the opening paren or EMPTY
+		const afterType = rest.replace(/^\s*(Z|M|ZM)\b/, '').trimStart();
+		if (afterType.startsWith('(') || afterType === 'EMPTY') return true;
+	}
+	return false;
+}
+
+/**
+ * Parse a JSON string as a GeoJSON Geometry.
+ * Handles raw geometry objects and Feature wrappers.
+ */
+export function parseGeoJsonGeometry(value: string): GeoJSON.Geometry | null {
+	let parsed: unknown;
+	try { parsed = JSON.parse(value); } catch { return null; }
+	if (typeof parsed !== 'object' || parsed === null) return null;
+
+	const obj = parsed as Record<string, unknown>;
+
+	// Raw geometry: {"type": "LineString", "coordinates": [...]}
+	if (typeof obj.type === 'string' && GEOJSON_GEOMETRY_TYPES.has(obj.type) && 'coordinates' in obj) {
+		return parsed as GeoJSON.Geometry;
+	}
+
+	// Feature wrapper: {"type": "Feature", "geometry": {...}}
+	if (obj.type === 'Feature' && typeof obj.geometry === 'object' && obj.geometry !== null) {
+		const geom = obj.geometry as Record<string, unknown>;
+		if (typeof geom.type === 'string' && GEOJSON_GEOMETRY_TYPES.has(geom.type) && 'coordinates' in geom) {
+			return obj.geometry as GeoJSON.Geometry;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Check whether a string value looks like a GeoJSON geometry JSON string.
+ * Quick check: must start with '{' and contain a known geometry type.
+ */
+export function isGeoJsonGeometryValue(value: string): boolean {
+	const trimmed = value.trim();
+	if (!trimmed.startsWith('{')) return false;
+	return parseGeoJsonGeometry(trimmed) !== null;
+}
+
+/**
+ * Check whether a string value contains geometry in any supported format (WKT or GeoJSON).
+ */
+export function isGeometryValue(value: string): boolean {
+	return isWktValue(value) || isGeoJsonGeometryValue(value);
+}
+
+/**
+ * Auto-detect a column containing geometry strings (WKT or GeoJSON).
+ * Checks known column name aliases first, then scans all columns.
+ */
+export function detectGeometryColumn(
+	headers: string[],
+	firstRow: Record<string, string>
+): string | null {
+	const lcMap = new Map<string, string>();
+	for (const h of headers) lcMap.set(h.toLowerCase(), h);
+
+	// Check known geometry column aliases
+	for (const alias of GEOMETRY_COLUMN_ALIASES) {
+		const match = lcMap.get(alias);
+		if (match && firstRow[match] && isGeometryValue(firstRow[match])) return match;
+	}
+
+	// Fallback: scan all columns for a geometry value
+	for (const h of headers) {
+		if (firstRow[h] && isGeometryValue(firstRow[h])) return h;
+	}
+
+	return null;
+}
+
+/** @deprecated Use detectGeometryColumn instead */
+export const detectWktColumn = detectGeometryColumn;
+
+/** Parse a "x y" or "x y z" coordinate string into [x, y] */
+function parseCoordPair(s: string): [number, number] | null {
+	const parts = s.trim().split(/\s+/);
+	if (parts.length < 2) return null;
+	const x = parseFloat(parts[0]);
+	const y = parseFloat(parts[1]);
+	if (isNaN(x) || isNaN(y)) return null;
+	return [x, y];
+}
+
+/** Parse a comma-separated list of coordinate pairs */
+function parseCoordList(s: string): [number, number][] | null {
+	const pairs = s.split(',');
+	const coords: [number, number][] = [];
+	for (const p of pairs) {
+		const trimmed = p.trim();
+		if (!trimmed) continue;
+		const coord = parseCoordPair(trimmed);
+		if (!coord) return null;
+		coords.push(coord);
+	}
+	return coords.length > 0 ? coords : null;
+}
+
+/**
+ * Split a string at top-level commas (depth-0 relative to parentheses).
+ * Used to split multi-geometry bodies without breaking nested coordinate lists.
+ */
+function splitTopLevel(s: string): string[] {
+	const parts: string[] = [];
+	let depth = 0;
+	let current = '';
+	for (const ch of s) {
+		if (ch === '(') { depth++; current += ch; }
+		else if (ch === ')') { depth--; current += ch; }
+		else if (ch === ',' && depth === 0) {
+			parts.push(current.trim());
+			current = '';
+		} else {
+			current += ch;
+		}
+	}
+	if (current.trim()) parts.push(current.trim());
+	return parts;
+}
+
+/** Strip one layer of outer parentheses: "(content)" -> "content" */
+function stripOuter(s: string): string {
+	const t = s.trim();
+	if (t.startsWith('(') && t.endsWith(')')) return t.slice(1, -1).trim();
+	return t;
+}
+
+/**
+ * Parse a WKT string into a GeoJSON Geometry, or null if invalid.
+ * Supports: Point, LineString, Polygon, Multi variants, GeometryCollection.
+ * WKT coordinate order (X Y = lng lat) matches GeoJSON order.
+ */
+export function parseWkt(wkt: string): GeoJSON.Geometry | null {
+	const trimmed = wkt.trim();
+	if (!trimmed) return null;
+
+	// Extract type name and body
+	const parenIdx = trimmed.indexOf('(');
+	if (parenIdx === -1) {
+		// Could be "TYPE EMPTY"
+		if (/EMPTY$/i.test(trimmed)) return null;
+		return null;
+	}
+
+	const typePart = trimmed.slice(0, parenIdx).trim().toUpperCase();
+	// Strip optional Z/M/ZM suffix
+	const typeClean = typePart.replace(/\s+(Z|M|ZM)$/, '');
+	const body = trimmed.slice(parenIdx + 1, trimmed.lastIndexOf(')')).trim();
+
+	switch (typeClean) {
+		case 'POINT': {
+			const coord = parseCoordPair(body);
+			return coord ? { type: 'Point', coordinates: coord } : null;
+		}
+		case 'LINESTRING': {
+			const coords = parseCoordList(body);
+			return coords ? { type: 'LineString', coordinates: coords } : null;
+		}
+		case 'POLYGON': {
+			const rings = splitTopLevel(body).map(r => parseCoordList(stripOuter(r)));
+			if (rings.some(r => r === null)) return null;
+			return { type: 'Polygon', coordinates: rings as [number, number][][] };
+		}
+		case 'MULTIPOINT': {
+			// MULTIPOINT ((x y), (x y)) or MULTIPOINT (x y, x y)
+			const inner = body.trim();
+			let points: [number, number][];
+			if (inner.includes('(')) {
+				const parsed = splitTopLevel(inner).map(p => parseCoordPair(stripOuter(p)));
+				if (parsed.some(p => p === null)) return null;
+				points = parsed as [number, number][];
+			} else {
+				const parsed = parseCoordList(inner);
+				if (!parsed) return null;
+				points = parsed;
+			}
+			return { type: 'MultiPoint', coordinates: points };
+		}
+		case 'MULTILINESTRING': {
+			const lines = splitTopLevel(body).map(l => parseCoordList(stripOuter(l)));
+			if (lines.some(l => l === null)) return null;
+			return { type: 'MultiLineString', coordinates: lines as [number, number][][] };
+		}
+		case 'MULTIPOLYGON': {
+			const polygons = splitTopLevel(body).map(p => {
+				const rings = splitTopLevel(stripOuter(p)).map(r => parseCoordList(stripOuter(r)));
+				if (rings.some(r => r === null)) return null;
+				return rings as [number, number][][];
+			});
+			if (polygons.some(p => p === null)) return null;
+			return { type: 'MultiPolygon', coordinates: polygons as [number, number][][][] };
+		}
+		case 'GEOMETRYCOLLECTION': {
+			const geoms = splitTopLevel(body).map(g => parseWkt(g));
+			if (geoms.some(g => g === null)) return null;
+			return { type: 'GeometryCollection', geometries: geoms as GeoJSON.Geometry[] };
+		}
+		default:
+			return null;
+	}
+}
+
+/**
+ * Parse a geometry string value in any supported format (WKT or GeoJSON).
+ */
+function parseGeometryValue(value: string): GeoJSON.Geometry | null {
+	return parseWkt(value) ?? parseGeoJsonGeometry(value);
+}
+
+/**
+ * Convert parsed CSV rows to a GeoJSON FeatureCollection using a geometry column
+ * containing WKT or GeoJSON strings. Rows with invalid/missing geometry are skipped.
+ */
+function rowsFromGeometryColumn(
+	rows: Record<string, string>[],
+	geomCol: string
+): GeoJSON.FeatureCollection {
+	const features: GeoJSON.Feature[] = [];
+
+	for (const row of rows) {
+		const raw = row[geomCol];
+		if (!raw) continue;
+
+		const geometry = parseGeometryValue(raw);
+		if (!geometry) continue;
+
+		const properties: Record<string, string | number> = {};
+		for (const [key, value] of Object.entries(row)) {
+			if (key === geomCol) continue;
+			const num = Number(value);
+			properties[key] = value !== '' && !isNaN(num) ? num : value;
+		}
+
+		features.push({ type: 'Feature', geometry, properties });
+	}
+
+	return { type: 'FeatureCollection', features };
+}
+
 export const csvLoader: FormatLoader = {
 	async load(data: LoaderData, options?: LoaderOptions): Promise<LoaderResult> {
 		const text = data as string;
@@ -270,7 +541,17 @@ export const csvLoader: FormatLoader = {
 			return { data };
 		}
 
-		// Try separate lat/lng columns first
+		// Try geometry column detection (WKT or GeoJSON strings)
+		const geomCol = detectGeometryColumn(headers, rows[0]);
+		if (geomCol) {
+			const data = rowsFromGeometryColumn(rows, geomCol);
+			if (data.features.length === 0) {
+				throw new Error(`No valid geometries found in column '${geomCol}'`);
+			}
+			return { data };
+		}
+
+		// Try separate lat/lng columns
 		try {
 			const { latColumn, lngColumn } = detectCoordinateColumns(headers, options);
 			const data = rowsToFeatureCollection(rows, latColumn, lngColumn);
@@ -291,8 +572,8 @@ export const csvLoader: FormatLoader = {
 
 		// Nothing worked - throw with helpful message
 		throw new Error(
-			`Could not detect coordinate columns. ` +
-			`No separate lat/lng columns or combined "lat, lng" columns found. ` +
+			`Could not detect geometry columns. ` +
+			`No geometry column (WKT or GeoJSON), separate lat/lng columns, or combined "lat, lng" columns found. ` +
 			`Headers: ${headers.join(', ')}`
 		);
 	},

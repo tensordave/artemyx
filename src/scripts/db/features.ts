@@ -2,7 +2,7 @@
  * Feature query operations
  */
 
-import { getConnection } from './core';
+import { getConnection, getDB } from './core';
 
 /**
  * Get features from DuckDB as a GeoJSON string.
@@ -143,4 +143,136 @@ export async function getDistinctGeometryTypes(datasetId: string): Promise<Set<s
 		if (row.geom_type) types.add(row.geom_type as string);
 	}
 	return types;
+}
+
+// ── Export functions ─────────────────────────────────────────────────────────
+
+const textEncoder = new TextEncoder();
+
+/**
+ * Get all distinct property keys across every feature in a dataset.
+ * Unlike getPropertyKeys() which samples one row, this scans all features
+ * so no columns are missed in flattened exports.
+ */
+async function getAllPropertyKeys(datasetId: string): Promise<string[]> {
+	const connection = await getConnection();
+	const stmt = await connection.prepare(`
+		SELECT DISTINCT unnest(json_keys(properties)) as key
+		FROM features
+		WHERE dataset_id = ? AND properties IS NOT NULL
+	`);
+	const result = await stmt.query(datasetId);
+	await stmt.close();
+
+	const keys: string[] = [];
+	for (const row of result.toArray()) {
+		const key = row.key as string;
+		if (key && !key.startsWith('_')) keys.push(key);
+	}
+	return keys.sort();
+}
+
+/** Escape a property key for use in a DuckDB JSON path expression ('$."key"'). */
+function jsonPath(key: string): string {
+	const escaped = key.replace(/'/g, "''");
+	return `'$."${escaped}"'`;
+}
+
+/** Escape a property key for use as a SQL column alias ("key"). */
+function sqlAlias(key: string): string {
+	return `"${key.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Build a SELECT expression list that flattens properties JSON into columns.
+ * Returns the geometry expression + one column per property key.
+ */
+function buildFlattenedSelect(keys: string[], geometryExpr: string): string {
+	const cols = [geometryExpr];
+	for (const key of keys) {
+		cols.push(`json_extract_string(properties, ${jsonPath(key)}) AS ${sqlAlias(key)}`);
+	}
+	return cols.join(', ');
+}
+
+/**
+ * Export a dataset as a GeoJSON FeatureCollection buffer.
+ * Reuses getFeaturesAsGeoJSONString() and encodes to Uint8Array.
+ */
+export async function exportAsGeoJSON(datasetId: string): Promise<Uint8Array> {
+	const str = await getFeaturesAsGeoJSONString(datasetId);
+	return textEncoder.encode(str);
+}
+
+/**
+ * Export a dataset as CSV with flattened property columns.
+ * Geometry is serialized as WKT via ST_AsText.
+ * Uses DuckDB COPY TO for correct CSV escaping and quoting.
+ */
+export async function exportAsCSV(datasetId: string): Promise<Uint8Array> {
+	const connection = await getConnection();
+	const db = await getDB();
+	const filename = `_export_${Date.now()}.csv`;
+
+	try {
+		// Step 1: Create temp table with parameterized filter
+		const createStmt = await connection.prepare(
+			'CREATE TEMP TABLE _export_tmp AS SELECT geometry, properties FROM features WHERE dataset_id = ? AND geometry IS NOT NULL'
+		);
+		await createStmt.query(datasetId);
+		await createStmt.close();
+
+		// Step 2: Get all property keys from the temp table
+		const keys = await getAllPropertyKeys(datasetId);
+
+		// Step 3: Build and execute COPY TO with flattened columns
+		const selectExpr = buildFlattenedSelect(keys, 'ST_AsText(geometry) AS geometry');
+		await connection.query(
+			`COPY (SELECT ${selectExpr} FROM _export_tmp) TO '${filename}' (FORMAT CSV, HEADER)`
+		);
+
+		// Step 4: Read the file buffer
+		const buffer = await db.copyFileToBuffer(filename);
+		return buffer;
+	} finally {
+		// Clean up temp table and virtual file
+		await connection.query('DROP TABLE IF EXISTS _export_tmp').catch(() => {});
+		await db.dropFile(filename).catch(() => {});
+	}
+}
+
+/**
+ * Export a dataset as GeoParquet-compatible Parquet.
+ * Geometry is serialized as WKB via ST_AsWKB for GeoParquet compatibility.
+ * Properties are flattened to individual columns.
+ */
+export async function exportAsParquet(datasetId: string): Promise<Uint8Array> {
+	const connection = await getConnection();
+	const db = await getDB();
+	const filename = `_export_${Date.now()}.parquet`;
+
+	try {
+		// Step 1: Create temp table with parameterized filter
+		const createStmt = await connection.prepare(
+			'CREATE TEMP TABLE _export_tmp AS SELECT geometry, properties FROM features WHERE dataset_id = ? AND geometry IS NOT NULL'
+		);
+		await createStmt.query(datasetId);
+		await createStmt.close();
+
+		// Step 2: Get all property keys
+		const keys = await getAllPropertyKeys(datasetId);
+
+		// Step 3: Build and execute COPY TO with WKB geometry
+		const selectExpr = buildFlattenedSelect(keys, 'ST_AsWKB(geometry) AS geometry');
+		await connection.query(
+			`COPY (SELECT ${selectExpr} FROM _export_tmp) TO '${filename}' (FORMAT PARQUET)`
+		);
+
+		// Step 4: Read the file buffer
+		const buffer = await db.copyFileToBuffer(filename);
+		return buffer;
+	} finally {
+		await connection.query('DROP TABLE IF EXISTS _export_tmp').catch(() => {});
+		await db.dropFile(filename).catch(() => {});
+	}
 }

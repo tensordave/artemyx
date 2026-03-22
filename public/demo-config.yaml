@@ -1,7 +1,6 @@
 # Artemyx Demo Configuration
 # Used by the landing page to showcase the declarative config system.
-# Vancouver parks walkshed: layered 200m and 400m buffers over a Protomaps vector basemap.
-# Water layer rendered above the buffers to visually mask ocean and river areas.
+# Vancouver parks walkshed: layered 200m and 400m buffers over carto-dark basemap.
 
 map:
   center: [-123.1207, 49.2827]
@@ -9,12 +8,6 @@ map:
   basemap: carto-dark
 
 datasets:
-  - id: protomaps
-    url: "https://demo-bucket.protomaps.com/v4.pmtiles"
-    format: pmtiles
-    name: Protomaps
-    fitBounds: false
-
   - id: parks
     url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/parks-polygon-representation/exports/geojson?lang=en&timezone=America%2FLos_Angeles"
     name: Vancouver Parks
@@ -40,37 +33,6 @@ operations:
       dissolve: true
 
 layers:
-  # --- Protomaps base layers (bottom) ---
-
-  # Earth - landmass base
-  - id: earth-fill
-    source: protomaps
-    type: fill
-    source-layer: earth
-    paint:
-      fill-color: "#1a1a2e"
-      fill-opacity: 0.4
-
-  # Landcover - natural areas
-  - id: landcover-fill
-    source: protomaps
-    type: fill
-    source-layer: landcover
-    paint:
-      fill-color: "#1a3a2a"
-      fill-opacity: 0.5
-
-  # Landuse - parks, residential, commercial zones
-  - id: landuse-fill
-    source: protomaps
-    type: fill
-    source-layer: landuse
-    paint:
-      fill-color: "#2a4a3a"
-      fill-opacity: 0.4
-
-  # --- Walkshed layers (middle) ---
-
   # 400m walkshed (outer) - cooler blue teal
   - id: walkshed-400m-fill
     source: walkshed_400m
@@ -103,60 +65,6 @@ layers:
       line-width: 1.0
       line-opacity: 0.2
 
-  # --- Water on top to mask buffer over ocean/rivers ---
-
-  # Water - oceans, lakes, rivers
-  - id: water-fill
-    source: protomaps
-    type: fill
-    source-layer: water
-    paint:
-      fill-color: "#193d5a"
-      fill-opacity: 0.8
-
-  # --- Protomaps detail layers (top) ---
-
-  # Buildings - footprints
-  - id: buildings-fill
-    source: protomaps
-    type: fill
-    source-layer: buildings
-    minzoom: 13
-    paint:
-      fill-color: "#3a3a5c"
-      fill-opacity: 0.6
-
-  # Boundaries - admin borders
-  - id: boundaries-line
-    source: protomaps
-    type: line
-    source-layer: boundaries
-    paint:
-      line-color: "#6366f1"
-      line-width: 1.5
-      line-opacity: 0.5
-
-  # Roads - street network
-  - id: roads-line
-    source: protomaps
-    type: line
-    source-layer: roads
-    paint:
-      line-color: "#94a3b8"
-      line-width:
-        - interpolate
-        - ["exponential", 1.5]
-        - ["zoom"]
-        - 5
-        - 0.5
-        - 14
-        - 2
-        - 18
-        - 8
-      line-opacity: 0.7
-
-  # --- Parks on top of roads/buildings ---
-
   # Park polygons
   - id: parks-fill
     source: parks
@@ -174,44 +82,3 @@ layers:
       line-color: "#166534"
       line-width: 1
       line-opacity: 0.5
-
-  # --- Labels (topmost) ---
-
-  # Places - city and town labels
-  - id: places-label
-    source: protomaps
-    type: symbol
-    source-layer: places
-    minzoom: 5
-    layout:
-      text-field: ["get", "name"]
-      text-size:
-        - interpolate
-        - ["linear"]
-        - ["zoom"]
-        - 5
-        - 10
-        - 12
-        - 14
-      text-font: ["Open Sans Regular"]
-      text-max-width: 8
-    paint:
-      text-color: "#e2e8f0"
-      text-halo-color: "#0f172a"
-      text-halo-width: 1.5
-
-  # POIs - points of interest
-  - id: pois-label
-    source: protomaps
-    type: symbol
-    source-layer: pois
-    minzoom: 15
-    layout:
-      text-field: ["get", "name"]
-      text-size: 11
-      text-font: ["Open Sans Regular"]
-      text-max-width: 8
-    paint:
-      text-color: "#a5b4fc"
-      text-halo-color: "#0f172a"
-      text-halo-width: 1

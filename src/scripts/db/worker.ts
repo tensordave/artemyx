@@ -8,7 +8,7 @@ import type { MainMessage, WorkerRequest, CrsPromptResponse, InitResult, LoadPip
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog, getConnection, getDB, checkpoint, vacuum, exportOPFSFile, importOPFSFile } from './core';
 import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, deleteSubDatasets, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, getOperations, clearOperations, saveOperationMetadata, createMetadataOnlyDataset, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
 import type { StyleConfig } from './datasets';
-import { getFeaturesAsGeoJSONString, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes } from './features';
+import { getFeaturesAsGeoJSONString, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes, exportAsCSV, exportAsParquet } from './features';
 import type { OperationConfig } from '../config/types';
 import { isUnaryOperation, isBinaryOperation } from '../config/types';
 import type { ComputeCallbacks, ComputeResult } from '../config/operations';
@@ -763,6 +763,22 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 				const geoJsonStr = await getFeaturesAsGeoJSONString(req.datasetId);
 				const geoJsonBuf = textEncoder.encode(geoJsonStr);
 				respondTransfer(requestId, geoJsonBuf, [geoJsonBuf.buffer]);
+				break;
+			}
+
+			case 'exportAsCSV': {
+				postProgress(req.datasetId, 'processing', 'Exporting as CSV...');
+				const csvBuf = await exportAsCSV(req.datasetId);
+				postProgress(req.datasetId, 'success', 'CSV export complete');
+				respondTransfer(requestId, csvBuf, [csvBuf.buffer]);
+				break;
+			}
+
+			case 'exportAsParquet': {
+				postProgress(req.datasetId, 'processing', 'Exporting as Parquet...');
+				const parquetBuf = await exportAsParquet(req.datasetId);
+				postProgress(req.datasetId, 'success', 'Parquet export complete');
+				respondTransfer(requestId, parquetBuf, [parquetBuf.buffer]);
 				break;
 			}
 

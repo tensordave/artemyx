@@ -1,9 +1,30 @@
 import type { Map, IControl } from 'maplibre-gl';
-import { codeBlockIcon, playIcon, pencilIcon, eraserIcon, trashIcon, fileArrowUpIcon, magicWandIcon, exportIcon, fileCodeIcon, downloadSimpleIcon } from '../icons';
+import { codeBlockIcon, playIcon, pencilIcon, eraserIcon, trashIcon, fileArrowUpIcon, magicWandIcon, exportIcon, fileCodeIcon, downloadSimpleIcon, boxArrowDownIcon } from '../icons';
 import { generateConfigYaml } from '../config/generator';
 import { exportConfigYaml } from '../config/export-config';
 import { exportViewerZip } from '../config/export-viewer';
 import { highlightSync, highlightAsync } from '../utils/shiki';
+import type { OutputResult } from '../config/output-types';
+import { revokeOutputBlobs } from '../config/output-types';
+import { executeOutputs } from '../config/output-executor';
+import { parseConfig } from '../config/parser';
+import { zipSync } from 'fflate';
+
+function formatFileSize(bytes: number): string {
+	if (bytes === 0) return '0 B';
+	const units = ['B', 'KB', 'MB', 'GB'];
+	const i = Math.floor(Math.log(bytes) / Math.log(1024));
+	return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+}
+
+function downloadBlob(url: string, filename: string): void {
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = filename;
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+}
 
 export interface ConfigControlOptions {
 	onRun?: (yamlText?: string) => Promise<void>;
@@ -35,6 +56,11 @@ export class ConfigControl implements IControl {
 	private exportBtn: HTMLButtonElement | null = null;
 	private exportDropdown: HTMLDivElement | null = null;
 	private exportDropdownCloseHandler: ((e: MouseEvent) => void) | null = null;
+	private outputsBtn: HTMLButtonElement | null = null;
+	private outputsDropdown: HTMLDivElement | null = null;
+	private outputsDropdownCloseHandler: ((e: MouseEvent) => void) | null = null;
+	private outputResults: OutputResult[] = [];
+	private isOutputsExecuting = false;
 	private runBtn: HTMLButtonElement | null = null;
 	private clearBtn: HTMLButtonElement | null = null;
 	private bodyEl: HTMLDivElement | null = null;
@@ -89,6 +115,8 @@ export class ConfigControl implements IControl {
 				}
 			});
 		}
+
+		this.updateOutputsButtonState();
 	}
 
 	closePanel(): void {
@@ -128,6 +156,9 @@ export class ConfigControl implements IControl {
 		if (this.boundPointerMove) document.removeEventListener('pointermove', this.boundPointerMove);
 		if (this.boundPointerUp) document.removeEventListener('pointerup', this.boundPointerUp);
 		this.closeExportDropdown();
+		this.closeOutputsDropdown();
+		revokeOutputBlobs(this.outputResults);
+		this.outputResults = [];
 		this.panel?.remove();
 		this.container?.remove();
 		this.map = null;
@@ -137,6 +168,7 @@ export class ConfigControl implements IControl {
 		this.importBtn = null;
 		this.generateBtn = null;
 		this.exportBtn = null;
+		this.outputsBtn = null;
 		this.runBtn = null;
 		this.clearBtn = null;
 		this.bodyEl = null;
@@ -222,6 +254,15 @@ export class ConfigControl implements IControl {
 		this.exportBtn.addEventListener('click', () => this.toggleExportDropdown());
 		downloadGroup.appendChild(this.exportBtn);
 
+		this.outputsBtn = document.createElement('button');
+		this.outputsBtn.type = 'button';
+		this.outputsBtn.className = 'config-viewer-action-btn';
+		this.outputsBtn.title = 'Run outputs';
+		this.outputsBtn.innerHTML = boxArrowDownIcon;
+		this.outputsBtn.disabled = true;
+		this.outputsBtn.addEventListener('click', () => this.handleOutputsClick());
+		downloadGroup.appendChild(this.outputsBtn);
+
 		actions.appendChild(downloadGroup);
 
 		// Divider
@@ -299,6 +340,7 @@ export class ConfigControl implements IControl {
 		if (this.importBtn) this.importBtn.disabled = disabled;
 		if (this.generateBtn) this.generateBtn.disabled = disabled;
 		if (this.exportBtn) this.exportBtn.disabled = disabled;
+		if (this.outputsBtn) this.outputsBtn.disabled = disabled;
 		if (this.runBtn) this.runBtn.disabled = disabled;
 		if (this.clearBtn) this.clearBtn.disabled = disabled;
 	}
@@ -308,7 +350,13 @@ export class ConfigControl implements IControl {
 		this.setButtonsDisabled(true);
 		try {
 			const basemapId = this.options.getBasemapId?.() ?? 'carto-dark';
-			const yaml = await generateConfigYaml(this.map, basemapId);
+			// Round-trip outputs from current config if present
+			let currentOutputs;
+			try {
+				const config = parseConfig(this.rawYaml);
+				currentOutputs = config.outputs;
+			} catch { /* no valid config to extract outputs from */ }
+			const yaml = await generateConfigYaml(this.map, basemapId, currentOutputs);
 			this.updateConfig(yaml);
 			if (!this.isEditing) this.enterEditMode();
 			const textarea = this.bodyEl?.querySelector('textarea');
@@ -404,6 +452,192 @@ export class ConfigControl implements IControl {
 			document.removeEventListener('click', this.exportDropdownCloseHandler);
 			this.exportDropdownCloseHandler = null;
 		}
+	}
+
+	// ── Outputs dropdown ─────────────────────────────────────────────
+
+	private updateOutputsButtonState(): void {
+		if (!this.outputsBtn) return;
+		try {
+			const config = parseConfig(this.rawYaml);
+			const hasOutputs = config.outputs && config.outputs.length > 0;
+			this.outputsBtn.disabled = !hasOutputs || this.isExecuting;
+		} catch {
+			this.outputsBtn.disabled = true;
+		}
+	}
+
+	private async handleOutputsClick(): Promise<void> {
+		if (this.isExecuting || this.isOutputsExecuting) return;
+
+		// If we already have results, toggle the dropdown
+		if (this.outputResults.length > 0) {
+			if (this.outputsDropdown) {
+				this.closeOutputsDropdown();
+			} else {
+				this.showOutputsDropdown();
+			}
+			return;
+		}
+
+		// Execute outputs
+		this.isOutputsExecuting = true;
+		if (this.outputsBtn) {
+			this.outputsBtn.disabled = true;
+			this.outputsBtn.classList.add('config-viewer-action-btn--loading');
+		}
+
+		try {
+			const config = parseConfig(this.rawYaml);
+			if (!config.outputs || config.outputs.length === 0) return;
+
+			revokeOutputBlobs(this.outputResults);
+			this.outputResults = await executeOutputs(config.outputs);
+			this.showOutputsDropdown();
+		} catch (e) {
+			console.error('Output execution failed:', e);
+		} finally {
+			this.isOutputsExecuting = false;
+			if (this.outputsBtn) {
+				this.outputsBtn.classList.remove('config-viewer-action-btn--loading');
+			}
+			this.updateOutputsButtonState();
+		}
+	}
+
+	private showOutputsDropdown(): void {
+		if (this.outputsDropdown) {
+			this.closeOutputsDropdown();
+			return;
+		}
+
+		const dropdown = document.createElement('div');
+		dropdown.className = 'context-menu outputs-dropdown';
+
+		if (this.outputResults.length === 0) {
+			const empty = document.createElement('div');
+			empty.className = 'context-menu-item';
+			empty.style.opacity = '0.5';
+			empty.textContent = 'No outputs generated';
+			dropdown.appendChild(empty);
+		} else {
+			for (const result of this.outputResults) {
+				const row = document.createElement('div');
+				row.className = 'outputs-dropdown-row';
+
+				const name = document.createElement('span');
+				name.className = 'outputs-dropdown-filename';
+				name.textContent = result.filename;
+				row.appendChild(name);
+
+				const badge = document.createElement('span');
+				badge.className = `outputs-dropdown-badge outputs-dropdown-badge--${result.format}`;
+				badge.textContent = result.format.toUpperCase();
+				row.appendChild(badge);
+
+				if (result.error) {
+					const errorEl = document.createElement('span');
+					errorEl.className = 'outputs-dropdown-error';
+					errorEl.textContent = result.error;
+					row.appendChild(errorEl);
+				} else {
+					const sizeEl = document.createElement('span');
+					sizeEl.className = 'outputs-dropdown-size';
+					sizeEl.textContent = formatFileSize(result.size);
+					row.appendChild(sizeEl);
+
+					const dlBtn = document.createElement('button');
+					dlBtn.className = 'outputs-dropdown-dl';
+					dlBtn.innerHTML = downloadSimpleIcon;
+					dlBtn.title = `Download ${result.filename}`;
+					dlBtn.disabled = !result.blobUrl;
+					dlBtn.addEventListener('click', (e) => {
+						e.stopPropagation();
+						if (result.blobUrl) downloadBlob(result.blobUrl, result.filename);
+					});
+					row.appendChild(dlBtn);
+				}
+
+				dropdown.appendChild(row);
+			}
+
+			// Download All (.zip) when multiple successes
+			const successResults = this.outputResults.filter(r => r.blobUrl);
+			if (successResults.length > 1) {
+				const divider = document.createElement('div');
+				divider.className = 'context-menu-divider';
+				dropdown.appendChild(divider);
+
+				const downloadAll = document.createElement('div');
+				downloadAll.className = 'context-menu-item';
+				const dlIcon = document.createElement('span');
+				dlIcon.className = 'context-menu-icon';
+				dlIcon.innerHTML = downloadSimpleIcon;
+				downloadAll.appendChild(dlIcon);
+				downloadAll.appendChild(document.createTextNode('Download All (.zip)'));
+				downloadAll.addEventListener('click', () => {
+					this.closeOutputsDropdown();
+					this.downloadAllAsZip(successResults);
+				});
+				dropdown.appendChild(downloadAll);
+			}
+		}
+
+		document.body.appendChild(dropdown);
+		this.outputsDropdown = dropdown;
+
+		requestAnimationFrame(() => {
+			if (!this.outputsBtn || !this.outputsDropdown) return;
+			const btnRect = this.outputsBtn.getBoundingClientRect();
+			const menuRect = this.outputsDropdown.getBoundingClientRect();
+			let left = btnRect.left;
+			let top = btnRect.bottom + 4;
+			if (left + menuRect.width > window.innerWidth) {
+				left = btnRect.right - menuRect.width;
+			}
+			if (top + menuRect.height > window.innerHeight) {
+				top = btnRect.top - menuRect.height - 4;
+			}
+			this.outputsDropdown.style.left = `${left}px`;
+			this.outputsDropdown.style.top = `${top}px`;
+		});
+
+		this.outputsDropdownCloseHandler = (e: MouseEvent) => {
+			if (!this.outputsDropdown?.contains(e.target as Node)) {
+				this.closeOutputsDropdown();
+			}
+		};
+		setTimeout(() => {
+			if (this.outputsDropdownCloseHandler) {
+				document.addEventListener('click', this.outputsDropdownCloseHandler);
+			}
+		}, 10);
+	}
+
+	private closeOutputsDropdown(): void {
+		if (this.outputsDropdown) {
+			this.outputsDropdown.remove();
+			this.outputsDropdown = null;
+		}
+		if (this.outputsDropdownCloseHandler) {
+			document.removeEventListener('click', this.outputsDropdownCloseHandler);
+			this.outputsDropdownCloseHandler = null;
+		}
+	}
+
+	private async downloadAllAsZip(results: OutputResult[]): Promise<void> {
+		const files: Record<string, Uint8Array> = {};
+		for (const r of results) {
+			if (!r.blobUrl) continue;
+			const resp = await fetch(r.blobUrl);
+			const buf = await resp.arrayBuffer();
+			files[r.filename] = new Uint8Array(buf);
+		}
+		const zipData = zipSync(files);
+		const blob = new Blob([zipData.buffer as ArrayBuffer], { type: 'application/zip' });
+		const url = URL.createObjectURL(blob);
+		downloadBlob(url, 'outputs.zip');
+		URL.revokeObjectURL(url);
 	}
 
 	private async handleExportViewer(): Promise<void> {
@@ -600,11 +834,18 @@ export class ConfigControl implements IControl {
 				this.bodyEl.scrollTop = scrollPos;
 			}
 		});
+
+		this.updateOutputsButtonState();
 	}
 
 	private async handleRun(): Promise<void> {
 		if (this.isExecuting || !this.options.onRun) return;
 		this.resetClearConfirm();
+
+		// Clear previous output results on re-run
+		revokeOutputBlobs(this.outputResults);
+		this.outputResults = [];
+		this.closeOutputsDropdown();
 
 		this.isExecuting = true;
 		this.setButtonsDisabled(true);
@@ -613,6 +854,7 @@ export class ConfigControl implements IControl {
 		} finally {
 			this.isExecuting = false;
 			this.setButtonsDisabled(false);
+			this.updateOutputsButtonState();
 		}
 	}
 
@@ -776,6 +1018,7 @@ export class ConfigControl implements IControl {
 		this.isOpen = false;
 		this.panel.classList.remove('config-viewer--open');
 		this.resetClearConfirm();
+		this.closeOutputsDropdown();
 
 		// Capture textarea content if closing mid-edit
 		this.panel?.classList.remove('config-viewer--editing');

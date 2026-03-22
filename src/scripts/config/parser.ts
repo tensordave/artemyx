@@ -15,12 +15,14 @@ import type {
 	UnaryOperationType,
 	BinaryOperationType,
 	LayerType,
+	OutputFormat,
 } from './types';
 import type { ConfigFormat } from '../loaders/types';
 import { validateCrsString } from './validators/shared';
 import { validateDatasets } from './validators/datasets';
 import { validateOperations } from './validators/operations';
 import { validateLayers } from './validators/layers';
+import { validateOutputs } from './validators/outputs';
 
 // --- Constants (exported for use by validators) ---
 
@@ -41,6 +43,9 @@ export const ALL_OPERATIONS = [...UNARY_OPERATIONS, ...BINARY_OPERATIONS];
 
 /** Valid MapLibre layer types */
 export const VALID_LAYER_TYPES: LayerType[] = ['fill', 'line', 'circle', 'symbol', 'heatmap', 'fill-extrusion'];
+
+/** Valid output format values */
+export const VALID_OUTPUT_FORMATS: OutputFormat[] = ['geojson', 'csv', 'parquet'];
 
 /** Default config path served from public/ folder */
 const DEFAULT_CONFIG_PATH = '/app-config.yaml';
@@ -149,6 +154,25 @@ function validateConfig(config: unknown): ValidationResult {
 	// Validate layers (optional section)
 	if ('layers' in obj) {
 		errors.push(...validateLayers(obj.layers, validSourceIds));
+	}
+
+	// Collect PMTiles dataset IDs for output validation (PMTiles sources rejected)
+	const pmtilesDatasetIds = new Set<string>();
+	if (Array.isArray(obj.datasets)) {
+		obj.datasets.forEach((d) => {
+			const dataset = d as Record<string, unknown>;
+			if (typeof dataset?.id === 'string') {
+				if (dataset.format === 'pmtiles' ||
+					(typeof dataset.url === 'string' && dataset.url.endsWith('.pmtiles'))) {
+					pmtilesDatasetIds.add(dataset.id);
+				}
+			}
+		});
+	}
+
+	// Validate outputs (optional section)
+	if ('outputs' in obj) {
+		errors.push(...validateOutputs(obj.outputs, validSourceIds, pmtilesDatasetIds));
 	}
 
 	return { valid: errors.length === 0, errors };

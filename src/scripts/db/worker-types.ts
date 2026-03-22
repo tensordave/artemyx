@@ -277,6 +277,18 @@ export interface ImportOPFSRequest extends RequestBase {
 	buffer: ArrayBuffer;
 }
 
+// ── Export requests ─────────────────────────────────────────────────────────
+
+export interface ExportAsCSVRequest extends RequestBase {
+	type: 'exportAsCSV';
+	datasetId: string;
+}
+
+export interface ExportAsParquetRequest extends RequestBase {
+	type: 'exportAsParquet';
+	datasetId: string;
+}
+
 // ── CRS prompt response (main -> worker, no requestId) ──────────────────────
 
 export interface CrsPromptResponse {
@@ -329,7 +341,9 @@ export type WorkerRequest =
 	| DeleteSubDatasetsRequest
 	| CreateMetadataDatasetRequest
 	| ExportOPFSRequest
-	| ImportOPFSRequest;
+	| ImportOPFSRequest
+	| ExportAsCSVRequest
+	| ExportAsParquetRequest;
 
 // ── Response types (worker -> main, correlated by requestId) ────────────────
 

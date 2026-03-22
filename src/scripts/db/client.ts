@@ -297,6 +297,23 @@ export async function getFeaturesAsGeoJSON(datasetId?: string): Promise<GeoJSON.
 	return decodeGeoJsonBuffer(buffer);
 }
 
+// ── Export functions (return raw buffers for download) ───────────────────
+
+/** Export dataset as GeoJSON buffer (reuses getFeaturesAsGeoJSON RPC, returns raw bytes). */
+export async function exportAsGeoJSON(datasetId: string): Promise<Uint8Array> {
+	return rpc<Uint8Array>('getFeaturesAsGeoJSON', { datasetId });
+}
+
+/** Export dataset as CSV with flattened property columns and WKT geometry. */
+export async function exportAsCSV(datasetId: string): Promise<Uint8Array> {
+	return rpc<Uint8Array>('exportAsCSV', { datasetId });
+}
+
+/** Export dataset as GeoParquet with WKB geometry and flattened property columns. */
+export async function exportAsParquet(datasetId: string): Promise<Uint8Array> {
+	return rpc<Uint8Array>('exportAsParquet', { datasetId });
+}
+
 export async function getDatasetBounds(datasetId: string): Promise<[number, number, number, number] | null> {
 	return rpc<[number, number, number, number] | null>('getDatasetBounds', { datasetId });
 }

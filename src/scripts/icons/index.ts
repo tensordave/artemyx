@@ -46,6 +46,7 @@ export { playIcon } from './play';                           // run config butto
 export { eraserIcon } from './eraser';                       // clear all data button
 export { magicWandIcon } from './magic-wand';                // generate config from session
 export { exportIcon } from './export';                       // export config menu
+export { boxArrowDownIcon } from './box-arrow-down';         // outputs button
 
 // Roadmap: future features
 export { downloadIcon } from './download';                   // export data from layer context menu

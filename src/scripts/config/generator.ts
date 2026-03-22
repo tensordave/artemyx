@@ -9,7 +9,7 @@ import yaml from 'js-yaml';
 import { getDatasets, getOperations } from '../db';
 import { DEFAULT_STYLE, DEFAULT_COLOR } from '../db/constants';
 import type { StyleConfig } from '../db/constants';
-import type { StyleConfigPartial } from './types';
+import type { StyleConfigPartial, OutputConfig } from './types';
 import { UNARY_OPERATIONS } from './parser';
 import { getTooltipFields } from '../controls/popup';
 
@@ -318,9 +318,10 @@ export function extractLayerConfigs(map: Map): LayerExtractionResult {
  *
  * @param map - MapLibre map instance (for center/zoom)
  * @param basemapId - Current basemap ID from BasemapControl
+ * @param currentOutputs - Optional outputs from current config to round-trip
  * @returns YAML string ready for the config editor
  */
-export async function generateConfigYaml(map: Map, basemapId: string): Promise<string> {
+export async function generateConfigYaml(map: Map, basemapId: string, currentOutputs?: OutputConfig[]): Promise<string> {
 	const center = map.getCenter();
 	const zoom = map.getZoom();
 
@@ -533,6 +534,20 @@ export async function generateConfigYaml(map: Map, basemapId: string): Promise<s
 			}
 		}
 		config.layers = layerConfigs;
+	}
+
+	// Round-trip outputs from current config (outputs have no DuckDB state)
+	if (currentOutputs && currentOutputs.length > 0) {
+		config.outputs = currentOutputs.map((o) => {
+			const entry: Record<string, unknown> = {
+				source: o.source,
+				format: o.format,
+			};
+			if (o.filename && o.filename !== o.source) {
+				entry.filename = o.filename;
+			}
+			return entry;
+		});
 	}
 
 	// Serialize to YAML
