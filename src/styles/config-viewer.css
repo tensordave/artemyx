@@ -277,12 +277,21 @@
 }
 
 .outputs-dropdown-row {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	padding: 8px 12px;
 	font-size: 12px;
 	color: #fff;
+}
+
+.outputs-dropdown-row--pending {
+	opacity: 0.4;
+}
+
+.outputs-dropdown-row--generating {
+	opacity: 1;
 }
 
 .outputs-dropdown-row:hover {
@@ -321,6 +330,11 @@
 .outputs-dropdown-badge--parquet {
 	background-color: rgba(168, 85, 247, 0.2);
 	color: #a855f7;
+}
+
+.outputs-dropdown-badge--pmtiles {
+	background-color: rgba(249, 115, 22, 0.2);
+	color: #f97316;
 }
 
 .outputs-dropdown-size {
@@ -364,4 +378,59 @@
 .config-viewer-action-btn--loading {
 	opacity: 0.6;
 	pointer-events: none;
+}
+
+/* Status area (spinner + text, shown during pending/generating) */
+
+.outputs-dropdown-status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
+.outputs-dropdown-status svg {
+	width: 14px;
+	height: 14px;
+	fill: #94a3b8;
+}
+
+.outputs-dropdown-status--spinning svg {
+	animation: progress-spin 1s linear infinite;
+}
+
+.outputs-dropdown-status-text {
+	font-size: 10px;
+	color: #94a3b8;
+	max-width: 140px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Thin progress bar at the bottom of a generating row */
+
+.outputs-dropdown-progress {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	height: 2px;
+	background: #f97316;
+	transition: width 0.3s ease;
+	border-radius: 0 1px 1px 0;
+}
+
+/* No-data notice */
+
+.outputs-dropdown-notice {
+	padding: 8px 12px;
+	font-size: 12px;
+	color: #94a3b8;
+}
+
+.outputs-dropdown-missing {
+	padding: 4px 12px;
+	font-size: 11px;
+	color: #ef4444;
 }

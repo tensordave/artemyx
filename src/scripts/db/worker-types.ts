@@ -289,6 +289,21 @@ export interface ExportAsParquetRequest extends RequestBase {
 	datasetId: string;
 }
 
+export interface ExportAsPMTilesRequest extends RequestBase {
+	type: 'exportAsPMTiles';
+	datasetId: string;
+	params?: import('../config/types').PMTilesOutputParams;
+}
+
+export interface ExtractPMTilesRequest extends RequestBase {
+	type: 'extractPMTiles';
+	url: string;
+	extractZoom: number;
+	bbox: [number, number, number, number];
+	layers?: string[];
+	outputParams?: import('../config/types').PMTilesOutputParams;
+}
+
 // ── CRS prompt response (main -> worker, no requestId) ──────────────────────
 
 export interface CrsPromptResponse {
@@ -343,7 +358,9 @@ export type WorkerRequest =
 	| ExportOPFSRequest
 	| ImportOPFSRequest
 	| ExportAsCSVRequest
-	| ExportAsParquetRequest;
+	| ExportAsParquetRequest
+	| ExportAsPMTilesRequest
+	| ExtractPMTilesRequest;
 
 // ── Response types (worker -> main, correlated by requestId) ────────────────
 
@@ -368,6 +385,8 @@ export interface ProgressEvent {
 	operation: string;
 	status: ProgressStatus;
 	message?: string;
+	/** Numeric progress 0-1 for determinate progress tracking */
+	progress?: number;
 }
 
 export interface InfoEvent {

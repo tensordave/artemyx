@@ -29,6 +29,8 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - Address search via Photon geocoding (OSM data, no API key)
 - Scale bar (metric/imperial) and mouse coordinate display (decimal degrees / DMS toggle)
 - Feature inspection with property popups and hover tooltips
+- Config-driven outputs with format selection (GeoJSON, CSV, Parquet, PMTiles) and zip download
+- PMTiles extraction from remote vector tile archives with tile decoding and feature deduplication
 - Fully client-side - no backend required
 
 ## Tech Stack
@@ -51,6 +53,8 @@ src/scripts/
 │   ├── generator.ts   # Generate YAML config from current session state
 │   ├── export-config.ts    # Export config as YAML file download
 │   ├── export-viewer.ts    # Export viewer-ready ZIP (config + data files)
+│   ├── output-executor.ts  # Config-driven output execution (GeoJSON, CSV, Parquet, PMTiles)
+│   ├── output-types.ts     # Output format types and PMTiles params
 │   └── operations/    # One file per operation (buffer, intersection, union, ...) + shared render.ts
 ├── db/                # DuckDB-WASM (runs in Web Worker)
 │   ├── worker.ts      # Module worker entry point, message dispatch, full load pipeline
@@ -60,6 +64,8 @@ src/scripts/
 │   ├── datasets.ts    # Dataset CRUD operations (worker-side)
 │   ├── features.ts    # Feature queries, GeoJSON export (worker-side)
 │   ├── constants.ts   # Pure constants, types, localStorage helpers (shared)
+│   ├── pmtiles-reader.ts  # PMTiles tile fetching, MVT decoding, feature deduplication
+│   ├── pmtiles-writer.ts  # PMTiles archive generation (geojson-vt + vt-pbf)
 │   └── utils.ts       # Hash generation, helpers
 ├── loaders/           # Format loader registry
 │   ├── index.ts       # Barrel re-export
@@ -111,8 +117,11 @@ src/scripts/
 │   └── safari-banner.ts    # Dismissible Safari compatibility warning
 ├── utils/             # Shared utilities
 │   ├── highlight-config.ts  # Shiki YAML highlighting helper
+│   ├── shiki.ts             # Shiki instance and theme management
 │   └── safari-detect.ts     # Safari/WebKit detection
+├── examples/          # Example registry and routing
 ├── icons/             # Phosphor SVG icon strings
+├── db.ts              # DuckDB singleton reference (main thread)
 ├── teardown.ts        # Clean teardown (remove all datasets, sources, layers)
 ├── map.ts             # MapLibre init + config loading (entry point)
 └── basemaps.ts        # Basemap tile configurations

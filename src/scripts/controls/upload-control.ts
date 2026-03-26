@@ -118,7 +118,7 @@ export class UploadControl implements maplibregl.IControl {
 		// Hidden file input
 		this.fileInput = document.createElement('input');
 		this.fileInput.type = 'file';
-		this.fileInput.accept = '.geojson,.json,.csv,.parquet,.geoparquet';
+		this.fileInput.accept = '.geojson,.json,.csv,.parquet,.geoparquet,.pmtiles';
 		this.fileInput.style.display = 'none';
 		this.container.appendChild(this.fileInput);
 

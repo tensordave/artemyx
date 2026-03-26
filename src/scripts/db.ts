@@ -14,14 +14,14 @@ export type { FallbackReason } from './db/core';
 export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, deleteDataset, deleteAllDatasets, deleteSubDatasets, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, createMetadataDataset, checkpoint, vacuum } from './db/client';
 
 // Feature query operations (via worker RPC)
-export { getFeaturesAsGeoJSON, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes, exportAsGeoJSON, exportAsCSV, exportAsParquet } from './db/client';
+export { getFeaturesAsGeoJSON, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes, exportAsGeoJSON, exportAsCSV, exportAsParquet, exportAsPMTiles, extractPMTiles } from './db/client';
 
 // Full pipeline operations (worker-side fetch + parse + insert)
 export { loadFromUrl, loadFromBuffer, executeOperationInWorker, getOperations, clearOperations, saveOperationMetadata } from './db/client';
 
 // Event handler for progress/info/warn forwarding from worker
-export { setEventHandler } from './db/client';
-export type { WorkerEventHandler } from './db/client';
+export { setEventHandler, addProgressListener, removeProgressListener } from './db/client';
+export type { WorkerEventHandler, ProgressListener } from './db/client';
 
 // Utility functions (pure, no DB access - stay on main thread)
 export { generateDatasetId, extractDatasetName, slugifyDatasetId } from './db/utils';

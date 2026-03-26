@@ -326,7 +326,23 @@ export interface LayerConfig {
 }
 
 /** Supported output formats (distinct from input ConfigFormat) */
-export type OutputFormat = 'geojson' | 'csv' | 'parquet';
+export type OutputFormat = 'geojson' | 'csv' | 'parquet' | 'pmtiles';
+
+/** Format-specific parameters for PMTiles output generation */
+export interface PMTilesOutputParams {
+	/** Minimum zoom level for tile generation (default: 0) */
+	minzoom?: number;
+	/** Maximum zoom level for tile generation (default: 14) */
+	maxzoom?: number;
+	/** Layer name in the MVT output (defaults to source ID) */
+	layerName?: string;
+	/** Spatial bounding box for subsetting [west, south, east, north] */
+	bbox?: [number, number, number, number];
+	/** Source layers to include (for multi-layer PMTiles archive extraction) */
+	layers?: string[];
+	/** Zoom level to extract tiles at (required for PMTiles source extraction). Its presence signals extraction mode. */
+	extractZoom?: number;
+}
 
 /** Output configuration for exporting datasets or operation results */
 export interface OutputConfig {
@@ -336,6 +352,8 @@ export interface OutputConfig {
 	format: OutputFormat;
 	/** Output filename (without extension). Defaults to source ID. */
 	filename?: string;
+	/** Format-specific parameters (currently only used for pmtiles) */
+	params?: PMTilesOutputParams;
 }
 
 /**

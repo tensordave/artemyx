@@ -546,6 +546,9 @@ export async function generateConfigYaml(map: Map, basemapId: string, currentOut
 			if (o.filename && o.filename !== o.source) {
 				entry.filename = o.filename;
 			}
+			if (o.params && Object.keys(o.params).length > 0) {
+				entry.params = o.params;
+			}
 			return entry;
 		});
 	}

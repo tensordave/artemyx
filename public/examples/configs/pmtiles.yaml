@@ -5,15 +5,16 @@
 # via HTTP range requests through the pmtiles:// protocol handler.
 
 map:
-  center: [-122.4194, 37.7749]  # San Francisco, CA
+  center: [-123.1207, 49.2827]  # Vancouver, BC
   zoom: 13
   basemap: carto-dark
 
 datasets:
   - id: protomaps
-    url: "https://demo-bucket.protomaps.com/v4.pmtiles"
+    url: "https://assets.artemyx.org/pmtiles/lower-mainland-extract.pmtiles"
     format: pmtiles
     name: Protomaps
+    fitBounds: false
 
 layers:
   # Earth - landmass base

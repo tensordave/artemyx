@@ -45,7 +45,7 @@ export const ALL_OPERATIONS = [...UNARY_OPERATIONS, ...BINARY_OPERATIONS];
 export const VALID_LAYER_TYPES: LayerType[] = ['fill', 'line', 'circle', 'symbol', 'heatmap', 'fill-extrusion'];
 
 /** Valid output format values */
-export const VALID_OUTPUT_FORMATS: OutputFormat[] = ['geojson', 'csv', 'parquet'];
+export const VALID_OUTPUT_FORMATS: OutputFormat[] = ['geojson', 'csv', 'parquet', 'pmtiles'];
 
 /** Default config path served from public/ folder */
 const DEFAULT_CONFIG_PATH = '/app-config.yaml';

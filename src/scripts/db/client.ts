@@ -70,7 +70,7 @@ function rpc<T>(type: string, payload: Record<string, unknown> = {}, transfer?: 
 // ── Event handler ───────────────────────────────────────────────────────────
 
 export interface WorkerEventHandler {
-	onProgress?: (operation: string, status: ProgressStatus, message?: string) => void;
+	onProgress?: (operation: string, status: ProgressStatus, message?: string, progress?: number) => void;
 	onInfo?: (tag: string, message: string) => void;
 	onWarn?: (tag: string, message: string) => void;
 	onInitLog?: (entries: InitLogEntry[]) => void;
@@ -80,6 +80,24 @@ let eventHandler: WorkerEventHandler | null = null;
 
 export function setEventHandler(handler: WorkerEventHandler): void {
 	eventHandler = handler;
+}
+
+// ── Progress listeners (secondary subscribers) ──────────────────────────────
+
+export type ProgressListener = (operation: string, status: ProgressStatus, message?: string, progress?: number) => void;
+
+const progressListeners: Set<ProgressListener> = new Set();
+
+export function addProgressListener(fn: ProgressListener): void {
+	progressListeners.add(fn);
+}
+
+export function removeProgressListener(fn: ProgressListener): void {
+	progressListeners.delete(fn);
+}
+
+function notifyProgressListeners(operation: string, status: ProgressStatus, message?: string, progress?: number): void {
+	for (const fn of progressListeners) fn(operation, status, message, progress);
 }
 
 // ── Message routing ─────────────────────────────────────────────────────────
@@ -105,7 +123,8 @@ function wireWorkerHandlers(w: Worker): void {
 		if ('event' in msg) {
 			switch (msg.event) {
 				case 'progress':
-					eventHandler?.onProgress?.(msg.operation, msg.status, msg.message);
+					eventHandler?.onProgress?.(msg.operation, msg.status, msg.message, msg.progress);
+					notifyProgressListeners(msg.operation, msg.status, msg.message, msg.progress);
 					break;
 				case 'info':
 					eventHandler?.onInfo?.(msg.tag, msg.message);
@@ -123,7 +142,8 @@ function wireWorkerHandlers(w: Worker): void {
 					for (const evt of msg.events) {
 						switch (evt.event) {
 							case 'progress':
-								eventHandler?.onProgress?.(evt.operation, evt.status, evt.message);
+								eventHandler?.onProgress?.(evt.operation, evt.status, evt.message, evt.progress);
+								notifyProgressListeners(evt.operation, evt.status, evt.message, evt.progress);
 								break;
 							case 'info':
 								eventHandler?.onInfo?.(evt.tag, evt.message);
@@ -312,6 +332,22 @@ export async function exportAsCSV(datasetId: string): Promise<Uint8Array> {
 /** Export dataset as GeoParquet with WKB geometry and flattened property columns. */
 export async function exportAsParquet(datasetId: string): Promise<Uint8Array> {
 	return rpc<Uint8Array>('exportAsParquet', { datasetId });
+}
+
+/** Export dataset as PMTiles v3 vector tile archive. */
+export async function exportAsPMTiles(datasetId: string, params?: import('../config/types').PMTilesOutputParams): Promise<Uint8Array> {
+	return rpc<Uint8Array>('exportAsPMTiles', { datasetId, params });
+}
+
+/** Extract features from a remote PMTiles archive, deduplicate, and rebuild as a new archive. */
+export async function extractPMTiles(
+	url: string,
+	extractZoom: number,
+	bbox: [number, number, number, number],
+	layers?: string[],
+	outputParams?: import('../config/types').PMTilesOutputParams
+): Promise<Uint8Array> {
+	return rpc<Uint8Array>('extractPMTiles', { url, extractZoom, bbox, layers, outputParams });
 }
 
 export async function getDatasetBounds(datasetId: string): Promise<[number, number, number, number] | null> {

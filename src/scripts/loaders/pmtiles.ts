@@ -21,11 +21,12 @@ export interface PMTilesMetadata {
 }
 
 /**
- * Fetch PMTiles header and metadata from a URL.
- * Only reads the archive header (single range request), not tile data.
+ * Read PMTiles header and metadata.
+ * Accepts a URL string (fetched via HTTP range requests) or a PMTiles instance
+ * (for local files using FileSource).
  */
-export async function getPMTilesMetadata(url: string): Promise<PMTilesMetadata> {
-	const pm = new PMTiles(url);
+export async function getPMTilesMetadata(urlOrInstance: string | PMTiles): Promise<PMTilesMetadata> {
+	const pm = typeof urlOrInstance === 'string' ? new PMTiles(urlOrInstance) : urlOrInstance;
 	const header = await pm.getHeader();
 	const metadata = await pm.getMetadata();
 

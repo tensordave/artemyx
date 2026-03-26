@@ -3,7 +3,7 @@ import Header from '../components/Header.astro';
 import { highlightConfigYaml } from '../scripts/utils/highlight-config';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../styles/global.css';
-import { cloudArrowDownIcon, fileArrowUpIcon, gitMergeIcon, codeBlockIcon, stackIcon, databaseIcon, mapTrifoldIcon, magnifyingGlassIcon, listIcon, circleIcon } from '../scripts/icons';
+import { cloudArrowDownIcon, fileArrowUpIcon, gitMergeIcon, codeBlockIcon, stackIcon, databaseIcon, mapTrifoldIcon, magnifyingGlassIcon, listIcon, circleIcon, boxArrowDownIcon } from '../scripts/icons';
 
 const configFile = 'demo-config.yaml';
 const highlightedYaml = await highlightConfigYaml(configFile);
@@ -59,8 +59,8 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={codeBlockIcon} />
-					<div class="feature-card-title">View config</div>
-					<p class="feature-card-body">Opens a panel showing the active YAML configuration with syntax highlighting.</p>
+					<div class="feature-card-title">Config editor</div>
+					<p class="feature-card-body">Edit, run, and clear YAML configurations with live syntax highlighting. Import configs, generate from session state, or export as a viewer-ready ZIP.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={stackIcon} />
@@ -70,7 +70,7 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={databaseIcon} />
 					<div class="feature-card-title">Storage</div>
-					<p class="feature-card-body">Session persistence status - datasets survive page refresh via browser storage.</p>
+					<p class="feature-card-body">Session persistence via browser storage - datasets survive page refresh. Export and import the database for portable sessions.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={magnifyingGlassIcon} />
@@ -81,6 +81,11 @@ const highlightedYaml = await highlightConfigYaml(configFile);
 					<div class="control-card-icon" set:html={listIcon} />
 					<div class="feature-card-title">Legend</div>
 					<p class="feature-card-body">Auto-generated legend derived from layer styles. Shows color swatches, gradient ramps, and category breakdowns.</p>
+				</div>
+				<div class="feature-card">
+					<div class="control-card-icon" set:html={boxArrowDownIcon} />
+					<div class="feature-card-title">Outputs</div>
+					<p class="feature-card-body">Export datasets as GeoJSON, CSV, Parquet, or PMTiles. Extract features from remote PMTiles archives. Download results individually or as a ZIP.</p>
 				</div>
 				<div class="feature-card">
 					<div class="control-card-icon" set:html={mapTrifoldIcon} />

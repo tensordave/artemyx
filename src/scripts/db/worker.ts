@@ -89,8 +89,8 @@ function scheduleBatchFlush(): void {
 	}
 }
 
-function postProgress(operation: string, status: ProgressStatus, message?: string): void {
-	const evt: ProgressEvent = { event: 'progress', operation, status, message };
+function postProgress(operation: string, status: ProgressStatus, message?: string, progress?: number): void {
+	const evt: ProgressEvent = { event: 'progress', operation, status, message, progress };
 	// Terminal statuses flush immediately for instant user feedback
 	if (status === 'success' || status === 'error') {
 		pendingEvents.push(evt);
@@ -779,6 +779,35 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 				const parquetBuf = await exportAsParquet(req.datasetId);
 				postProgress(req.datasetId, 'success', 'Parquet export complete');
 				respondTransfer(requestId, parquetBuf, [parquetBuf.buffer]);
+				break;
+			}
+
+			case 'exportAsPMTiles': {
+				postProgress(req.datasetId, 'processing', 'Generating PMTiles...');
+				const { generatePMTiles } = await import('./pmtiles-writer');
+				const pmtilesBuf = await generatePMTiles({
+					datasetId: req.datasetId,
+					params: req.params,
+					onProgress: (msg, p) => postProgress(req.datasetId, 'processing', msg, p),
+				});
+				postProgress(req.datasetId, 'success', 'PMTiles export complete');
+				respondTransfer(requestId, pmtilesBuf, [pmtilesBuf.buffer]);
+				break;
+			}
+
+			case 'extractPMTiles': {
+				postProgress('extract-pmtiles', 'processing', 'Extracting PMTiles...');
+				const { extractPMTilesAndRebuild } = await import('./pmtiles-reader');
+				const extractBuf = await extractPMTilesAndRebuild({
+					url: req.url,
+					extractZoom: req.extractZoom,
+					bbox: req.bbox,
+					layers: req.layers,
+					outputParams: req.outputParams,
+					onProgress: (msg, p) => postProgress('extract-pmtiles', 'processing', msg, p),
+				});
+				postProgress('extract-pmtiles', 'success', 'PMTiles extraction complete');
+				respondTransfer(requestId, extractBuf, [extractBuf.buffer]);
 				break;
 			}
 

@@ -107,6 +107,8 @@ interface PMTilesLoadOptions {
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
 	layers?: LayerConfig[];
+	/** Pre-created PMTiles instance (for local file uploads using FileSource). */
+	pmtilesInstance?: import('pmtiles').PMTiles;
 }
 
 /**
@@ -123,8 +125,8 @@ export async function loadPMTilesDataset(
 
 	logger.progress(displayName, 'loading', 'Reading PMTiles metadata...');
 
-	// 1. Read PMTiles header
-	const metadata = await getPMTilesMetadata(dataset.url);
+	// 1. Read PMTiles header (use pre-created instance for file uploads)
+	const metadata = await getPMTilesMetadata(options.pmtilesInstance ?? dataset.url);
 
 	// 2. Validate tile type
 	if (metadata.tileType === 'raster') {

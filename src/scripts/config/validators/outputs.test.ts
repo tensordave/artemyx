@@ -13,7 +13,7 @@ describe('validateOutput', () => {
 	});
 
 	it('accepts all valid formats', () => {
-		for (const format of ['geojson', 'csv', 'parquet']) {
+		for (const format of ['geojson', 'csv', 'parquet', 'pmtiles']) {
 			const errors = validateOutput({ source: 'data', format }, 0);
 			expect(errors).toEqual([]);
 		}
@@ -63,6 +63,91 @@ describe('validateOutput', () => {
 		const errors = validateOutput({ format: 'geojson' }, 3);
 		expect(errors[0]).toContain('outputs[3]');
 	});
+
+	it('accepts pmtiles with valid params', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles',
+			params: { minzoom: 0, maxzoom: 10, layerName: 'parks' },
+		}, 0);
+		expect(errors).toEqual([]);
+	});
+
+	it('accepts pmtiles with bbox param', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles',
+			params: { bbox: [-123.2, 49.2, -123.0, 49.3] },
+		}, 0);
+		expect(errors).toEqual([]);
+	});
+
+	it('accepts pmtiles with layers param', () => {
+		const errors = validateOutput({
+			source: 'archive', format: 'pmtiles',
+			params: { layers: ['roads', 'buildings'] },
+		}, 0);
+		expect(errors).toEqual([]);
+	});
+
+	it('accepts pmtiles without params', () => {
+		const errors = validateOutput({ source: 'parks', format: 'pmtiles' }, 0);
+		expect(errors).toEqual([]);
+	});
+
+	it('rejects params on non-pmtiles format', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'geojson', params: { maxzoom: 10 },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('params are only valid for pmtiles'));
+	});
+
+	it('rejects non-integer minzoom', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles', params: { minzoom: 2.5 },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('minzoom: must be an integer'));
+	});
+
+	it('rejects out-of-range maxzoom', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles', params: { maxzoom: 25 },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('maxzoom: must be between 0 and 22'));
+	});
+
+	it('rejects minzoom > maxzoom', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles', params: { minzoom: 10, maxzoom: 5 },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('minzoom (10) must not exceed maxzoom (5)'));
+	});
+
+	it('rejects empty layerName', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles', params: { layerName: '' },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('layerName: must be a non-empty string'));
+	});
+
+	it('rejects invalid bbox', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles', params: { bbox: [1, 2, 3] },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('bbox: must be an array of 4 numbers'));
+	});
+
+	it('rejects bbox with west >= east', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles', params: { bbox: [10, 0, 5, 1] },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('west (10) must be less than east (5)'));
+	});
+
+	it('rejects empty layers array', () => {
+		const errors = validateOutput({
+			source: 'parks', format: 'pmtiles', params: { layers: [] },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('layers: must be a non-empty array'));
+	});
 });
 
 describe('validateOutputs', () => {
@@ -94,11 +179,22 @@ describe('validateOutputs', () => {
 		expect(errors).toContainEqual(expect.stringContaining("does not reference a valid dataset"));
 	});
 
-	it('rejects PMTiles source', () => {
+	it('rejects PMTiles source for non-pmtiles format', () => {
 		const outputs = [{ source: 'basemap', format: 'geojson' }];
 		const allSources = new Set([...validSources, 'basemap']);
 		const errors = validateOutputs(outputs, allSources, pmtilesSources);
 		expect(errors).toContainEqual(expect.stringContaining("is a PMTiles dataset"));
+	});
+
+	it('allows PMTiles source when format is pmtiles with extraction params', () => {
+		const outputs = [{
+			source: 'basemap',
+			format: 'pmtiles',
+			params: { extractZoom: 10, bbox: [-123.3, 49.2, -123.0, 49.3] },
+		}];
+		const allSources = new Set([...validSources, 'basemap']);
+		const errors = validateOutputs(outputs, allSources, pmtilesSources);
+		expect(errors).toEqual([]);
 	});
 
 	it('catches duplicate filenames with explicit names', () => {

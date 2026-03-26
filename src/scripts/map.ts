@@ -96,7 +96,7 @@ const basemap = getBasemap(mapSettings.basemap) ?? getDefaultBasemap();
 
 // Register PMTiles protocol handler before map creation.
 // Must precede any source addition that uses pmtiles:// URLs.
-const pmtilesProtocol = new PMTilesProtocol();
+export const pmtilesProtocol = new PMTilesProtocol();
 maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
 
 // Initialize the map with config settings

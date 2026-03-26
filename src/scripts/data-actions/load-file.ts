@@ -6,6 +6,9 @@
 import { loadFromBuffer } from '../db';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from '../controls/popup';
 import { showErrorDialog } from '../ui/error-dialog';
+import { loadPMTilesDataset } from './load-pmtiles';
+import { PMTiles, FileSource } from 'pmtiles';
+import { pmtilesProtocol } from '../map';
 import {
 	type LoadDataOptions,
 	formatBytes,
@@ -44,6 +47,21 @@ export async function loadDataFromFile(
 
 	try {
 		logger.progress(displayName, 'loading');
+
+		// PMTiles files bypass DuckDB - load as vector tile source via FileSource.
+		// Uses FileSource (File.slice) instead of blob URLs because browsers
+		// don't reliably support Range requests on blob:// URLs.
+		// The protocol key must match FileSource.getKey() which returns file.name.
+		if (file.name.endsWith('.pmtiles')) {
+			const pm = new PMTiles(new FileSource(file));
+			pmtilesProtocol.add(pm);
+			const success = await loadPMTilesDataset(
+				{ id: displayName, url: file.name, name: displayName, format: 'pmtiles' },
+				{ map, logger, layerToggleControl, loadedDatasets, pmtilesInstance: pm }
+			);
+			if (success) logger.scheduleIdle(3000);
+			return success;
+		}
 
 		// Read file to ArrayBuffer for zero-copy transfer to worker
 		const buffer = await file.arrayBuffer();

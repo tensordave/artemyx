@@ -5,19 +5,11 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.7.2 - PMTiles Extraction
-
-Goal: extract features from a remote `pmtiles://` source, decode MVT tiles, and retile into a new standalone `.pmtiles` file. Solves CORS issues with remote archives by producing a local copy. Introduces the tiling pipeline shared with v0.7.3.
-
-- **Output format expansion** - Add `pmtiles` to `OutputFormat`; `OutputConfig` gains optional `params` field for format-specific options; `PMTilesOutputParams` with `minzoom` (default 0), `maxzoom` (default 14), `layerName` (defaults to source ID), optional `bbox` for spatial subsetting, optional `layers` array to filter specific source layers from multi-layer archives
-- **Source validation** - For extraction, source must be a PMTiles dataset (`format='pmtiles'` in DuckDB `datasets` table); opposite of GeoJSON/CSV/Parquet outputs which reject PMTiles sources
-- **Extraction pipeline** - Read tile metadata from remote archive via `pmtiles` library (already installed) to determine available tiles and zoom range; fetch relevant tiles as HTTP range requests via the existing protocol handler; decode MVT tiles using `@mapbox/vector-tile` + `pbf` (new dependencies, both pure JS and worker-compatible); reconstruct GeoJSON features from decoded tile data, deduplicating features that span multiple tiles
-- **Tiling pipeline** - Shared infrastructure for v0.7.3: `geojson-vt` for tile slicing and simplification per zoom level, `vt-pbf` for MVT protobuf encoding (both new dependencies, pure JS, worker-compatible), PMTiles archive writer from `pmtiles` package (already installed); runs in DuckDB worker thread; progress reported per zoom level; result is an `ArrayBuffer` surfaced in the v0.7.1 outputs UI
-
 ### v0.7.3 - PMTiles Generation
 
-Goal: generate `.pmtiles` vector tiles from any DuckDB dataset or operation result. Reuses the tiling pipeline from v0.7.2 -- this version wires DuckDB feature data as input.
+Goal: generate `.pmtiles` vector tiles from any DuckDB dataset(s) or operation result(s). Reuses the tiling pipeline from v0.7.2 -- this version wires DuckDB feature data as input. Can add multiple layers to one `.pmtiles` file output. 
 
+- **Update Worker Timeout for Outputs panel** - Currently set to 120s, longer processing will time out the panel and make it unusable. Fix should check if operations are still in progress.
 - **DuckDB-to-tiles path** - `getFeaturesAsGeoJSON()` feeds features from any dataset into the v0.7.2 tiling pipeline (`geojson-vt` -> `vt-pbf` -> pmtiles writer); no new dependencies beyond what v0.7.2 introduced
 - **Source validation** - Source must be a non-PMTiles dataset (has actual feature data in DuckDB); rejects PMTiles sources (use extraction path instead)
 - **Preview on map** - After generation, optionally register the generated PMTiles as a viewable vector source via blob URL and the protocol handler for verifying output before downloading
@@ -32,13 +24,15 @@ Goal: persist generated and extracted PMTiles in OPFS so they survive page refre
 - **StorageControl updates** - Surface PMTiles cache size alongside DB size in the storage panel; include PMTiles files in OPFS export/import; clear PMTiles cache on "Clear Storage"
 - **MapLibre vector source wiring** - Cached PMTiles served via `pmtiles://` protocol from OPFS; auto-registered as vector sources on session restore; layers created from cached config
 
-### v0.7.5 - Accessibility and Shortcuts
+### v0.7.5 - Accessibility, Shortcuts and Polish
 
 Goal: keyboard navigation and ARIA improvements for the core map controls. Polish release after feature work stabilizes.
 
 - **Keyboard shortcuts** - L (layer control), P (progress), Esc (close any panel), Delete (remove feature), WASD for panning, R/F for zoom in/out; shortcuts disabled when a text input or textarea is focused
 - **ARIA labels** - Role attributes on interactive elements, `aria-expanded` on panels, `aria-label` on icon-only buttons, screen reader announcements for state changes in `layer-control.ts`
 - **Focus management** - Trap focus within open panels (config editor, layer panel); return focus to trigger button on panel close
+- **Outputs Helper** - (tbd) an Outputs YAML helper, to help generate the right Outputs formatting, extents, and zoom levels (as needed by file types)
+- **Feature Popups Fix** - In some cases, particularly with overlapping layers, multiple attribute/information popups open when clicking on a feature on the map. Should just show the top-most feature's information in a single popup. 
 
 
 ### v0.8.0 - deck.gl Core Integration
@@ -161,6 +155,10 @@ Goal: a minimal map app that renders pre-processed data without DuckDB, operatio
 - **Shapefile support** - Load `.shp`/`.dbf` archives from URLs; requires an additional JS library (e.g., shpjs) for parsing multi-file ZIP archives; more involved than other format additions and likely requires download endpoint handling to be in place first
 - **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc.
 
+### v0.14.0 - OpenData Gallery
+- **Fourth split of the monorepo - Data Gallery** - (details to come) for teams that need to deploy multiple maps, viewers, datasets, and more in an open data kind of environment, the authoring environment (app), CLI, and viewer get close to that, but need development to bring into a cohesive form for ingestion from outside sources. This takes the original 'examples' index and fleshes it out into a proper reusable gallery. 
+- **Open Data Gallery Wizard** - for the less tech savvy folk, a wizard to help create the necessary configs to create an open data gallery.  
+
 ## Backlog (Unscheduled)
 
 Items worth building eventually but not yet assigned to a version:
@@ -196,6 +194,9 @@ Items worth building eventually but not yet assigned to a version:
 
 
 ## Completed
+
+### v0.7.2 - PMTiles Extraction
+- PMTiles extraction pipeline (remote tile fetching via HTTP range requests, MVT decoding, cross-tile feature deduplication); PMTiles output format with configurable zoom range, bbox subsetting, and per-layer filtering; shared tiling infrastructure (`geojson-vt` + `vt-pbf` + PMTiles writer) reusable for v0.7.3 DuckDB-to-tiles path; output progress tracker with per-stage status updates
 
 ### v0.7.1 - Outputs
 - Config-driven output execution (GeoJSON, CSV, Parquet) with worker RPCs, results dropdown with format badges and zip download, CSV geometry round-trip via WKT and GeoJSON string detection in the loader, demo config simplified to parks walksheds on carto-dark
