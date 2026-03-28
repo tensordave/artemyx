@@ -142,7 +142,7 @@ function clipToBBox(
 		case 'MultiLineString': {
 			const all: number[][][] = [];
 			for (const line of geometry.coordinates) {
-				all.push(...clipLineCoords(line, west, south, east, north));
+				for (const seg of clipLineCoords(line, west, south, east, north)) all.push(seg);
 			}
 			return all.length > 0 ? { type: 'MultiLineString', coordinates: all } : null;
 		}
@@ -517,7 +517,7 @@ export async function extractPMTilesFeatures(
 	// 6. Compute actual bounds from extracted features
 	const allFeatures: GeoJSON.Feature[] = [];
 	for (const fc of resultLayers.values()) {
-		allFeatures.push(...fc.features);
+		for (const f of fc.features) allFeatures.push(f);
 	}
 	const bounds = computeBounds({ type: 'FeatureCollection', features: allFeatures });
 

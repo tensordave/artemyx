@@ -102,6 +102,7 @@ src/scripts/
 │   ├── data-control.ts       # Load data from URL with advanced options (CRS, format, columns)
 │   ├── upload-control.ts     # Local file upload (drag-and-drop, file picker)
 │   ├── config-control.ts     # Config editor (edit, run, clear, import, generate, export) with live Shiki highlighting
+│   ├── outputs-control.ts    # Outputs panel (run outputs, progress tracking, results download)
 │   ├── operation-builder-control.ts  # Visual operation builder with live YAML preview
 │   ├── layer-control.ts      # Layer visibility, color, rename, delete, reorder
 │   ├── legend-control.ts     # Auto-generated legend from active layer styles

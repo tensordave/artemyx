@@ -62,6 +62,7 @@ export async function generatePMTiles(options: PMTilesGenerateOptions): Promise<
 
 	// 4. Enumerate tiles within data bounds, encode MVT, compress
 	const tileEntries: { tileId: number; data: Uint8Array }[] = [];
+	let sinceLastYield = 0;
 
 	for (let z = minZoom; z <= maxZoom; z++) {
 		const { minX, minY, maxX, maxY } = bboxToTileRange(bounds, z);
@@ -80,6 +81,13 @@ export async function generatePMTiles(options: PMTilesGenerateOptions): Promise<
 					data: compressed,
 				});
 				tileCount++;
+
+				// Yield periodically so batched progress events flush to the main thread
+				if (++sinceLastYield >= 200) {
+					sinceLastYield = 0;
+					onProgress?.(`Zoom ${z}/${maxZoom}: ${tileCount} tiles`, 0.1 + ((z - minZoom + 1) / totalZooms) * 0.8);
+					await new Promise(resolve => setTimeout(resolve, 0));
+				}
 			}
 		}
 
@@ -100,6 +108,7 @@ export async function generatePMTiles(options: PMTilesGenerateOptions): Promise<
 		maxZoom,
 		bounds,
 		layerNames: [layerName],
+		onProgress: (msg, p) => onProgress?.(msg, 0.95 + p * 0.05),
 	});
 }
 
@@ -128,7 +137,7 @@ export async function generateMultiLayerPMTiles(options: MultiLayerPMTilesOption
 	onProgress?.('Computing bounds...', 0);
 	const allFeatures: GeoJSON.Feature[] = [];
 	for (const fc of layers.values()) {
-		allFeatures.push(...fc.features);
+		for (const f of fc.features) allFeatures.push(f);
 	}
 	const bounds = computeBounds({ type: 'FeatureCollection', features: allFeatures });
 
@@ -148,6 +157,7 @@ export async function generateMultiLayerPMTiles(options: MultiLayerPMTilesOption
 
 	// 3. Enumerate tiles, encode MVT with all layers per tile
 	const tileEntries: { tileId: number; data: Uint8Array }[] = [];
+	let sinceLastYield = 0;
 
 	for (let z = minZoom; z <= maxZoom; z++) {
 		const { minX, minY, maxX, maxY } = bboxToTileRange(bounds, z);
@@ -177,6 +187,13 @@ export async function generateMultiLayerPMTiles(options: MultiLayerPMTilesOption
 					data: compressed,
 				});
 				tileCount++;
+
+				// Yield periodically so batched progress events flush to the main thread
+				if (++sinceLastYield >= 200) {
+					sinceLastYield = 0;
+					onProgress?.(`Zoom ${z}/${maxZoom}: ${tileCount} tiles`, 0.1 + ((z - minZoom + 1) / totalZooms) * 0.8);
+					await new Promise(resolve => setTimeout(resolve, 0));
+				}
 			}
 		}
 
@@ -197,6 +214,7 @@ export async function generateMultiLayerPMTiles(options: MultiLayerPMTilesOption
 		maxZoom,
 		bounds,
 		layerNames,
+		onProgress: (msg: string, p: number) => onProgress?.(msg, 0.95 + p * 0.05),
 	});
 }
 
@@ -208,13 +226,14 @@ interface ArchiveOptions {
 	bounds: [number, number, number, number];
 	/** Single layer name or array of layer names for multi-layer archives */
 	layerNames: string[];
+	onProgress?: (message: string, progress: number) => void;
 }
 
-function buildPMTilesArchive(
+async function buildPMTilesArchive(
 	tileEntries: { tileId: number; data: Uint8Array }[],
 	options: ArchiveOptions
-): Uint8Array {
-	const { minZoom, maxZoom, bounds, layerNames } = options;
+): Promise<Uint8Array> {
+	const { minZoom, maxZoom, bounds, layerNames, onProgress } = options;
 	const [minLon, minLat, maxLon, maxLat] = bounds;
 	const centerLon = (minLon + maxLon) / 2;
 	const centerLat = (minLat + maxLat) / 2;
@@ -294,15 +313,24 @@ function buildPMTilesArchive(
 
 	// 7. Concatenate: header | directory | metadata | tile data
 	const totalSize = HEADER_SIZE + compressedDirectory.length + compressedMetadata.length + tileDataSize;
+	onProgress?.(`Assembling archive (${(totalSize / 1_048_576).toFixed(0)} MB)...`, 0);
 	const archive = new Uint8Array(totalSize);
 	let writePos = 0;
 
 	archive.set(buildHeaderBytes(header), writePos); writePos += HEADER_SIZE;
 	archive.set(compressedDirectory, writePos); writePos += compressedDirectory.length;
 	archive.set(compressedMetadata, writePos); writePos += compressedMetadata.length;
-	for (const part of tileDataParts) {
-		archive.set(part, writePos);
-		writePos += part.length;
+
+	let sinceLastYield = 0;
+	for (let i = 0; i < tileDataParts.length; i++) {
+		archive.set(tileDataParts[i], writePos);
+		writePos += tileDataParts[i].length;
+
+		if (++sinceLastYield >= 500) {
+			sinceLastYield = 0;
+			onProgress?.(`Writing tile data (${((i / tileDataParts.length) * 100).toFixed(0)}%)...`, i / tileDataParts.length);
+			await new Promise(resolve => setTimeout(resolve, 0));
+		}
 	}
 
 	return archive;

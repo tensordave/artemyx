@@ -795,8 +795,34 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 				break;
 			}
 
+			case 'exportAsMultiLayerPMTiles': {
+				const opId = req.operationId;
+				postProgress(opId, 'processing', 'Reading datasets for multi-layer PMTiles...');
+				const { getFeaturesAsGeoJSON } = await import('./features');
+				const { generateMultiLayerPMTiles } = await import('./pmtiles-writer');
+
+				const layers = new Map<string, GeoJSON.FeatureCollection>();
+				for (const datasetId of req.datasetIds) {
+					const fc = await getFeaturesAsGeoJSON(datasetId);
+					if (fc.features.length === 0) {
+						throw new Error(`Dataset '${datasetId}' has no features to tile`);
+					}
+					layers.set(datasetId, fc);
+				}
+
+				const mlBuf = await generateMultiLayerPMTiles({
+					layers,
+					params: req.params,
+					onProgress: (msg, p) => postProgress(opId, 'processing', msg, p),
+				});
+				postProgress(opId, 'success', 'Multi-layer PMTiles export complete');
+				respondTransfer(requestId, mlBuf, [mlBuf.buffer]);
+				break;
+			}
+
 			case 'extractPMTiles': {
-				postProgress('extract-pmtiles', 'processing', 'Extracting PMTiles...');
+				const extractOp = req.sourceId || 'extract-pmtiles';
+				postProgress(extractOp, 'processing', 'Extracting PMTiles...');
 				const { extractPMTilesAndRebuild } = await import('./pmtiles-reader');
 				const extractBuf = await extractPMTilesAndRebuild({
 					url: req.url,
@@ -804,9 +830,9 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 					bbox: req.bbox,
 					layers: req.layers,
 					outputParams: req.outputParams,
-					onProgress: (msg, p) => postProgress('extract-pmtiles', 'processing', msg, p),
+					onProgress: (msg, p) => postProgress(extractOp, 'processing', msg, p),
 				});
-				postProgress('extract-pmtiles', 'success', 'PMTiles extraction complete');
+				postProgress(extractOp, 'success', 'PMTiles extraction complete');
 				respondTransfer(requestId, extractBuf, [extractBuf.buffer]);
 				break;
 			}

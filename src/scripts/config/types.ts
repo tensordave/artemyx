@@ -346,8 +346,8 @@ export interface PMTilesOutputParams {
 
 /** Output configuration for exporting datasets or operation results */
 export interface OutputConfig {
-	/** Source dataset or operation output ID */
-	source: string;
+	/** Source dataset or operation output ID, or array of IDs for multi-layer PMTiles */
+	source: string | string[];
 	/** Export format */
 	format: OutputFormat;
 	/** Output filename (without extension). Defaults to source ID. */

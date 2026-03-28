@@ -89,11 +89,29 @@ export function validateOutput(output: unknown, index: number): string[] {
 
 	const o = output as Record<string, unknown>;
 
-	// Required: source (non-empty string)
+	// Required: source (non-empty string or non-empty array of non-empty strings)
 	if (!('source' in o)) {
 		errors.push(`${prefix}: missing required 'source'`);
+	} else if (Array.isArray(o.source)) {
+		if (o.source.length === 0) {
+			errors.push(`${prefix}.source: array must not be empty`);
+		} else if (!o.source.every(s => typeof s === 'string' && s.trim() !== '')) {
+			errors.push(`${prefix}.source: all entries must be non-empty strings`);
+		}
+		// Multi-source only valid for pmtiles format
+		if (typeof o.format === 'string' && o.format !== 'pmtiles') {
+			errors.push(`${prefix}.source: array sources are only valid for pmtiles format`);
+		}
+		// Multi-source incompatible with extraction and layerName params
+		const params = o.params as Record<string, unknown> | undefined;
+		if (params?.extractZoom !== undefined) {
+			errors.push(`${prefix}.params.extractZoom: not valid with multi-source output`);
+		}
+		if (params?.layerName !== undefined) {
+			errors.push(`${prefix}.params.layerName: not valid with multi-source output (each source ID becomes a layer name)`);
+		}
 	} else if (typeof o.source !== 'string' || o.source.trim() === '') {
-		errors.push(`${prefix}.source: must be a non-empty string`);
+		errors.push(`${prefix}.source: must be a non-empty string or array of strings`);
 	}
 
 	// Required: format (one of VALID_OUTPUT_FORMATS)
@@ -153,21 +171,31 @@ export function validateOutputs(
 	// Validate source references, PMTiles rejection, and extraction requirements
 	outputs.forEach((output, index) => {
 		const o = output as Record<string, unknown>;
-		if (typeof o?.source === 'string' && o.source.trim() !== '') {
-			if (!validSourceIds.has(o.source)) {
-				errors.push(`outputs[${index}].source: '${o.source}' does not reference a valid dataset or operation output`);
+		const sourceIds = Array.isArray(o?.source)
+			? (o.source as unknown[]).filter(s => typeof s === 'string' && s.trim() !== '') as string[]
+			: (typeof o?.source === 'string' && o.source.trim() !== '') ? [o.source] : [];
+
+		for (const src of sourceIds) {
+			if (!validSourceIds.has(src)) {
+				errors.push(`outputs[${index}].source: '${src}' does not reference a valid dataset or operation output`);
 			}
-			if (pmtilesDatasetIds.has(o.source) && o.format !== 'pmtiles') {
-				errors.push(`outputs[${index}].source: '${o.source}' is a PMTiles dataset (no feature data in DuckDB for export)`);
+			// Array sources must not reference PMTiles datasets (no feature data in DuckDB)
+			if (Array.isArray(o.source) && pmtilesDatasetIds.has(src)) {
+				errors.push(`outputs[${index}].source: '${src}' is a PMTiles dataset (cannot be used in multi-source output)`);
 			}
-			// PMTiles extraction requires extractZoom and bbox
-			if (pmtilesDatasetIds.has(o.source) && o.format === 'pmtiles') {
-				const params = o.params as Record<string, unknown> | undefined;
-				if (!params || params.extractZoom === undefined) {
-					errors.push(`outputs[${index}].params.extractZoom: required when source is a PMTiles dataset`);
+			// Single string source: original PMTiles rejection and extraction checks
+			if (!Array.isArray(o.source)) {
+				if (pmtilesDatasetIds.has(src) && o.format !== 'pmtiles') {
+					errors.push(`outputs[${index}].source: '${src}' is a PMTiles dataset (no feature data in DuckDB for export)`);
 				}
-				if (!params || params.bbox === undefined) {
-					errors.push(`outputs[${index}].params.bbox: required when source is a PMTiles dataset (cannot extract full archive)`);
+				if (pmtilesDatasetIds.has(src) && o.format === 'pmtiles') {
+					const params = o.params as Record<string, unknown> | undefined;
+					if (!params || params.extractZoom === undefined) {
+						errors.push(`outputs[${index}].params.extractZoom: required when source is a PMTiles dataset`);
+					}
+					if (!params || params.bbox === undefined) {
+						errors.push(`outputs[${index}].params.bbox: required when source is a PMTiles dataset (cannot extract full archive)`);
+					}
 				}
 			}
 		}
@@ -180,7 +208,7 @@ export function validateOutputs(
 		if (typeof o?.format !== 'string' || !VALID_OUTPUT_FORMATS.includes(o.format as OutputFormat)) return;
 		const baseName = (typeof o.filename === 'string' && o.filename.trim() !== '')
 			? o.filename
-			: (typeof o.source === 'string' ? o.source : '');
+			: Array.isArray(o.source) ? (o.source[0] as string ?? '') : (typeof o.source === 'string' ? o.source : '');
 		const fullName = `${baseName}.${o.format}`;
 		if (resolvedFilenames.has(fullName)) {
 			errors.push(`outputs[${index}]: duplicate filename '${fullName}' (conflicts with outputs[${resolvedFilenames.get(fullName)}])`);

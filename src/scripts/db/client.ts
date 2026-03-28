@@ -41,9 +41,14 @@ function getWorker(): Worker {
 // ── RPC mechanism ───────────────────────────────────────────────────────────
 
 let requestCounter = 0;
-const pending = new Map<string, { resolve: (data: any) => void; reject: (err: Error) => void }>();
+const pending = new Map<string, {
+	resolve: (data: any) => void;
+	reject: (err: Error) => void;
+	timer: ReturnType<typeof setTimeout>;
+	type: string;
+}>();
 
-const RPC_TIMEOUT_MS = 120_000; // 2 minutes — generous for heavy spatial ops
+const RPC_TIMEOUT_MS = 120_000; // 2 minutes of inactivity before timeout
 
 function rpc<T>(type: string, payload: Record<string, unknown> = {}, transfer?: Transferable[]): Promise<T> {
 	const w = getWorker();
@@ -51,13 +56,10 @@ function rpc<T>(type: string, payload: Record<string, unknown> = {}, transfer?: 
 	return new Promise((resolve, reject) => {
 		const timer = setTimeout(() => {
 			pending.delete(requestId);
-			reject(new Error(`RPC '${type}' timed out after ${RPC_TIMEOUT_MS / 1000}s`));
+			reject(new Error(`RPC '${type}' timed out after ${RPC_TIMEOUT_MS / 1000}s of inactivity`));
 		}, RPC_TIMEOUT_MS);
 
-		pending.set(requestId, {
-			resolve: (data: any) => { clearTimeout(timer); resolve(data); },
-			reject: (err: Error) => { clearTimeout(timer); reject(err); },
-		});
+		pending.set(requestId, { resolve, reject, timer, type });
 		const msg = { requestId, type, ...payload } as WorkerRequest;
 		if (transfer) {
 			w.postMessage(msg, transfer);
@@ -65,6 +67,22 @@ function rpc<T>(type: string, payload: Record<string, unknown> = {}, transfer?: 
 			w.postMessage(msg);
 		}
 	});
+}
+
+/**
+ * Reset timeout for all pending RPCs.
+ * Called when the worker sends any event message (progress, info, warn, batch),
+ * proving it is still alive. This allows long-running operations that report
+ * progress to exceed the base RPC_TIMEOUT_MS without being killed.
+ */
+function resetPendingTimers(): void {
+	for (const [requestId, entry] of pending) {
+		clearTimeout(entry.timer);
+		entry.timer = setTimeout(() => {
+			pending.delete(requestId);
+			entry.reject(new Error(`RPC '${entry.type}' timed out after ${RPC_TIMEOUT_MS / 1000}s of inactivity`));
+		}, RPC_TIMEOUT_MS);
+	}
 }
 
 // ── Event handler ───────────────────────────────────────────────────────────
@@ -110,6 +128,7 @@ function wireWorkerHandlers(w: Worker): void {
 		if ('requestId' in msg && msg.requestId) {
 			const p = pending.get(msg.requestId);
 			if (!p) return;
+			clearTimeout(p.timer);
 			pending.delete(msg.requestId);
 			if (msg.type === 'error') {
 				p.reject(new Error(msg.message));
@@ -155,13 +174,17 @@ function wireWorkerHandlers(w: Worker): void {
 					}
 					break;
 			}
+			// Any event from the worker proves it is alive — reset RPC timers
+			// so long-running operations with progress reporting don't time out.
+			resetPendingTimers();
 		}
 	};
 
 	w.onerror = (e: ErrorEvent) => {
 		// Reject all pending RPCs on worker crash
-		for (const [, { reject }] of pending) {
-			reject(new Error(`Worker crashed: ${e.message}`));
+		for (const [, entry] of pending) {
+			clearTimeout(entry.timer);
+			entry.reject(new Error(`Worker crashed: ${e.message}`));
 		}
 		pending.clear();
 		eventHandler?.onProgress?.('worker', 'error', 'Processing worker crashed. Try clearing the session.');
@@ -339,15 +362,21 @@ export async function exportAsPMTiles(datasetId: string, params?: import('../con
 	return rpc<Uint8Array>('exportAsPMTiles', { datasetId, params });
 }
 
+/** Export multiple datasets as a multi-layer PMTiles v3 vector tile archive. */
+export async function exportAsMultiLayerPMTiles(datasetIds: string[], params?: import('../config/types').PMTilesOutputParams, operationId?: string): Promise<Uint8Array> {
+	return rpc<Uint8Array>('exportAsMultiLayerPMTiles', { datasetIds, params, operationId: operationId ?? datasetIds[0] });
+}
+
 /** Extract features from a remote PMTiles archive, deduplicate, and rebuild as a new archive. */
 export async function extractPMTiles(
 	url: string,
 	extractZoom: number,
 	bbox: [number, number, number, number],
 	layers?: string[],
-	outputParams?: import('../config/types').PMTilesOutputParams
+	outputParams?: import('../config/types').PMTilesOutputParams,
+	sourceId?: string
 ): Promise<Uint8Array> {
-	return rpc<Uint8Array>('extractPMTiles', { url, extractZoom, bbox, layers, outputParams });
+	return rpc<Uint8Array>('extractPMTiles', { url, extractZoom, bbox, layers, outputParams, sourceId });
 }
 
 export async function getDatasetBounds(datasetId: string): Promise<[number, number, number, number] | null> {

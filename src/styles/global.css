@@ -10,6 +10,7 @@
 @import './style-panel.css';
 @import './data.css';
 @import './config-viewer.css';
+@import './outputs-control.css';
 @import './operation-builder.css';
 @import './basemap.css';
 @import './scale-bar.css';

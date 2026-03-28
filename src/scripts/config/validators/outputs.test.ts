@@ -148,6 +148,51 @@ describe('validateOutput', () => {
 		}, 0);
 		expect(errors).toContainEqual(expect.stringContaining('layers: must be a non-empty array'));
 	});
+
+	// Multi-source (array) tests
+	it('accepts array source with pmtiles format', () => {
+		const errors = validateOutput({
+			source: ['parks', 'trails'], format: 'pmtiles',
+		}, 0);
+		expect(errors).toEqual([]);
+	});
+
+	it('rejects array source with non-pmtiles format', () => {
+		const errors = validateOutput({
+			source: ['parks', 'trails'], format: 'geojson',
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('array sources are only valid for pmtiles'));
+	});
+
+	it('rejects empty array source', () => {
+		const errors = validateOutput({
+			source: [], format: 'pmtiles',
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('array must not be empty'));
+	});
+
+	it('rejects array source with non-string elements', () => {
+		const errors = validateOutput({
+			source: ['parks', 42], format: 'pmtiles',
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('all entries must be non-empty strings'));
+	});
+
+	it('rejects array source with extractZoom param', () => {
+		const errors = validateOutput({
+			source: ['parks', 'trails'], format: 'pmtiles',
+			params: { extractZoom: 10 },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('extractZoom: not valid with multi-source'));
+	});
+
+	it('rejects array source with layerName param', () => {
+		const errors = validateOutput({
+			source: ['parks', 'trails'], format: 'pmtiles',
+			params: { layerName: 'combined' },
+		}, 0);
+		expect(errors).toContainEqual(expect.stringContaining('layerName: not valid with multi-source'));
+	});
 });
 
 describe('validateOutputs', () => {
@@ -240,5 +285,25 @@ describe('validateOutputs', () => {
 		];
 		const errors = validateOutputs(outputs, validSources, pmtilesSources);
 		expect(errors.length).toBeGreaterThanOrEqual(2);
+	});
+
+	// Multi-source (array) tests
+	it('validates all sources in array against valid source IDs', () => {
+		const outputs = [{ source: ['parks', 'nonexistent'], format: 'pmtiles' }];
+		const errors = validateOutputs(outputs, validSources, pmtilesSources);
+		expect(errors).toContainEqual(expect.stringContaining("'nonexistent' does not reference a valid dataset"));
+	});
+
+	it('rejects PMTiles dataset ID in array source', () => {
+		const outputs = [{ source: ['parks', 'basemap'], format: 'pmtiles' }];
+		const allSources = new Set([...validSources, 'basemap']);
+		const errors = validateOutputs(outputs, allSources, pmtilesSources);
+		expect(errors).toContainEqual(expect.stringContaining("'basemap' is a PMTiles dataset"));
+	});
+
+	it('accepts valid multi-source pmtiles output', () => {
+		const outputs = [{ source: ['parks', 'roads'], format: 'pmtiles', filename: 'combined' }];
+		const errors = validateOutputs(outputs, validSources, pmtilesSources);
+		expect(errors).toEqual([]);
 	});
 });

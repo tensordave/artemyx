@@ -295,6 +295,14 @@ export interface ExportAsPMTilesRequest extends RequestBase {
 	params?: import('../config/types').PMTilesOutputParams;
 }
 
+export interface ExportAsMultiLayerPMTilesRequest extends RequestBase {
+	type: 'exportAsMultiLayerPMTiles';
+	datasetIds: string[];
+	params?: import('../config/types').PMTilesOutputParams;
+	/** Synthetic operation ID for progress reporting (typically the output filename) */
+	operationId: string;
+}
+
 export interface ExtractPMTilesRequest extends RequestBase {
 	type: 'extractPMTiles';
 	url: string;
@@ -302,6 +310,7 @@ export interface ExtractPMTilesRequest extends RequestBase {
 	bbox: [number, number, number, number];
 	layers?: string[];
 	outputParams?: import('../config/types').PMTilesOutputParams;
+	sourceId?: string;
 }
 
 // ── CRS prompt response (main -> worker, no requestId) ──────────────────────
@@ -360,6 +369,7 @@ export type WorkerRequest =
 	| ExportAsCSVRequest
 	| ExportAsParquetRequest
 	| ExportAsPMTilesRequest
+	| ExportAsMultiLayerPMTilesRequest
 	| ExtractPMTilesRequest;
 
 // ── Response types (worker -> main, correlated by requestId) ────────────────

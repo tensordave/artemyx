@@ -1,7 +1,17 @@
 import type { OutputConfig, OutputFormat } from './types';
 import type { OutputResult, OutputProgressCallback } from './output-types';
 import type { DatasetConfig } from './types';
-import { exportAsGeoJSON, exportAsCSV, exportAsParquet, exportAsPMTiles, extractPMTiles, datasetExists } from '../db';
+import { exportAsGeoJSON, exportAsCSV, exportAsParquet, exportAsPMTiles, exportAsMultiLayerPMTiles, extractPMTiles, datasetExists } from '../db';
+
+/** Normalize source to a flat array of IDs. */
+function getSourceIds(source: string | string[]): string[] {
+	return Array.isArray(source) ? source : [source];
+}
+
+/** Resolve a display-friendly source string (for filenames and progress keys). */
+function resolveSourceKey(output: OutputConfig): string {
+	return Array.isArray(output.source) ? (output.filename || output.source[0]) : output.source;
+}
 
 const MIME_TYPES: Record<OutputFormat, string> = {
 	geojson: 'application/geo+json',
@@ -23,9 +33,9 @@ export async function checkSourcesExist(
 	const extractionSources = new Set(
 		outputs
 			.filter(o => o.format === 'pmtiles' && o.params?.extractZoom !== undefined)
-			.map(o => o.source)
+			.flatMap(o => getSourceIds(o.source))
 	);
-	const uniqueSources = [...new Set(outputs.map(o => o.source))]
+	const uniqueSources = [...new Set(outputs.flatMap(o => getSourceIds(o.source)))]
 		.filter(id => !extractionSources.has(id));
 	const checks = await Promise.all(
 		uniqueSources.map(async (id) => ({ id, exists: await datasetExists(id) }))
@@ -52,11 +62,12 @@ export async function executeOutputs(
 
 	for (let i = 0; i < outputs.length; i++) {
 		const output = outputs[i];
-		const filename = `${output.filename || output.source}.${output.format}`;
+		const sourceKey = resolveSourceKey(output);
+		const filename = `${output.filename || sourceKey}.${output.format}`;
 
 		// Notify: generating
 		const generating: OutputResult = {
-			source: output.source,
+			source: sourceKey,
 			filename,
 			format: output.format,
 			blobUrl: null,
@@ -72,16 +83,22 @@ export async function executeOutputs(
 
 			switch (output.format) {
 				case 'geojson':
-					buffer = await exportAsGeoJSON(output.source);
+					buffer = await exportAsGeoJSON(output.source as string);
 					break;
 				case 'csv':
-					buffer = await exportAsCSV(output.source);
+					buffer = await exportAsCSV(output.source as string);
 					break;
 				case 'parquet':
-					buffer = await exportAsParquet(output.source);
+					buffer = await exportAsParquet(output.source as string);
 					break;
 				case 'pmtiles':
-					if (output.params?.extractZoom !== undefined) {
+					if (Array.isArray(output.source)) {
+						buffer = await exportAsMultiLayerPMTiles(
+							output.source,
+							output.params,
+							sourceKey
+						);
+					} else if (output.params?.extractZoom !== undefined) {
 						const sourceDataset = datasets?.find(d => d.id === output.source);
 						if (!sourceDataset?.url) {
 							throw new Error(`Cannot resolve URL for PMTiles source '${output.source}'`);
@@ -91,7 +108,8 @@ export async function executeOutputs(
 							output.params.extractZoom,
 							output.params.bbox!,
 							output.params.layers,
-							output.params
+							output.params,
+							output.source
 						);
 					} else {
 						buffer = await exportAsPMTiles(output.source, output.params);
@@ -107,7 +125,7 @@ export async function executeOutputs(
 			const blobUrl = URL.createObjectURL(blob);
 
 			const complete: OutputResult = {
-				source: output.source,
+				source: sourceKey,
 				filename,
 				format: output.format,
 				blobUrl,
@@ -120,7 +138,7 @@ export async function executeOutputs(
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error);
 			const errResult: OutputResult = {
-				source: output.source,
+				source: sourceKey,
 				filename,
 				format: output.format,
 				blobUrl: null,

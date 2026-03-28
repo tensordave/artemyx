@@ -5,16 +5,6 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.7.3 - PMTiles Generation
-
-Goal: generate `.pmtiles` vector tiles from any DuckDB dataset(s) or operation result(s). Reuses the tiling pipeline from v0.7.2 -- this version wires DuckDB feature data as input. Can add multiple layers to one `.pmtiles` file output. 
-
-- **Update Worker Timeout for Outputs panel** - Currently set to 120s, longer processing will time out the panel and make it unusable. Fix should check if operations are still in progress.
-- **DuckDB-to-tiles path** - `getFeaturesAsGeoJSON()` feeds features from any dataset into the v0.7.2 tiling pipeline (`geojson-vt` -> `vt-pbf` -> pmtiles writer); no new dependencies beyond what v0.7.2 introduced
-- **Source validation** - Source must be a non-PMTiles dataset (has actual feature data in DuckDB); rejects PMTiles sources (use extraction path instead)
-- **Preview on map** - After generation, optionally register the generated PMTiles as a viewable vector source via blob URL and the protocol handler for verifying output before downloading
-- **Progress** - Per-zoom-level progress updates via ProgressControl; total feature count logged at start
-
 ### v0.7.4 - OPFS PMTiles Cache
 
 Goal: persist generated and extracted PMTiles in OPFS so they survive page refresh without regeneration, extending the existing OPFS persistence model to tile archives.
@@ -191,9 +181,13 @@ Items worth building eventually but not yet assigned to a version:
   - `loadedDatasets.add()` still called so operations can reference skipped datasets
   - Progress message: "Skipped rendering (N features, M already rendered). Data available for operations."
 - **Native Apple Authoring (Swift)** - native macOS/iOS authoring app for the full spatial operations pipeline on Apple devices, where Safari's memory constraints make browser-based authoring unviable.
+- **PMTiles Preview on map** - After generation, optionally register the generated PMTiles as a viewable vector source via blob URL and the protocol handler for verifying output before downloading
 
 
 ## Completed
+
+### v0.7.3 - PMTiles Generation
+- DuckDB-to-tiles generation pipeline (`geojson-vt` + `vt-pbf` + PMTiles writer) with single-source and multi-source output (`source: string | string[]`), per-zoom progress tracking in a dedicated Outputs panel (resizable, movable, side-by-side with Config Editor), source validation routing (DuckDB sources to generation, PMTiles sources to extraction), worker heartbeat timeout fix, and config editor shortcut button with state-driven colors
 
 ### v0.7.2 - PMTiles Extraction
 - PMTiles extraction pipeline (remote tile fetching via HTTP range requests, MVT decoding, cross-tile feature deduplication); PMTiles output format with configurable zoom range, bbox subsetting, and per-layer filtering; shared tiling infrastructure (`geojson-vt` + `vt-pbf` + PMTiles writer) reusable for v0.7.3 DuckDB-to-tiles path; output progress tracker with per-stage status updates

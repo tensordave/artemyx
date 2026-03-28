@@ -3,7 +3,7 @@ import { Protocol as PMTilesProtocol } from 'pmtiles';
 import {
 	LayerToggleControl, ProgressControl, DataControl, UploadControl,
 	StorageControl, BasemapControl, GeocodingControl, ScaleBarControl,
-	ConfigControl, LegendControl, OperationBuilderControl,
+	ConfigControl, OutputsControl, LegendControl, OperationBuilderControl,
 	attachFeatureClickHandlers, attachFeatureHoverHandlers,
 } from './controls';
 import { getBasemap, getDefaultBasemap } from './basemaps';
@@ -183,6 +183,7 @@ const uploadControl = new UploadControl({
 const configControl = new ConfigControl({
 	getBasemapId: () => basemapControl.getCurrentBasemapId(),
 	onRun: async (yamlText?: string) => {
+		outputsControl.clearResults();
 		await teardownAll({ map, progressControl, layerToggleControl, loadedDatasets, preserveFileUploads: true });
 
 		let configToRun = mapConfig;
@@ -237,17 +238,67 @@ const operationBuilderControl = new OperationBuilderControl({
 
 layerToggleControl.setOperationBuilderControl(operationBuilderControl);
 
+const outputsControl = new OutputsControl({
+	getYaml: () => configControl.getYaml(),
+	getBasemapId: () => basemapControl.getCurrentBasemapId(),
+	openConfigEditor: () => configControl.togglePanel(),
+});
+
 // Right-hand controls: only one panel open at a time
-dataControl.setOnPanelOpen(() => { uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
-uploadControl.setOnPanelOpen(() => { dataControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
-operationBuilderControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); configControl.closePanel(); storageControl.closePanel(); });
-configControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); storageControl.closePanel(); });
-storageControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); });
+dataControl.setOnPanelOpen(() => { uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); storageControl.closePanel(); });
+uploadControl.setOnPanelOpen(() => { dataControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); storageControl.closePanel(); });
+operationBuilderControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); storageControl.closePanel(); });
+storageControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); });
+
+// ── Side-by-side panel coordinator ──────────────────────────────
+// When both Config Editor (680px) and Outputs (380px) are open,
+// auto-position them side by side if neither has been user-dragged.
+const CONFIG_WIDTH = 680;
+const OUTPUTS_WIDTH = 380;
+const PANEL_GAP = 24;
+const SIDE_BY_SIDE_MIN_VP = CONFIG_WIDTH + OUTPUTS_WIDTH + PANEL_GAP + 40;
+
+let panelsHaveBeenArranged = false;
+
+function arrangePanels(): void {
+	if (window.innerWidth < 768) return;
+
+	const bothOpen = configControl.getIsOpen() && outputsControl.getIsOpen();
+	const configDragged = configControl.getHasBeenDragged();
+	const outputsDragged = outputsControl.getHasBeenDragged();
+
+	if (bothOpen && window.innerWidth >= SIDE_BY_SIDE_MIN_VP) {
+		// Side by side: Config | gap | Outputs, aligned tops
+		const totalW = CONFIG_WIDTH + PANEL_GAP + OUTPUTS_WIDTH;
+		const startX = (window.innerWidth - totalW) / 2;
+		const topY = Math.max(20, window.innerHeight * 0.2);
+
+		if (!configDragged) configControl.setPosition(startX, topY);
+		if (!outputsDragged) outputsControl.setPosition(startX + CONFIG_WIDTH + PANEL_GAP, topY);
+		panelsHaveBeenArranged = true;
+	} else if (!panelsHaveBeenArranged) {
+		// Only re-center if panels haven't been arranged side-by-side yet
+		if (configControl.getIsOpen() && !configDragged) configControl.resetPosition();
+		if (outputsControl.getIsOpen() && !outputsDragged) outputsControl.resetPosition();
+	}
+}
+
+configControl.setOnPanelOpen(() => {
+	dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); storageControl.closePanel();
+	arrangePanels();
+});
+configControl.setOnPanelClose(() => arrangePanels());
+outputsControl.setOnPanelOpen(() => {
+	dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); storageControl.closePanel();
+	arrangePanels();
+});
+outputsControl.setOnPanelClose(() => arrangePanels());
 
 map.addControl(dataControl, 'top-right');
 map.addControl(uploadControl, 'top-right');
 map.addControl(operationBuilderControl, 'top-right');
 map.addControl(configControl, 'top-right');
+map.addControl(outputsControl, 'top-right');
 map.addControl(storageControl, 'top-right');
 map.addControl(layerToggleControl, 'top-left');
 map.addControl(basemapControl, 'top-left');

@@ -1,6 +1,6 @@
 # Changelog
 
-- [v0.7](changelogs/v0.7.md) - PMTiles loading, outputs config, CLI pipeline
+- [v0.7](changelogs/v0.7.md) - PMTiles loading, outputs config, CLI pipeline, worker timeout
 - [v0.6](changelogs/v0.6.md) - Operation builder, config editor, OPFS export/import, Safari gate
 - [v0.5](changelogs/v0.5.md) - Drill-down style panel, labels, zoom controls, legend
 - [v0.4](changelogs/v0.4.md) - Multi-format loaders, CRS reprojection, examples page, spatial accuracy

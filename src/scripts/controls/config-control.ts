@@ -1,32 +1,9 @@
 import type { Map, IControl } from 'maplibre-gl';
-import { codeBlockIcon, playIcon, pencilIcon, eraserIcon, trashIcon, fileArrowUpIcon, magicWandIcon, exportIcon, fileCodeIcon, downloadSimpleIcon, boxArrowDownIcon, circleNotchIcon } from '../icons';
+import { codeBlockIcon, playIcon, pencilIcon, eraserIcon, trashIcon, fileArrowUpIcon, magicWandIcon, exportIcon } from '../icons';
 import { generateConfigYaml } from '../config/generator';
 import { exportConfigYaml } from '../config/export-config';
-import { exportViewerZip } from '../config/export-viewer';
 import { highlightSync, highlightAsync } from '../utils/shiki';
-import type { OutputResult } from '../config/output-types';
-import { revokeOutputBlobs } from '../config/output-types';
-import { executeOutputs, checkSourcesExist } from '../config/output-executor';
 import { parseConfig } from '../config/parser';
-import { addProgressListener, removeProgressListener } from '../db';
-import type { ProgressListener } from '../db';
-import { zipSync } from 'fflate';
-
-function formatFileSize(bytes: number): string {
-	if (bytes === 0) return '0 B';
-	const units = ['B', 'KB', 'MB', 'GB'];
-	const i = Math.floor(Math.log(bytes) / Math.log(1024));
-	return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
-}
-
-function downloadBlob(url: string, filename: string): void {
-	const a = document.createElement('a');
-	a.href = url;
-	a.download = filename;
-	document.body.appendChild(a);
-	a.click();
-	document.body.removeChild(a);
-}
 
 export interface ConfigControlOptions {
 	onRun?: (yamlText?: string) => Promise<void>;
@@ -50,21 +27,14 @@ export class ConfigControl implements IControl {
 	private panel: HTMLDivElement | null = null;
 	private isOpen = false;
 	private onPanelOpen?: () => void;
+	private onPanelClose?: () => void;
+	private hasBeenDragged = false;
 	private options: ConfigControlOptions;
 
 	private editBtn: HTMLButtonElement | null = null;
 	private importBtn: HTMLButtonElement | null = null;
 	private generateBtn: HTMLButtonElement | null = null;
 	private exportBtn: HTMLButtonElement | null = null;
-	private exportDropdown: HTMLDivElement | null = null;
-	private exportDropdownCloseHandler: ((e: MouseEvent) => void) | null = null;
-	private outputsBtn: HTMLButtonElement | null = null;
-	private outputsDropdown: HTMLDivElement | null = null;
-	private outputsDropdownCloseHandler: ((e: MouseEvent) => void) | null = null;
-	private outputResults: OutputResult[] = [];
-	private isOutputsExecuting = false;
-	private outputProgressListener: ProgressListener | null = null;
-	private pmtilesSourceIds: Set<string> = new Set();
 	private runBtn: HTMLButtonElement | null = null;
 	private clearBtn: HTMLButtonElement | null = null;
 	private bodyEl: HTMLDivElement | null = null;
@@ -105,6 +75,13 @@ export class ConfigControl implements IControl {
 	}
 
 	/**
+	 * Return the current raw YAML text.
+	 */
+	getYaml(): string {
+		return this.rawYaml;
+	}
+
+	/**
 	 * Update the displayed config with new YAML text.
 	 * Used when restoring a saved config from OPFS on page load.
 	 */
@@ -119,12 +96,44 @@ export class ConfigControl implements IControl {
 				}
 			});
 		}
-
-		this.updateOutputsButtonState();
 	}
 
 	closePanel(): void {
 		this.close();
+	}
+
+	togglePanel(): void {
+		this.toggle();
+	}
+
+	setOnPanelClose(cb: () => void): void {
+		this.onPanelClose = cb;
+	}
+
+	getIsOpen(): boolean {
+		return this.isOpen;
+	}
+
+	getHasBeenDragged(): boolean {
+		return this.hasBeenDragged;
+	}
+
+	setPosition(left: number, top: number): void {
+		if (!this.panel) return;
+		this.ensurePositioned();
+		this.panel.style.left = `${left}px`;
+		this.panel.style.top = `${top}px`;
+	}
+
+	resetPosition(): void {
+		if (!this.panel) return;
+		this.panel.style.removeProperty('left');
+		this.panel.style.removeProperty('top');
+		this.panel.style.removeProperty('width');
+		this.panel.style.removeProperty('height');
+		this.panel.style.removeProperty('max-height');
+		this.panel.classList.remove('config-viewer--positioned');
+		this.hasBeenPositioned = false;
 	}
 
 	private handleEsc = (e: KeyboardEvent) => {
@@ -159,14 +168,6 @@ export class ConfigControl implements IControl {
 		if (this.highlightRafId) cancelAnimationFrame(this.highlightRafId);
 		if (this.boundPointerMove) document.removeEventListener('pointermove', this.boundPointerMove);
 		if (this.boundPointerUp) document.removeEventListener('pointerup', this.boundPointerUp);
-		this.closeExportDropdown();
-		this.closeOutputsDropdown();
-		if (this.outputProgressListener) {
-			removeProgressListener(this.outputProgressListener);
-			this.outputProgressListener = null;
-		}
-		revokeOutputBlobs(this.outputResults);
-		this.outputResults = [];
 		this.panel?.remove();
 		this.container?.remove();
 		this.map = null;
@@ -176,7 +177,6 @@ export class ConfigControl implements IControl {
 		this.importBtn = null;
 		this.generateBtn = null;
 		this.exportBtn = null;
-		this.outputsBtn = null;
 		this.runBtn = null;
 		this.clearBtn = null;
 		this.bodyEl = null;
@@ -250,26 +250,17 @@ export class ConfigControl implements IControl {
 		divider1.className = 'config-viewer-divider';
 		actions.appendChild(divider1);
 
-		// Download group (export)
+		// Download group (export config)
 		const downloadGroup = document.createElement('div');
 		downloadGroup.className = 'config-viewer-btn-group';
 
 		this.exportBtn = document.createElement('button');
 		this.exportBtn.type = 'button';
 		this.exportBtn.className = 'config-viewer-action-btn';
-		this.exportBtn.title = 'Export';
+		this.exportBtn.title = 'Export config';
 		this.exportBtn.innerHTML = exportIcon;
-		this.exportBtn.addEventListener('click', () => this.toggleExportDropdown());
+		this.exportBtn.addEventListener('click', () => this.handleExportConfig());
 		downloadGroup.appendChild(this.exportBtn);
-
-		this.outputsBtn = document.createElement('button');
-		this.outputsBtn.type = 'button';
-		this.outputsBtn.className = 'config-viewer-action-btn';
-		this.outputsBtn.title = 'Run outputs';
-		this.outputsBtn.innerHTML = boxArrowDownIcon;
-		this.outputsBtn.disabled = true;
-		this.outputsBtn.addEventListener('click', () => this.handleOutputsClick());
-		downloadGroup.appendChild(this.outputsBtn);
 
 		actions.appendChild(downloadGroup);
 
@@ -348,7 +339,6 @@ export class ConfigControl implements IControl {
 		if (this.importBtn) this.importBtn.disabled = disabled;
 		if (this.generateBtn) this.generateBtn.disabled = disabled;
 		if (this.exportBtn) this.exportBtn.disabled = disabled;
-		if (this.outputsBtn) this.outputsBtn.disabled = disabled;
 		if (this.runBtn) this.runBtn.disabled = disabled;
 		if (this.clearBtn) this.clearBtn.disabled = disabled;
 	}
@@ -374,409 +364,11 @@ export class ConfigControl implements IControl {
 		}
 	}
 
-	private toggleExportDropdown(): void {
+	private handleExportConfig(): void {
 		if (this.isExecuting) return;
-		if (this.exportDropdown) {
-			this.closeExportDropdown();
-			return;
-		}
-
-		const dropdown = document.createElement('div');
-		dropdown.className = 'context-menu';
-
-		// Export Config item
-		const configItem = document.createElement('div');
-		configItem.className = 'context-menu-item';
-		const configIconEl = document.createElement('span');
-		configIconEl.className = 'context-menu-icon';
-		configIconEl.innerHTML = fileCodeIcon;
-		configItem.appendChild(configIconEl);
-		configItem.appendChild(document.createTextNode('Export Config'));
-		configItem.addEventListener('click', () => {
-			this.closeExportDropdown();
-			const filenameEl = this.panel?.querySelector('.config-viewer-filename');
-			const name = filenameEl?.textContent?.replace(/\.yaml$/, '') || 'config';
-			exportConfigYaml(this.rawYaml, name);
-		});
-		dropdown.appendChild(configItem);
-
-		// Export Viewer (.zip) item
-		const viewerItem = document.createElement('div');
-		viewerItem.className = 'context-menu-item';
-		const viewerIconEl = document.createElement('span');
-		viewerIconEl.className = 'context-menu-icon';
-		viewerIconEl.innerHTML = downloadSimpleIcon;
-		viewerItem.appendChild(viewerIconEl);
-		viewerItem.appendChild(document.createTextNode('Export Viewer (.zip)'));
-		viewerItem.addEventListener('click', () => {
-			this.closeExportDropdown();
-			this.handleExportViewer();
-		});
-		dropdown.appendChild(viewerItem);
-
-		// Position below the export button
-		document.body.appendChild(dropdown);
-		this.exportDropdown = dropdown;
-
-		requestAnimationFrame(() => {
-			if (!this.exportBtn || !this.exportDropdown) return;
-			const btnRect = this.exportBtn.getBoundingClientRect();
-			const menuRect = this.exportDropdown.getBoundingClientRect();
-
-			let left = btnRect.left;
-			let top = btnRect.bottom + 4;
-
-			// Keep within viewport
-			if (left + menuRect.width > window.innerWidth) {
-				left = btnRect.right - menuRect.width;
-			}
-			if (top + menuRect.height > window.innerHeight) {
-				top = btnRect.top - menuRect.height - 4;
-			}
-
-			this.exportDropdown.style.left = `${left}px`;
-			this.exportDropdown.style.top = `${top}px`;
-		});
-
-		// Click-outside to close (delayed to avoid immediate closure)
-		this.exportDropdownCloseHandler = (e: MouseEvent) => {
-			if (!this.exportDropdown?.contains(e.target as Node)) {
-				this.closeExportDropdown();
-			}
-		};
-		setTimeout(() => {
-			if (this.exportDropdownCloseHandler) {
-				document.addEventListener('click', this.exportDropdownCloseHandler);
-			}
-		}, 10);
-	}
-
-	private closeExportDropdown(): void {
-		if (this.exportDropdown) {
-			this.exportDropdown.remove();
-			this.exportDropdown = null;
-		}
-		if (this.exportDropdownCloseHandler) {
-			document.removeEventListener('click', this.exportDropdownCloseHandler);
-			this.exportDropdownCloseHandler = null;
-		}
-	}
-
-	// ── Outputs dropdown ─────────────────────────────────────────────
-
-	private updateOutputsButtonState(): void {
-		if (!this.outputsBtn) return;
-		try {
-			const config = parseConfig(this.rawYaml);
-			const hasOutputs = config.outputs && config.outputs.length > 0;
-			this.outputsBtn.disabled = !hasOutputs || this.isExecuting;
-		} catch {
-			this.outputsBtn.disabled = true;
-		}
-	}
-
-	private async handleOutputsClick(): Promise<void> {
-		if (this.isExecuting || this.isOutputsExecuting) return;
-
-		// If we already have completed results, toggle the dropdown
-		if (this.outputResults.length > 0 && this.outputResults.every(r => !r.pending)) {
-			if (this.outputsDropdown) {
-				this.closeOutputsDropdown();
-			} else {
-				this.showOutputsDropdown();
-			}
-			return;
-		}
-
-		// Parse config
-		let config;
-		try {
-			config = parseConfig(this.rawYaml);
-		} catch {
-			return;
-		}
-		if (!config.outputs || config.outputs.length === 0) return;
-
-		// Pre-check: do all sources exist in DuckDB?
-		const { allExist, missing } = await checkSourcesExist(config.outputs);
-		if (!allExist) {
-			this.showOutputsNotice(missing);
-			return;
-		}
-
-		// Build pending results and show dropdown immediately
-		this.isOutputsExecuting = true;
-		if (this.outputsBtn) {
-			this.outputsBtn.classList.add('config-viewer-action-btn--loading');
-		}
-
-		revokeOutputBlobs(this.outputResults);
-		this.pmtilesSourceIds = new Set(
-			config.outputs.filter(o => o.format === 'pmtiles').map(o => o.source)
-		);
-		this.outputResults = config.outputs.map(o => ({
-			source: o.source,
-			filename: `${o.filename || o.source}.${o.format}`,
-			format: o.format,
-			blobUrl: null,
-			size: 0,
-			pending: true,
-			status: 'pending' as const,
-		}));
-		this.showOutputsDropdown();
-
-		// Register worker progress listener for granular PMTiles updates
-		this.outputProgressListener = (operation, _status, message, progress) => {
-			if (!this.pmtilesSourceIds.has(operation)) return;
-			const idx = this.outputResults.findIndex(
-				r => r.source === operation && r.status === 'generating'
-			);
-			if (idx === -1) return;
-			this.outputResults[idx] = {
-				...this.outputResults[idx],
-				statusMessage: message,
-				progress,
-			};
-			this.updateOutputRow(idx);
-		};
-		addProgressListener(this.outputProgressListener);
-
-		try {
-			const finalResults = await executeOutputs(config.outputs, (i, result) => {
-				this.outputResults[i] = result;
-				this.updateOutputRow(i);
-			}, config.datasets);
-			this.outputResults = finalResults;
-			// Append "Download All" if multiple successes
-			this.appendDownloadAll();
-		} catch (e) {
-			console.error('Output execution failed:', e);
-		} finally {
-			this.isOutputsExecuting = false;
-			if (this.outputProgressListener) {
-				removeProgressListener(this.outputProgressListener);
-				this.outputProgressListener = null;
-			}
-			if (this.outputsBtn) {
-				this.outputsBtn.classList.remove('config-viewer-action-btn--loading');
-			}
-			this.updateOutputsButtonState();
-		}
-	}
-
-	private renderOutputRow(result: OutputResult): HTMLDivElement {
-		const row = document.createElement('div');
-		row.className = 'outputs-dropdown-row';
-
-		// Status modifier class
-		if (result.status === 'pending') row.classList.add('outputs-dropdown-row--pending');
-		else if (result.status === 'generating') row.classList.add('outputs-dropdown-row--generating');
-
-		const name = document.createElement('span');
-		name.className = 'outputs-dropdown-filename';
-		name.textContent = result.filename;
-		row.appendChild(name);
-
-		const badge = document.createElement('span');
-		badge.className = `outputs-dropdown-badge outputs-dropdown-badge--${result.format}`;
-		badge.textContent = result.format.toUpperCase();
-		row.appendChild(badge);
-
-		if (result.status === 'pending' || result.status === 'generating') {
-			const status = document.createElement('span');
-			status.className = 'outputs-dropdown-status outputs-dropdown-status--spinning';
-			status.innerHTML = circleNotchIcon;
-			row.appendChild(status);
-
-			if (result.status === 'generating' && result.statusMessage) {
-				const msgEl = document.createElement('span');
-				msgEl.className = 'outputs-dropdown-status-text';
-				msgEl.textContent = result.statusMessage;
-				row.appendChild(msgEl);
-			}
-
-			// Progress bar for PMTiles
-			if (result.progress !== undefined && result.progress > 0) {
-				const bar = document.createElement('div');
-				bar.className = 'outputs-dropdown-progress';
-				bar.style.width = `${Math.round(result.progress * 100)}%`;
-				row.appendChild(bar);
-			}
-		} else if (result.status === 'error' || result.error) {
-			const errorEl = document.createElement('span');
-			errorEl.className = 'outputs-dropdown-error';
-			errorEl.textContent = result.error || 'Unknown error';
-			row.appendChild(errorEl);
-		} else {
-			// complete
-			const sizeEl = document.createElement('span');
-			sizeEl.className = 'outputs-dropdown-size';
-			sizeEl.textContent = formatFileSize(result.size);
-			row.appendChild(sizeEl);
-
-			const dlBtn = document.createElement('button');
-			dlBtn.className = 'outputs-dropdown-dl';
-			dlBtn.innerHTML = downloadSimpleIcon;
-			dlBtn.title = `Download ${result.filename}`;
-			dlBtn.disabled = !result.blobUrl;
-			dlBtn.addEventListener('click', (e) => {
-				e.stopPropagation();
-				if (result.blobUrl) downloadBlob(result.blobUrl, result.filename);
-			});
-			row.appendChild(dlBtn);
-		}
-
-		return row;
-	}
-
-	private updateOutputRow(index: number): void {
-		if (!this.outputsDropdown) return;
-		const existing = this.outputsDropdown.querySelector(`[data-output-index="${index}"]`);
-		if (!existing) return;
-		const newRow = this.renderOutputRow(this.outputResults[index]);
-		newRow.setAttribute('data-output-index', String(index));
-		existing.replaceWith(newRow);
-	}
-
-	private appendDownloadAll(): void {
-		if (!this.outputsDropdown) return;
-		const successResults = this.outputResults.filter(r => r.blobUrl);
-		if (successResults.length <= 1) return;
-
-		const divider = document.createElement('div');
-		divider.className = 'context-menu-divider';
-		this.outputsDropdown.appendChild(divider);
-
-		const downloadAll = document.createElement('div');
-		downloadAll.className = 'context-menu-item';
-		const dlIcon = document.createElement('span');
-		dlIcon.className = 'context-menu-icon';
-		dlIcon.innerHTML = downloadSimpleIcon;
-		downloadAll.appendChild(dlIcon);
-		downloadAll.appendChild(document.createTextNode('Download All (.zip)'));
-		downloadAll.addEventListener('click', () => {
-			this.closeOutputsDropdown();
-			this.downloadAllAsZip(successResults);
-		});
-		this.outputsDropdown.appendChild(downloadAll);
-	}
-
-	private showOutputsNotice(missing: string[]): void {
-		this.closeOutputsDropdown();
-		const dropdown = document.createElement('div');
-		dropdown.className = 'context-menu outputs-dropdown';
-
-		const notice = document.createElement('div');
-		notice.className = 'outputs-dropdown-notice';
-		notice.textContent = 'Run the config first to load data.';
-		dropdown.appendChild(notice);
-
-		for (const id of missing) {
-			const row = document.createElement('div');
-			row.className = 'outputs-dropdown-missing';
-			row.textContent = `Missing: ${id}`;
-			dropdown.appendChild(row);
-		}
-
-		document.body.appendChild(dropdown);
-		this.outputsDropdown = dropdown;
-		this.positionOutputsDropdown();
-
-		this.outputsDropdownCloseHandler = (e: MouseEvent) => {
-			if (!this.outputsDropdown?.contains(e.target as Node)) {
-				this.closeOutputsDropdown();
-			}
-		};
-		setTimeout(() => {
-			if (this.outputsDropdownCloseHandler) {
-				document.addEventListener('click', this.outputsDropdownCloseHandler);
-			}
-		}, 10);
-	}
-
-	private showOutputsDropdown(): void {
-		if (this.outputsDropdown) {
-			this.closeOutputsDropdown();
-		}
-
-		const dropdown = document.createElement('div');
-		dropdown.className = 'context-menu outputs-dropdown';
-
-		for (let i = 0; i < this.outputResults.length; i++) {
-			const row = this.renderOutputRow(this.outputResults[i]);
-			row.setAttribute('data-output-index', String(i));
-			dropdown.appendChild(row);
-		}
-
-		document.body.appendChild(dropdown);
-		this.outputsDropdown = dropdown;
-		this.positionOutputsDropdown();
-
-		this.outputsDropdownCloseHandler = (e: MouseEvent) => {
-			if (!this.outputsDropdown?.contains(e.target as Node)) {
-				this.closeOutputsDropdown();
-			}
-		};
-		setTimeout(() => {
-			if (this.outputsDropdownCloseHandler) {
-				document.addEventListener('click', this.outputsDropdownCloseHandler);
-			}
-		}, 10);
-	}
-
-	private positionOutputsDropdown(): void {
-		requestAnimationFrame(() => {
-			if (!this.outputsBtn || !this.outputsDropdown) return;
-			const btnRect = this.outputsBtn.getBoundingClientRect();
-			const menuRect = this.outputsDropdown.getBoundingClientRect();
-			let left = btnRect.left;
-			let top = btnRect.bottom + 4;
-			if (left + menuRect.width > window.innerWidth) {
-				left = btnRect.right - menuRect.width;
-			}
-			if (top + menuRect.height > window.innerHeight) {
-				top = btnRect.top - menuRect.height - 4;
-			}
-			this.outputsDropdown.style.left = `${left}px`;
-			this.outputsDropdown.style.top = `${top}px`;
-		});
-	}
-
-	private closeOutputsDropdown(): void {
-		if (this.outputsDropdown) {
-			this.outputsDropdown.remove();
-			this.outputsDropdown = null;
-		}
-		if (this.outputsDropdownCloseHandler) {
-			document.removeEventListener('click', this.outputsDropdownCloseHandler);
-			this.outputsDropdownCloseHandler = null;
-		}
-	}
-
-	private async downloadAllAsZip(results: OutputResult[]): Promise<void> {
-		const files: Record<string, Uint8Array> = {};
-		for (const r of results) {
-			if (!r.blobUrl) continue;
-			const resp = await fetch(r.blobUrl);
-			const buf = await resp.arrayBuffer();
-			files[r.filename] = new Uint8Array(buf);
-		}
-		const zipData = zipSync(files);
-		const blob = new Blob([zipData.buffer as ArrayBuffer], { type: 'application/zip' });
-		const url = URL.createObjectURL(blob);
-		downloadBlob(url, 'outputs.zip');
-		URL.revokeObjectURL(url);
-	}
-
-	private async handleExportViewer(): Promise<void> {
-		if (this.isExecuting || !this.map) return;
-		this.setButtonsDisabled(true);
-		try {
-			const basemapId = this.options.getBasemapId?.() ?? 'carto-dark';
-			await exportViewerZip(this.map, basemapId);
-		} finally {
-			this.setButtonsDisabled(false);
-		}
+		const filenameEl = this.panel?.querySelector('.config-viewer-filename');
+		const name = filenameEl?.textContent?.replace(/\.yaml$/, '') || 'config';
+		exportConfigYaml(this.rawYaml, name);
 	}
 
 	private handleImport(): void {
@@ -962,18 +554,11 @@ export class ConfigControl implements IControl {
 				this.bodyEl.scrollTop = scrollPos;
 			}
 		});
-
-		this.updateOutputsButtonState();
 	}
 
 	private async handleRun(): Promise<void> {
 		if (this.isExecuting || !this.options.onRun) return;
 		this.resetClearConfirm();
-
-		// Clear previous output results on re-run
-		revokeOutputBlobs(this.outputResults);
-		this.outputResults = [];
-		this.closeOutputsDropdown();
 
 		this.isExecuting = true;
 		this.setButtonsDisabled(true);
@@ -982,7 +567,6 @@ export class ConfigControl implements IControl {
 		} finally {
 			this.isExecuting = false;
 			this.setButtonsDisabled(false);
-			this.updateOutputsButtonState();
 		}
 	}
 
@@ -1049,6 +633,7 @@ export class ConfigControl implements IControl {
 		this.ensurePositioned();
 
 		this.isDragging = true;
+		this.hasBeenDragged = true;
 		this.dragStartX = e.clientX;
 		this.dragStartY = e.clientY;
 		const rect = this.panel!.getBoundingClientRect();
@@ -1146,7 +731,6 @@ export class ConfigControl implements IControl {
 		this.isOpen = false;
 		this.panel.classList.remove('config-viewer--open');
 		this.resetClearConfirm();
-		this.closeOutputsDropdown();
 
 		// Capture textarea content if closing mid-edit
 		this.panel?.classList.remove('config-viewer--editing');
@@ -1176,5 +760,6 @@ export class ConfigControl implements IControl {
 		}
 
 		document.removeEventListener('keydown', this.handleEsc);
+		this.onPanelClose?.();
 	}
 }
