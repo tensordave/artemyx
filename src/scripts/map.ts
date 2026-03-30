@@ -4,6 +4,7 @@ import {
 	LayerToggleControl, ProgressControl, DataControl, UploadControl,
 	StorageControl, BasemapControl, GeocodingControl, ScaleBarControl,
 	ConfigControl, OutputsControl, LegendControl, OperationBuilderControl,
+	LabelToggleControl,
 	attachFeatureClickHandlers, attachFeatureHoverHandlers,
 } from './controls';
 import { getBasemap, getDefaultBasemap } from './basemaps';
@@ -18,6 +19,7 @@ import { getDisplayColor } from './layer-actions/color';
 import { BrowserLogger } from './logger';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getDatasets, getDatasetBounds, getFeaturesAsGeoJSON, setLayerOrders, saveViewport, getCachedViewport, setEventHandler, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig, updateDatasetColor, updateDatasetStyle } from './db';
 import { addOperationResultToMap } from './config/operations/render';
+import { initShortcuts } from './shortcuts';
 import { resolveSubLayerStyle } from './data-actions/load-pmtiles';
 import { DEFAULT_STYLE } from './db/constants';
 import { isSafari } from './utils/safari-detect';
@@ -114,6 +116,11 @@ const map = new maplibregl.Map({
 	zoom: mapSettings.zoom,
 	attributionControl: false
 });
+
+// Accessibility: give the focusable canvas a role and label for screen readers
+const canvas = map.getCanvas();
+canvas.setAttribute('role', 'application');
+canvas.setAttribute('aria-label', 'Interactive map');
 
 // Attribution in bottom-right, below scale bar (added after scale bar below)
 const attributionControl = new maplibregl.AttributionControl({
@@ -242,6 +249,7 @@ const outputsControl = new OutputsControl({
 	getYaml: () => configControl.getYaml(),
 	getBasemapId: () => basemapControl.getCurrentBasemapId(),
 	openConfigEditor: () => configControl.togglePanel(),
+	updateYaml: (yaml: string) => configControl.updateConfig(yaml),
 });
 
 // Right-hand controls: only one panel open at a time
@@ -309,6 +317,39 @@ layerToggleControl.setLegendControl(legendControl);
 map.addControl(new ScaleBarControl(), 'bottom-right');
 map.addControl(attributionControl, 'bottom-right');
 map.addControl(progressControl, 'bottom-left');
+const labelToggleControl = new LabelToggleControl();
+map.addControl(labelToggleControl, 'top-left');
+labelToggleControl.restoreLabels();
+
+// Keyboard shortcuts for panel toggles, WASD pan, R/F zoom
+initShortcuts({
+	map,
+	bindings: [
+		{ key: 'l', action: () => layerToggleControl.togglePanel() },
+		{ key: 'p', action: () => progressControl.togglePanel() },
+		{ key: 'i', action: () => dataControl.togglePanel() },
+		{ key: 'u', action: () => uploadControl.togglePanel() },
+		{ key: 'c', action: () => configControl.togglePanel() },
+		{ key: 't', action: () => storageControl.togglePanel() },
+		{ key: '/', action: () => geocodingControl.togglePanel() },
+		{ key: 'o', action: () => operationBuilderControl.togglePanel() },
+		{ key: 'x', action: () => outputsControl.togglePanel() },
+		{ key: 'b', action: () => basemapControl.togglePanel() },
+		{ key: 'e', action: () => legendControl.togglePanel() },
+		{ key: 'n', action: () => labelToggleControl.toggle() },
+	],
+	closers: [
+		() => layerToggleControl.closePanel(),
+		() => dataControl.closePanel(),
+		() => uploadControl.closePanel(),
+		() => configControl.closePanel(),
+		() => operationBuilderControl.closePanel(),
+		() => outputsControl.closePanel(),
+		() => storageControl.closePanel(),
+		() => basemapControl.closePanel(),
+		() => geocodingControl.closePanel(),
+	],
+});
 
 // Surface any config error now that the progress control is in the DOM
 if (configError) {
@@ -369,8 +410,8 @@ async function restoreNonConfigDatasets(config: MapConfig | null): Promise<void>
 
 					const layerIds = addDefaultVectorLayers(map, sourceId, parentId, color, style, dataset.source_layer, layerSuffix);
 					if (layerIds.length > 0) {
-						const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: dataset.name || dataset.id });
-						attachFeatureClickHandlers(map, layerIds, hoverPopup);
+						attachFeatureHoverHandlers(map, layerIds, { label: dataset.name || dataset.id });
+						attachFeatureClickHandlers(map, layerIds);
 					}
 
 					if (!dataset.visible) {
@@ -401,10 +442,10 @@ async function restoreNonConfigDatasets(config: MapConfig | null): Promise<void>
 			}
 
 			if (layerIds.length > 0) {
-				const hoverPopup = attachFeatureHoverHandlers(map, layerIds, {
+				attachFeatureHoverHandlers(map, layerIds, {
 					label: dataset.name || dataset.id
 				});
-				attachFeatureClickHandlers(map, layerIds, hoverPopup);
+				attachFeatureClickHandlers(map, layerIds);
 			}
 
 			progressControl.updateProgress(
@@ -582,11 +623,11 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 					: undefined;
 				const label = sourceNameMap.get(lc?.source ?? '') || lc?.source || layerId;
 
-				const hoverPopup = attachFeatureHoverHandlers(map, [layerId], {
+				attachFeatureHoverHandlers(map, [layerId], {
 					label,
 					fields: tooltipFields
 				});
-				attachFeatureClickHandlers(map, [layerId], hoverPopup);
+				attachFeatureClickHandlers(map, [layerId]);
 			}
 		}
 	}

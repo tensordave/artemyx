@@ -4,6 +4,7 @@ import { generateConfigYaml } from '../config/generator';
 import { exportConfigYaml } from '../config/export-config';
 import { highlightSync, highlightAsync } from '../utils/shiki';
 import { parseConfig } from '../config/parser';
+import { createFocusTrap, type FocusTrap } from '../utils/focus-trap';
 
 export interface ConfigControlOptions {
 	onRun?: (yamlText?: string) => Promise<void>;
@@ -42,6 +43,7 @@ export class ConfigControl implements IControl {
 	private isExecuting = false;
 	private clearConfirmTimer: ReturnType<typeof setTimeout> | null = null;
 	private clearConfirmPending = false;
+	private mainBtn: HTMLButtonElement | null = null;
 
 	private isEditing = false;
 	private originalHtml = '';
@@ -65,6 +67,8 @@ export class ConfigControl implements IControl {
 
 	private readonly MIN_WIDTH = 360;
 	private readonly MIN_HEIGHT = 250;
+	private focusTrap: FocusTrap | null = null;
+	private previousFocus: HTMLElement | null = null;
 
 	constructor(options?: ConfigControlOptions) {
 		this.options = options ?? {};
@@ -149,9 +153,12 @@ export class ConfigControl implements IControl {
 		const btn = document.createElement('button');
 		btn.type = 'button';
 		btn.className = 'control-btn';
-		btn.title = 'Config Editor';
+		btn.title = 'Config Editor (C)';
+		btn.setAttribute('aria-label', 'Config Editor');
+		btn.setAttribute('aria-expanded', 'false');
 		btn.innerHTML = codeBlockIcon;
 		btn.addEventListener('click', () => this.toggle());
+		this.mainBtn = btn;
 		this.container.appendChild(btn);
 
 		// Build panel and append to map container (not control group)
@@ -163,6 +170,8 @@ export class ConfigControl implements IControl {
 	}
 
 	onRemove(): void {
+		this.focusTrap?.deactivate();
+		this.focusTrap = null;
 		document.removeEventListener('keydown', this.handleEsc);
 		if (this.clearConfirmTimer) clearTimeout(this.clearConfirmTimer);
 		if (this.highlightRafId) cancelAnimationFrame(this.highlightRafId);
@@ -182,6 +191,7 @@ export class ConfigControl implements IControl {
 		this.bodyEl = null;
 		this.fileInput = null;
 		this.highlightEl = null;
+		this.mainBtn = null;
 	}
 
 	private buildPanel(): HTMLDivElement {
@@ -215,6 +225,7 @@ export class ConfigControl implements IControl {
 		this.editBtn.type = 'button';
 		this.editBtn.className = 'config-viewer-action-btn';
 		this.editBtn.title = 'Edit config';
+		this.editBtn.setAttribute('aria-label', 'Edit config');
 		this.editBtn.innerHTML = pencilIcon;
 		this.editBtn.addEventListener('click', () => this.toggleEdit());
 		authoringGroup.appendChild(this.editBtn);
@@ -223,6 +234,7 @@ export class ConfigControl implements IControl {
 		this.importBtn.type = 'button';
 		this.importBtn.className = 'config-viewer-action-btn';
 		this.importBtn.title = 'Import config file';
+		this.importBtn.setAttribute('aria-label', 'Import config file');
 		this.importBtn.innerHTML = fileArrowUpIcon;
 		this.importBtn.addEventListener('click', () => this.fileInput?.click());
 		authoringGroup.appendChild(this.importBtn);
@@ -239,6 +251,7 @@ export class ConfigControl implements IControl {
 		this.generateBtn.type = 'button';
 		this.generateBtn.className = 'config-viewer-action-btn';
 		this.generateBtn.title = 'Generate config from session';
+		this.generateBtn.setAttribute('aria-label', 'Generate config from session');
 		this.generateBtn.innerHTML = magicWandIcon;
 		this.generateBtn.addEventListener('click', () => this.handleGenerate());
 		authoringGroup.appendChild(this.generateBtn);
@@ -258,6 +271,7 @@ export class ConfigControl implements IControl {
 		this.exportBtn.type = 'button';
 		this.exportBtn.className = 'config-viewer-action-btn';
 		this.exportBtn.title = 'Export config';
+		this.exportBtn.setAttribute('aria-label', 'Export config');
 		this.exportBtn.innerHTML = exportIcon;
 		this.exportBtn.addEventListener('click', () => this.handleExportConfig());
 		downloadGroup.appendChild(this.exportBtn);
@@ -277,6 +291,7 @@ export class ConfigControl implements IControl {
 		this.runBtn.type = 'button';
 		this.runBtn.className = 'config-viewer-action-btn config-viewer-action-btn--run';
 		this.runBtn.title = 'Run config';
+		this.runBtn.setAttribute('aria-label', 'Run config');
 		this.runBtn.innerHTML = playIcon;
 		this.runBtn.addEventListener('click', () => this.handleRun());
 		executionGroup.appendChild(this.runBtn);
@@ -285,6 +300,7 @@ export class ConfigControl implements IControl {
 		this.clearBtn.type = 'button';
 		this.clearBtn.className = 'config-viewer-action-btn config-viewer-action-btn--clear';
 		this.clearBtn.title = 'Clear all data';
+		this.clearBtn.setAttribute('aria-label', 'Clear all data');
 		this.clearBtn.innerHTML = eraserIcon;
 		this.clearBtn.addEventListener('click', () => this.handleClear());
 		executionGroup.appendChild(this.clearBtn);
@@ -297,6 +313,8 @@ export class ConfigControl implements IControl {
 		closeBtn.type = 'button';
 		closeBtn.className = 'config-viewer-close';
 		closeBtn.textContent = '\u00d7';
+		closeBtn.title = 'Close (Esc)';
+		closeBtn.setAttribute('aria-label', 'Close config editor');
 		closeBtn.addEventListener('click', () => this.close());
 		header.appendChild(closeBtn);
 
@@ -420,6 +438,7 @@ export class ConfigControl implements IControl {
 		this.editBtn!.classList.add('config-viewer-action-btn--active');
 		this.editBtn!.innerHTML = pencilIcon.replace('fill="#3388ff"', 'fill="#22c55e"');
 		this.editBtn!.title = 'Exit edit mode';
+		this.editBtn!.setAttribute('aria-label', 'Exit edit mode');
 
 		// Disable Run while editing
 		if (this.runBtn) this.runBtn.disabled = true;
@@ -464,6 +483,7 @@ export class ConfigControl implements IControl {
 
 		textarea.focus();
 		textarea.setSelectionRange(0, 0);
+		this.focusTrap?.updateElements();
 
 		// Defer until layout settles: auto-grow textarea and restore body scroll
 		requestAnimationFrame(() => {
@@ -521,6 +541,7 @@ export class ConfigControl implements IControl {
 		this.editBtn!.classList.remove('config-viewer-action-btn--active');
 		this.editBtn!.innerHTML = pencilIcon;
 		this.editBtn!.title = 'Edit config';
+		this.editBtn!.setAttribute('aria-label', 'Edit config');
 
 		// Capture textarea content, scroll position, and clean up highlight state
 		const textarea = this.bodyEl.querySelector('textarea');
@@ -554,6 +575,7 @@ export class ConfigControl implements IControl {
 				this.bodyEl.scrollTop = scrollPos;
 			}
 		});
+		this.focusTrap?.updateElements();
 	}
 
 	private async handleRun(): Promise<void> {
@@ -579,6 +601,7 @@ export class ConfigControl implements IControl {
 			this.clearBtn!.classList.add('config-viewer-action-btn--confirm');
 			this.clearBtn!.innerHTML = trashIcon.replace('fill="#3388ff"', 'fill="#ef4444"');
 			this.clearBtn!.title = 'Click again to confirm';
+			this.clearBtn!.setAttribute('aria-label', 'Click again to confirm clear');
 
 			this.clearConfirmTimer = setTimeout(() => {
 				this.resetClearConfirm();
@@ -608,6 +631,7 @@ export class ConfigControl implements IControl {
 			this.clearBtn.classList.remove('config-viewer-action-btn--confirm');
 			this.clearBtn.innerHTML = eraserIcon;
 			this.clearBtn.title = 'Clear all data';
+			this.clearBtn.setAttribute('aria-label', 'Clear all data');
 		}
 	}
 
@@ -720,16 +744,22 @@ export class ConfigControl implements IControl {
 
 	private open(): void {
 		if (!this.panel) return;
+		this.previousFocus = document.activeElement as HTMLElement | null;
 		this.isOpen = true;
 		this.panel.classList.add('config-viewer--open');
+		this.mainBtn?.setAttribute('aria-expanded', 'true');
 		this.onPanelOpen?.();
 		document.addEventListener('keydown', this.handleEsc);
+		this.focusTrap = createFocusTrap(this.panel);
+		this.focusTrap.activate();
+		this.focusTrap.focusFirst();
 	}
 
 	private close(): void {
 		if (!this.panel) return;
 		this.isOpen = false;
 		this.panel.classList.remove('config-viewer--open');
+		this.mainBtn?.setAttribute('aria-expanded', 'false');
 		this.resetClearConfirm();
 
 		// Capture textarea content if closing mid-edit
@@ -748,6 +778,7 @@ export class ConfigControl implements IControl {
 			if (this.editBtn) {
 				this.editBtn.innerHTML = pencilIcon;
 				this.editBtn.title = 'Edit config';
+				this.editBtn.setAttribute('aria-label', 'Edit config');
 			}
 			if (this.runBtn) this.runBtn.disabled = false;
 
@@ -759,7 +790,11 @@ export class ConfigControl implements IControl {
 			});
 		}
 
+		this.focusTrap?.deactivate();
+		this.focusTrap = null;
 		document.removeEventListener('keydown', this.handleEsc);
 		this.onPanelClose?.();
+		if (this.previousFocus?.isConnected) this.previousFocus.focus();
+		this.previousFocus = null;
 	}
 }

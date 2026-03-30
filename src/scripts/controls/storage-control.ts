@@ -65,11 +65,13 @@ export class StorageControl implements maplibregl.IControl {
 	private multiTabDetected = false;
 	private broadcastChannel: BroadcastChannel | null = null;
 	private onDocPointerDown: (e: PointerEvent) => void;
+	private previousFocus: HTMLElement | null = null;
 
 	constructor(options?: StorageControlOptions) {
 		this.onPanelOpen = options?.onPanelOpen;
 		this.onDocPointerDown = (e: PointerEvent) => {
 			if (!this.container?.contains(e.target as Node)) {
+				this.previousFocus = null;
 				this.closePanel();
 			}
 		};
@@ -95,7 +97,9 @@ export class StorageControl implements maplibregl.IControl {
 		this.button.type = 'button';
 		this.button.className = 'control-btn';
 		this.button.innerHTML = databaseIcon;
-		this.button.title = 'Storage';
+		this.button.title = 'Storage (T)';
+		this.button.setAttribute('aria-label', 'Storage');
+		this.button.setAttribute('aria-expanded', 'false');
 		this.container.appendChild(this.button);
 
 		// Panel (hidden by default)
@@ -107,7 +111,9 @@ export class StorageControl implements maplibregl.IControl {
 		this.button.addEventListener('click', () => {
 			if (this.panel) {
 				const isOpen = this.panel.classList.toggle('control-panel--open');
+				this.button!.setAttribute('aria-expanded', String(isOpen));
 				if (isOpen) {
+					this.previousFocus = document.activeElement as HTMLElement | null;
 					this.onPanelOpen?.();
 					this.renderPanel();
 					document.addEventListener('pointerdown', this.onDocPointerDown);
@@ -136,12 +142,31 @@ export class StorageControl implements maplibregl.IControl {
 		this.onPanelOpen = cb;
 	}
 
+	togglePanel(): void {
+		if (this.panel) {
+			const isOpen = this.panel.classList.contains('control-panel--open');
+			if (isOpen) {
+				this.closePanel();
+			} else {
+				this.previousFocus = document.activeElement as HTMLElement | null;
+				this.panel.classList.add('control-panel--open');
+				this.button?.setAttribute('aria-expanded', 'true');
+				this.onPanelOpen?.();
+				this.renderPanel();
+				document.addEventListener('pointerdown', this.onDocPointerDown);
+			}
+		}
+	}
+
 	/**
 	 * Close the panel (called externally for right-hand mutual exclusivity).
 	 */
 	closePanel(): void {
 		this.panel?.classList.remove('control-panel--open');
+		this.button?.setAttribute('aria-expanded', 'false');
 		document.removeEventListener('pointerdown', this.onDocPointerDown);
+		if (this.previousFocus?.isConnected) this.previousFocus.focus();
+		this.previousFocus = null;
 	}
 
 	/**

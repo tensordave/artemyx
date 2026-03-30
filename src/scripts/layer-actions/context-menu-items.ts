@@ -20,6 +20,7 @@ function createMenuItem(
 	item.className = isDanger
 		? 'context-menu-item context-menu-item--danger'
 		: 'context-menu-item';
+	item.setAttribute('role', 'menuitem');
 
 	const iconSpan = document.createElement('span');
 	iconSpan.className = 'context-menu-icon';
@@ -41,6 +42,7 @@ function createMenuItem(
 export function createMenuDivider(): HTMLDivElement {
 	const divider = document.createElement('div');
 	divider.className = 'context-menu-divider';
+	divider.setAttribute('role', 'separator');
 	return divider;
 }
 

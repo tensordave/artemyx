@@ -102,8 +102,8 @@ export async function loadDataFromUrl(
 			loadedDatasets.add(result.datasetId);
 
 			if (layerIds.length > 0) {
-				const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: datasetName });
-				attachFeatureClickHandlers(map, layerIds, hoverPopup);
+				attachFeatureHoverHandlers(map, layerIds, { label: datasetName });
+				attachFeatureClickHandlers(map, layerIds);
 			}
 
 			layerToggleControl.refreshPanel();

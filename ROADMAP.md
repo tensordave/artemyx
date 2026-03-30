@@ -5,29 +5,9 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.7.4 - OPFS PMTiles Cache
+### v0.9.0 - deck.gl and Binary Arrow
 
-Goal: persist generated and extracted PMTiles in OPFS so they survive page refresh without regeneration, extending the existing OPFS persistence model to tile archives.
-
-- **OPFS tile storage** - Generated `.pmtiles` files written to OPFS alongside the DuckDB database; keyed by output source ID and config hash; restored on session reload without re-running the tiling/extraction pipeline
-- **Cache invalidation** - Invalidate when source dataset changes (feature count or hash mismatch); re-generation triggered automatically or on-demand via outputs button
-- **StorageControl updates** - Surface PMTiles cache size alongside DB size in the storage panel; include PMTiles files in OPFS export/import; clear PMTiles cache on "Clear Storage"
-- **MapLibre vector source wiring** - Cached PMTiles served via `pmtiles://` protocol from OPFS; auto-registered as vector sources on session restore; layers created from cached config
-
-### v0.7.5 - Accessibility, Shortcuts and Polish
-
-Goal: keyboard navigation and ARIA improvements for the core map controls. Polish release after feature work stabilizes.
-
-- **Keyboard shortcuts** - L (layer control), P (progress), Esc (close any panel), Delete (remove feature), WASD for panning, R/F for zoom in/out; shortcuts disabled when a text input or textarea is focused
-- **ARIA labels** - Role attributes on interactive elements, `aria-expanded` on panels, `aria-label` on icon-only buttons, screen reader announcements for state changes in `layer-control.ts`
-- **Focus management** - Trap focus within open panels (config editor, layer panel); return focus to trigger button on panel close
-- **Outputs Helper** - (tbd) an Outputs YAML helper, to help generate the right Outputs formatting, extents, and zoom levels (as needed by file types)
-- **Feature Popups Fix** - In some cases, particularly with overlapping layers, multiple attribute/information popups open when clicking on a feature on the map. Should just show the top-most feature's information in a single popup. 
-
-
-### v0.8.0 - deck.gl Core Integration
-
-Goal: establish the full deck.gl integration path using GeoJsonLayer as the initial renderer type, handling all geometry types (polygon, line, point) in parallel with the existing MapLibre pipeline.
+Goal: establish the full deck.gl integration path, handling all geometry types in parallel with the existing MapLibre pipeline, powered by Arrow binary data to eliminate GeoJSON round-trips.
 
 - **Arrow binary data path** - `getFeaturesAsArrow()` in `features.ts` returns the raw Arrow table from DuckDB, bypassing `ST_AsGeoJSON` string serialization; coordinate columns extracted as `Float64Array` for direct consumption by deck.gl binary input format; eliminates the GeoJSON round-trip for large datasets; deck.gl optional renderer is to use this instead of GeoJSON round trips
 - **`MapboxOverlay` manager** - Singleton `DeckGLManager` (`src/scripts/deckgl/manager.ts`) holds the `MapboxOverlay` instance added to the map on load; exposes `addLayer`, `removeLayer`, `updateLayer`; composites all deck.gl layers into a single WebGL context; deck.gl loaded via dynamic `import()` only when first deck.gl layer is requested to avoid bundling cost when unused
@@ -37,25 +17,61 @@ Goal: establish the full deck.gl integration path using GeoJsonLayer as the init
 - **Layer control renderer-awareness** - `visibility.ts`, `color.ts`, and `delete.ts` in `layer-actions/` consult the registry; call deck.gl manager when deck.gl-managed instead of MapLibre style API
 - **Popup/hover parity** - `attachDeckHoverHandlers` / `attachDeckClickHandlers` wired via deck.gl `onHover` / `onClick` callbacks on the layer spec; reuse existing popup DOM and CSS from `popup.ts`; matches current MapLibre popup behavior for feature properties and layer name display
 
-### v0.8.1 - Auto-promote and Feature Count Guard
-
-- **Auto-promote large datasets** - Datasets exceeding a configurable feature count threshold (default: 50k) are automatically assigned `renderer: deckgl` using a `GeoJsonLayer`; explicit `renderer` in config always wins; threshold configurable via `map.deckglThreshold` in YAML
-- **Retire cumulative feature count guard** - The render-skip guard from v0.6.x is removed; datasets previously skipped are auto-promoted to deck.gl instead of being excluded from rendering
-
-### v0.8.2 - ArcLayer
+### v0.9.1 - ArcLayer
 
 - **`ArcLayer`** - Flow and OD (origin-destination) visualization; requires source and target coordinate columns in feature properties; distinct from GeoJsonLayer line rendering - draws curved great-circle arcs between point pairs
 
-### v0.9.0 - Monorepo Split and Shared Core
+### v0.9.2 - Additional Render Types
+
+- **`ScatterplotLayer`** - deck.gl large point cloud rendering with radius scale and fill/stroke color accessors; suited for transit stops, parcel centroids, and other high-count point datasets
+- **`HeatmapLayer`** - deck.gl GPU-accelerated continuous density; distinct from MapLibre's `heatmap` type, operates entirely on the deck.gl pipeline
+- **`HexagonLayer`** - deck.gl aggregation hexbins; count or sum of features per cell; configurable radius and elevation scale
+- **`ColumnLayer`** - deck.gl 3D vertical bars driven by a numeric property; pairs with `fill-extrusion` use cases that need deck.gl's rendering scale
+
+### v0.9.3 - Auto-promote
+
+- **Auto-promote large datasets** - Datasets exceeding a configurable feature count threshold (default: 50k) are automatically assigned `renderer: deckgl` using a `GeoJsonLayer`; explicit `renderer` in config always wins; threshold configurable via `map.deckglThreshold` in YAML
+
+### v0.10.0 - Monorepo Split and Shared Core
 
 Goal: restructure the codebase into a monorepo with a shared core package, preparing the foundation for the CLI and viewer. No new user-facing features - this is a structural release.
 
 - **Monorepo setup** - pnpm/npm workspaces with `packages/core/`, `apps/app/` (current Astro browser app), `apps/viewer/` (placeholder), `apps/cli/` (placeholder)
 - **`packages/core/`** - Extract shared modules: config types, parser (with pluggable loader), operations graph, operation SQL functions (compute-only, no render), loader parsers (data in, GeoJSON out), logger interface, unit conversion, DB query builders and schema definitions
 - **`apps/app/`** - Current browser app, imports from `@artemyx/core`; browser-specific code stays here: MapLibre integration, DuckDB-WASM initialization, OPFS persistence, UI controls, popup handlers, rendering side of operations
-- **DB interface** - Abstract `DBAdapter` interface in core (`execute`, `prepare`, `registerFile`); WASM implementation in `apps/app/`, native DuckDB implementation added in v0.9.1; SQL queries written against the interface, not the driver
+- **DB interface** - Abstract `DBAdapter` interface in core (`execute`, `prepare`, `registerFile`); WASM implementation in `apps/app/`, native DuckDB implementation added in v0.11.0; SQL queries written against the interface, not the driver
 
-### v0.9.1 - Headless CLI
+### v0.10.1 - Lightweight Viewer
+
+Goal: a minimal map app that renders pre-processed data without DuckDB, operations, or data loading UI.
+
+  **Architecture:**
+  - `apps/viewer/` - Astro static site importing `@artemyx/core` (config types, parser) + MapLibre + deck.gl
+  - No DuckDB dependency - datasets are pre-processed GeoJSON, PMTiles, or GeoParquet served as static files
+  - Reads viewer configs (generated by CLI `--viewer-config` or app "Export viewer config")
+  - Config schema: `map` (center/zoom/basemap) + `datasets` (id/url/format) + `layers` (styling)
+
+  **What it includes:**
+  - MapLibre map with basemap switching
+  - PMTiles protocol handler for tiled vector sources
+  - deck.gl overlay for large datasets (shared `DeckGLManager` from v0.9.x)
+  - Layer visibility toggle
+  - Feature popups
+  - Responsive layout
+
+  **What it excludes:**
+  - No DuckDB, no OPFS, no storage control
+  - No DataControl (no URL loading)
+  - No operations, no YAML snippet runner
+  - No export (data is read-only)
+
+  **Deployment model:**
+  - CLI generates output files + viewer config
+  - Viewer deployed as a static site (GitHub Pages, Netlify, S3)
+  - Config and data files co-located or hosted separately (URLs in config)
+  - Example GitHub Actions workflow: CLI runs on schedule, commits outputs, viewer rebuilds via Pages
+
+### v0.11.0 - Headless CLI
 
 Goal: run artemyx pipelines from the command line without a browser.
 
@@ -91,63 +107,32 @@ Goal: run artemyx pipelines from the command line without a browser.
   - Static tile publishing: push `.pmtiles` to S3/R2/GitHub Pages, load in browser with no tile server
   - Zero-infrastructure self-updating maps: GitHub Actions runs the pipeline on a schedule, commits output PMTiles to the repo, GitHub Pages serves them via HTTP range requests - no backend, no tile server, no cloud bill
 
-### v0.9.2 - Lightweight Viewer
-
-Goal: a minimal map app that renders pre-processed data without DuckDB, operations, or data loading UI.
-
-  **Architecture:**
-  - `apps/viewer/` - Astro static site importing `@artemyx/core` (config types, parser) + MapLibre + deck.gl
-  - No DuckDB dependency - datasets are pre-processed GeoJSON, PMTiles, or GeoParquet served as static files
-  - Reads viewer configs (generated by CLI `--viewer-config` or app "Export viewer config")
-  - Config schema: `map` (center/zoom/basemap) + `datasets` (id/url/format) + `layers` (styling)
-
-  **What it includes:**
-  - MapLibre map with basemap switching
-  - PMTiles protocol handler for tiled vector sources
-  - deck.gl overlay for large datasets (shared `DeckGLManager` from v0.8.x)
-  - Layer visibility toggle
-  - Feature popups
-  - Responsive layout
-
-  **What it excludes:**
-  - No DuckDB, no OPFS, no storage control
-  - No DataControl (no URL loading)
-  - No operations, no YAML snippet runner
-  - No export (data is read-only)
-
-  **Deployment model:**
-  - CLI generates output files + viewer config
-  - Viewer deployed as a static site (GitHub Pages, Netlify, S3)
-  - Config and data files co-located or hosted separately (URLs in config)
-  - Example GitHub Actions workflow: CLI runs on schedule, commits outputs, viewer rebuilds via Pages
-
-### v0.10.0 - Sharing and Additional Render Types
+### v0.12.0 - Sharing and Caching
 
 - **URL state sharing** - Serialize session (datasets, layers, paint, operations) into URL parameters for shareable links without needing a repo or exported YAML
-- **`ScatterplotLayer`** - deck.gl large point cloud rendering with radius scale and fill/stroke color accessors; suited for transit stops, parcel centroids, and other high-count point datasets
-- **`HeatmapLayer`** - deck.gl GPU-accelerated continuous density; distinct from MapLibre's `heatmap` type, operates entirely on the deck.gl pipeline
-- **`HexagonLayer`** - deck.gl aggregation hexbins; count or sum of features per cell; configurable radius and elevation scale
-- **`ColumnLayer`** - deck.gl 3D vertical bars driven by a numeric property; pairs with `fill-extrusion` use cases that need deck.gl's rendering scale
+- **OPFS PMTiles Cache** - Generated `.pmtiles` files written to OPFS alongside the DuckDB database; keyed by output source ID and config hash; restored on session reload without re-running the tiling/extraction pipeline
+- **Cache invalidation** - Invalidate when source dataset changes (feature count or hash mismatch); re-generation triggered automatically or on-demand via outputs button
+- **StorageControl updates** - Surface PMTiles cache size alongside DB size in the storage panel; include PMTiles files in OPFS export/import; clear PMTiles cache on "Clear Storage"
+- **MapLibre vector source wiring** - Cached PMTiles served via `pmtiles://` protocol from OPFS; auto-registered as vector sources on session restore; layers created from cached config
 
-### v0.11.0 - Large Data Optimizations & Custom Basemaps
+### v0.13.0 - Large Data Optimizations and Custom Basemaps
 - **Feature generalization (LOD)** - `ST_Simplify(geometry, tolerance)` with tolerance scaled to zoom level; applies to GeoJSON-backed sources (superseded for tiled datasets by the PMTiles pipeline); may be removable once PMTiles is the default large-data path
 - **Viewport streaming** - Load only features visible in current extent via `ST_Intersects(geometry, ST_MakeEnvelope(west, south, east, north))`; applies to GeoJSON-backed sources; may be removable once PMTiles is the default large-data path
 - **Custom basemap tile URL** - Let users point at their own tile server (self-hosted MapTiler, PMTiles, WMS) via config or UI; extends the existing basemap switcher; pairs with the CLI's PMTiles output for a full static publish-and-load workflow
 
-### v0.12.0 - Tools Expansion
+### v0.14.0 - Tools Expansion
 - **Statistics panel** - Per-dataset summary statistics: feature count, and for numeric attribute columns, min/max/mean/median. Use Phosphor chart-bar icon. Top-left.
 - **Measurement tools** - Distance, area, bearing calculations. Use Phosphor ruler icon. Top-left.
 - **Collapsed tools menu** - Collapsible "tools" menu or grouped overflow control to keep the UI manageable on smaller screens without hiding functionality
-- **Toggle for showing text beside icons** - Accessibility improvement for desktop mainly, a button to expand all buttons to show their text value (ie the tooltip button title)
 - **Expression-aware overrides** - Expression-driven properties shown as disabled with an "Expression" badge; toggle lets user replace the expression with a flat GUI value for that property
 
-### v0.13.0 - More Formats and Configurations
+### v0.15.0 - More Formats and Configurations
 - **Shapefile support** - Load `.shp`/`.dbf` archives from URLs; requires an additional JS library (e.g., shpjs) for parsing multi-file ZIP archives; more involved than other format additions and likely requires download endpoint handling to be in place first
 - **Map Options Configurations** - give the ability for map-configs to specify what GUI features to enable/disable, like: storage controls, basemap picker, loading data, styling editor, etc.
 
-### v0.14.0 - OpenData Gallery
-- **Fourth split of the monorepo - Data Gallery** - (details to come) for teams that need to deploy multiple maps, viewers, datasets, and more in an open data kind of environment, the authoring environment (app), CLI, and viewer get close to that, but need development to bring into a cohesive form for ingestion from outside sources. This takes the original 'examples' index and fleshes it out into a proper reusable gallery. 
-- **Open Data Gallery Wizard** - for the less tech savvy folk, a wizard to help create the necessary configs to create an open data gallery.  
+### v0.16.0 - OpenData Gallery
+- **Fourth split of the monorepo - Data Gallery** - (details to come) for teams that need to deploy multiple maps, viewers, datasets, and more in an open data kind of environment, the authoring environment (app), CLI, and viewer get close to that, but need development to bring into a cohesive form for ingestion from outside sources. This takes the original 'examples' index and fleshes it out into a proper reusable gallery.
+- **Open Data Gallery Wizard** - for the less tech savvy folk, a wizard to help create the necessary configs to create an open data gallery.
 
 ## Backlog (Unscheduled)
 
@@ -174,7 +159,7 @@ Items worth building eventually but not yet assigned to a version:
   - `datasets.ts`: wrap geometry expression in `loadGeoJSON()` INSERT with `CASE WHEN ST_IsValid(geom_raw) THEN geom_raw ELSE ST_MakeValid(geom_raw) END`
   - Same for `appendFeatures()` (paginated path)
   - Order: parse geometry -> validate/repair -> CRS reproject (transform wraps validated geometry)
-- **Cumulative feature count guard** - Track running feature total during OPFS restore; skip MapLibre source/layer creation (not DuckDB data) for datasets beyond threshold; data stays in DuckDB for operations; stopgap until v0.8.x auto-promote replaces this guard with deck.gl rendering
+- **Cumulative feature count guard** - Track running feature total during OPFS restore; skip MapLibre source/layer creation (not DuckDB data) for datasets beyond threshold; data stays in DuckDB for operations; stopgap until v0.9.x auto-promote replaces this guard with deck.gl rendering
   - `RENDER_THRESHOLD = 200_000` constant
   - `map.ts` `restoreManualDatasets()`: cumulative counter, skip `addDatasetToMap()` when exceeded
   - `load-config.ts` and `executor.ts` OPFS restore paths: same guard logic
@@ -185,6 +170,9 @@ Items worth building eventually but not yet assigned to a version:
 
 
 ## Completed
+
+### v0.8.0 - Accessibility, Shortcuts and Polish
+- Keyboard shortcuts (L/P/I/U/C/T/O/X/B/E/Esc/WASD/R/F) with tooltip hints and text-beside-icons toggle, ARIA labels and roles on interactive elements with screen reader announcements, focus trapping in open panels with return-to-trigger on close, feature popup fix for overlapping layers (single top-most popup), Outputs Helper form builder (format-aware fields, PMTiles params, live YAML preview, config injection), PMTiles first-run reload fix, Outputs panel scroll fix
 
 ### v0.7.3 - PMTiles Generation
 - DuckDB-to-tiles generation pipeline (`geojson-vt` + `vt-pbf` + PMTiles writer) with single-source and multi-source output (`source: string | string[]`), per-zoom progress tracking in a dedicated Outputs panel (resizable, movable, side-by-side with Config Editor), source validation routing (DuckDB sources to generation, PMTiles sources to extraction), worker heartbeat timeout fix, and config editor shortcut button with state-driven colors

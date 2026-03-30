@@ -91,8 +91,8 @@ export async function loadDataFromFile(
 		result.geoJson = null as any;
 
 		loadedDatasets.add(result.datasetId);
-		const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: displayName });
-		attachFeatureClickHandlers(map, layerIds, hoverPopup);
+		attachFeatureHoverHandlers(map, layerIds, { label: displayName });
+		attachFeatureClickHandlers(map, layerIds);
 
 		if (result.bounds && !options.skipFitBounds) fitMapToBounds(map, result.bounds);
 		layerToggleControl.refreshPanel();

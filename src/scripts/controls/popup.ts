@@ -117,56 +117,70 @@ export function createPopupContent(properties: any): HTMLElement {
 	return container;
 }
 
+// Shared click popup state — single popup + registry ensures only the
+// topmost layer shows a popup when multiple layers overlap.
+let sharedClickPopup: maplibregl.Popup | null = null;
+const clickRegistry = new Set<string>();
+let clickHandlerAttached = false;
+
 /**
  * Attach click handlers to feature layers for popups.
- * Returns the popup instance so hover handlers can hide it on click.
+ * Uses a single shared popup and a map-level click handler that picks
+ * the topmost feature via queryRenderedFeatures — only one popup at a time.
  */
 export function attachFeatureClickHandlers(
 	map: maplibregl.Map,
-	layerIds: string[],
-	hoverPopup?: maplibregl.Popup
+	layerIds: string[]
 ): void {
-	// Create a single popup instance to reuse
-	const popup = new maplibregl.Popup({
-		closeButton: true,
-		closeOnClick: true,
-		maxWidth: '350px',
-		className: 'feature-popup'
-	});
+	// Create shared popup on first call
+	if (!sharedClickPopup) {
+		sharedClickPopup = new maplibregl.Popup({
+			closeButton: true,
+			closeOnClick: true,
+			maxWidth: '350px',
+			className: 'feature-popup'
+		});
+	}
 
-	// Add click handler for each layer
-	layerIds.forEach(layerId => {
-		map.on('click', layerId, (e) => {
-			if (!e.features || e.features.length === 0) {
-				return;
-			}
+	// Register each layer; add cursor handlers for new layers only
+	for (const layerId of layerIds) {
+		if (!clickRegistry.has(layerId)) {
+			clickRegistry.add(layerId);
+
+			map.on('mouseenter', layerId, () => {
+				map.getCanvas().style.cursor = 'pointer';
+			});
+
+			map.on('mouseleave', layerId, () => {
+				map.getCanvas().style.cursor = '';
+			});
+		}
+	}
+
+	// Attach a single map-level click handler (once)
+	if (!clickHandlerAttached) {
+		map.on('click', (e) => {
+			const registeredIds = [...clickRegistry];
+			if (registeredIds.length === 0) return;
+
+			const features = map.queryRenderedFeatures(e.point, { layers: registeredIds });
+			if (features.length === 0) return;
+
+			const topFeature = features[0];
 
 			// Hide hover tooltip when click popup opens
-			hoverPopup?.remove();
+			sharedHoverPopup?.remove();
 
-			// Get first feature's properties
-			const feature = e.features[0];
-			const properties = feature.properties;
+			const content = createPopupContent(topFeature.properties);
 
-			// Create popup content
-			const content = createPopupContent(properties);
-
-			// Set popup location and content
-			popup
+			sharedClickPopup!
 				.setLngLat(e.lngLat)
 				.setDOMContent(content)
 				.addTo(map);
 		});
 
-		// Change cursor on hover
-		map.on('mouseenter', layerId, () => {
-			map.getCanvas().style.cursor = 'pointer';
-		});
-
-		map.on('mouseleave', layerId, () => {
-			map.getCanvas().style.cursor = '';
-		});
-	});
+		clickHandlerAttached = true;
+	}
 }
 
 /** Options for hover tooltip behavior */
@@ -224,13 +238,12 @@ let hoverHandlerAttached = false;
  * Attach hover tooltip handlers to feature layers.
  * Uses a single shared popup and a map-level mousemove handler that picks
  * the topmost feature via queryRenderedFeatures — only one tooltip at a time.
- * Returns the shared popup instance for coordination with click handlers.
  */
 export function attachFeatureHoverHandlers(
 	map: maplibregl.Map,
 	layerIds: string[],
 	options: HoverTooltipOptions
-): maplibregl.Popup {
+): void {
 	// Create shared popup on first call
 	if (!sharedHoverPopup) {
 		sharedHoverPopup = new maplibregl.Popup({
@@ -282,8 +295,6 @@ export function attachFeatureHoverHandlers(
 
 		hoverHandlerAttached = true;
 	}
-
-	return sharedHoverPopup;
 }
 
 /**
@@ -293,6 +304,7 @@ export function attachFeatureHoverHandlers(
 export function removeFeatureHandlers(layerIds: string[]): void {
 	for (const id of layerIds) {
 		hoverRegistry.delete(id);
+		clickRegistry.delete(id);
 	}
 }
 
@@ -302,6 +314,7 @@ export function removeFeatureHandlers(layerIds: string[]): void {
  */
 export function clearAllFeatureHandlers(): void {
 	hoverRegistry.clear();
+	clickRegistry.clear();
 }
 
 /**

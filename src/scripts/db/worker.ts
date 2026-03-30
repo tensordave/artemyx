@@ -32,6 +32,21 @@ import { generateDatasetId } from './utils';
 import type { ProgressStatus } from '../logger/types';
 import type { ProgressEvent, InfoEvent, WarnEvent } from './worker-types';
 
+// ── Top-level error handler (captures OOM and other uncaught errors) ───────
+
+self.addEventListener('error', (e) => {
+	try {
+		self.postMessage({ event: 'warn', tag: 'Worker', message: `Uncaught error: ${e.message}` });
+	} catch { /* worker is dying — nothing we can do */ }
+});
+
+self.addEventListener('unhandledrejection', (e) => {
+	try {
+		const msg = e.reason instanceof Error ? e.reason.message : String(e.reason);
+		self.postMessage({ event: 'warn', tag: 'Worker', message: `Unhandled rejection: ${msg}` });
+	} catch { /* worker is dying — nothing we can do */ }
+});
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const textEncoder = new TextEncoder();

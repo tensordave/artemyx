@@ -44,6 +44,17 @@ export class ProgressControl implements IControl {
     this.statusRow = document.createElement('div');
     this.statusRow.className = 'progress-status-row status-idle';
     this.statusRow.addEventListener('click', () => this.toggleExpansion());
+		this.statusRow.title = 'Progress (P)';
+		this.statusRow.setAttribute('role', 'button');
+		this.statusRow.setAttribute('aria-label', 'Progress');
+		this.statusRow.setAttribute('aria-expanded', 'false');
+		this.statusRow.tabIndex = 0;
+		this.statusRow.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				this.toggleExpansion();
+			}
+		});
 
     // Composite icon: base circle ring + state-driven inner icon
     const iconWrapper = document.createElement('div');
@@ -86,6 +97,7 @@ export class ProgressControl implements IControl {
     this.clearHistoryButton.className = 'progress-clear-history-btn';
     this.clearHistoryButton.innerHTML = trashIcon;
     this.clearHistoryButton.title = 'Clear history';
+    this.clearHistoryButton.setAttribute('aria-label', 'Clear history');
     this.clearHistoryButton.addEventListener('click', () => this.clearHistory());
     headerButtons.appendChild(this.clearHistoryButton);
 
@@ -93,6 +105,7 @@ export class ProgressControl implements IControl {
     this.minimizeButton.className = 'progress-minimize-btn';
     this.minimizeButton.textContent = '\u2212';
     this.minimizeButton.title = 'Minimize';
+    this.minimizeButton.setAttribute('aria-label', 'Minimize progress panel');
     this.minimizeButton.addEventListener('click', () => this.toggleExpansion());
     headerButtons.appendChild(this.minimizeButton);
 
@@ -227,11 +240,16 @@ export class ProgressControl implements IControl {
     }, delay);
   }
 
+  togglePanel(): void {
+    this.toggleExpansion();
+  }
+
   /**
    * Toggle the history panel. The status row stays visible at all times as the persistent toggle target.
    */
   private toggleExpansion(): void {
     this.isExpanded = !this.isExpanded;
+    this.statusRow?.setAttribute('aria-expanded', String(this.isExpanded));
 
     if (this.expandedPanel) {
       if (this.isExpanded) {

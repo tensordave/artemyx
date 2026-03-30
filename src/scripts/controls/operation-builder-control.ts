@@ -16,6 +16,7 @@ import { addOperationResultToMap } from '../config/operations/render';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from './popup';
 import { gitMergeIcon, eraserIcon } from '../icons';
 import { getHighlighter, highlightSync, highlightAsync } from '../utils/shiki';
+import { createFocusTrap, type FocusTrap } from '../utils/focus-trap';
 
 export interface OperationBuilderOptions {
 	map: Map;
@@ -35,6 +36,7 @@ export class OperationBuilderControl implements IControl {
 	private container: HTMLElement | null = null;
 	private panel: HTMLElement | null = null;
 	private mapContainer: HTMLElement | null = null;
+	private mainBtn: HTMLButtonElement | null = null;
 	private isOpen = false;
 	private onPanelOpen: (() => void) | null = null;
 
@@ -65,6 +67,8 @@ export class OperationBuilderControl implements IControl {
 	private boundPointerUp: (() => void) | null = null;
 	private readonly MIN_WIDTH = 340;
 	private readonly MIN_HEIGHT = 300;
+	private focusTrap: FocusTrap | null = null;
+	private previousFocus: HTMLElement | null = null;
 
 	// YAML preview
 	private yamlPreviewContainer: HTMLElement | null = null;
@@ -96,9 +100,12 @@ export class OperationBuilderControl implements IControl {
 		const button = document.createElement('button');
 		button.className = 'control-btn';
 		button.type = 'button';
-		button.title = 'Operation Builder';
+		button.title = 'Operation Builder (O)';
+		button.setAttribute('aria-label', 'Operation Builder');
+		button.setAttribute('aria-expanded', 'false');
 		button.innerHTML = gitMergeIcon;
-		button.addEventListener('click', () => this.toggle());
+		button.addEventListener('click', () => this.togglePanel());
+		this.mainBtn = button;
 		this.container.appendChild(button);
 
 		this.mapContainer = map.getContainer();
@@ -108,6 +115,8 @@ export class OperationBuilderControl implements IControl {
 	}
 
 	onRemove(): void {
+		this.focusTrap?.deactivate();
+		this.focusTrap = null;
 		document.removeEventListener('keydown', this.handleEsc);
 		if (this.boundPointerMove) {
 			document.removeEventListener('pointermove', this.boundPointerMove);
@@ -157,6 +166,7 @@ export class OperationBuilderControl implements IControl {
 		clearBtn.className = 'operation-builder-header-btn';
 		clearBtn.type = 'button';
 		clearBtn.title = 'Clear form';
+		clearBtn.setAttribute('aria-label', 'Clear form');
 		clearBtn.innerHTML = eraserIcon;
 		clearBtn.addEventListener('click', () => this.resetForm());
 		headerActions.appendChild(clearBtn);
@@ -164,7 +174,8 @@ export class OperationBuilderControl implements IControl {
 		const closeBtn = document.createElement('button');
 		closeBtn.className = 'operation-builder-close';
 		closeBtn.type = 'button';
-		closeBtn.title = 'Close';
+		closeBtn.title = 'Close (Esc)';
+		closeBtn.setAttribute('aria-label', 'Close operation builder');
 		closeBtn.textContent = '\u00d7';
 		closeBtn.addEventListener('click', () => this.close());
 		headerActions.appendChild(closeBtn);
@@ -338,6 +349,7 @@ export class OperationBuilderControl implements IControl {
 				return this.buildDatasetSelect('input-b');
 			}));
 		}
+		this.focusTrap?.updateElements();
 	}
 
 	private buildDatasetSelect(name: string): HTMLSelectElement {
@@ -958,10 +970,10 @@ export class OperationBuilderControl implements IControl {
 
 			// Attach popup/hover handlers
 			if (layerIds.length > 0) {
-				const hoverPopup = attachFeatureHoverHandlers(
+				attachFeatureHoverHandlers(
 					this.options.map, layerIds, { label: result.displayName }
 				);
-				attachFeatureClickHandlers(this.options.map, layerIds, hoverPopup);
+				attachFeatureClickHandlers(this.options.map, layerIds);
 			}
 
 			this.options.layerToggleControl.refreshPanel();
@@ -1050,7 +1062,7 @@ export class OperationBuilderControl implements IControl {
 
 	// ── Open / Close ────────────────────────────────────────────────────
 
-	private toggle(): void {
+	togglePanel(): void {
 		if (this.isOpen) {
 			this.close();
 		} else {
@@ -1060,6 +1072,7 @@ export class OperationBuilderControl implements IControl {
 
 	private async open(): Promise<void> {
 		if (!this.panel) return;
+		this.previousFocus = document.activeElement as HTMLElement | null;
 		this.isOpen = true;
 
 		// Pre-warm Shiki for YAML preview
@@ -1071,15 +1084,24 @@ export class OperationBuilderControl implements IControl {
 		this.autoGenerateOutputName();
 
 		this.panel.classList.add('operation-builder--open');
+		this.mainBtn?.setAttribute('aria-expanded', 'true');
 		this.onPanelOpen?.();
 		document.addEventListener('keydown', this.handleEsc);
+		this.focusTrap = createFocusTrap(this.panel);
+		this.focusTrap.activate();
+		this.focusTrap.focusFirst();
 	}
 
 	private close(): void {
 		if (!this.panel) return;
 		this.isOpen = false;
+		this.focusTrap?.deactivate();
+		this.focusTrap = null;
 		this.panel.classList.remove('operation-builder--open');
+		this.mainBtn?.setAttribute('aria-expanded', 'false');
 		document.removeEventListener('keydown', this.handleEsc);
+		if (this.previousFocus?.isConnected) this.previousFocus.focus();
+		this.previousFocus = null;
 	}
 
 	// ── Drag / Resize ───────────────────────────────────────────────────

@@ -209,7 +209,7 @@ function registerHandlers(
 
 	if (opts) {
 		const label = newName ?? opts.label;
-		const hoverPopup = attachFeatureHoverHandlers(map, newLayerIds, { label, fields: opts.fields });
-		attachFeatureClickHandlers(map, newLayerIds, hoverPopup);
+		attachFeatureHoverHandlers(map, newLayerIds, { label, fields: opts.fields });
+		attachFeatureClickHandlers(map, newLayerIds);
 	}
 }

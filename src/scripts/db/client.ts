@@ -181,13 +181,17 @@ function wireWorkerHandlers(w: Worker): void {
 	};
 
 	w.onerror = (e: ErrorEvent) => {
+		// Identify which RPCs were in flight when the crash occurred
+		const inFlight = [...pending.values()].map(p => p.type);
+		const context = inFlight.length > 0 ? ` during: ${inFlight.join(', ')}` : '';
+
 		// Reject all pending RPCs on worker crash
 		for (const [, entry] of pending) {
 			clearTimeout(entry.timer);
-			entry.reject(new Error(`Worker crashed: ${e.message}`));
+			entry.reject(new Error(`Worker crashed${context}: ${e.message}`));
 		}
 		pending.clear();
-		eventHandler?.onProgress?.('worker', 'error', 'Processing worker crashed. Try clearing the session.');
+		eventHandler?.onProgress?.('worker', 'error', `Processing worker crashed${context}. Try clearing the session.`);
 	};
 }
 

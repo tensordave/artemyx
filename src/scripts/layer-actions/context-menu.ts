@@ -62,6 +62,7 @@ export function createContextMenu(
 	// Create menu container
 	const menu = document.createElement('div');
 	menu.className = 'context-menu';
+	menu.setAttribute('role', 'menu');
 
 	// Append to body so it can overflow panel bounds
 	document.body.appendChild(menu);

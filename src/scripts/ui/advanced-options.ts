@@ -43,6 +43,8 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 	toggle.className = 'advanced-options-toggle';
 	toggle.innerHTML = gearIcon + '<span>Options</span>';
 	toggle.title = 'Advanced loading options';
+	toggle.setAttribute('aria-label', 'Advanced loading options');
+	toggle.setAttribute('aria-expanded', 'false');
 	wrapper.appendChild(toggle);
 
 	// Collapsible body
@@ -108,8 +110,9 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 
 	// -- Toggle visibility --
 	toggle.addEventListener('click', () => {
-		body.classList.toggle('advanced-options--open');
+		const isOpen = body.classList.toggle('advanced-options--open');
 		toggle.classList.toggle('advanced-options-toggle--open');
+		toggle.setAttribute('aria-expanded', String(isOpen));
 	});
 
 	// -- CRS validation --
@@ -176,6 +179,7 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 		geoInput.disabled = false;
 		body.classList.remove('advanced-options--open');
 		toggle.classList.remove('advanced-options-toggle--open');
+		toggle.setAttribute('aria-expanded', 'false');
 	}
 
 	return { element: wrapper, getValues, reset };

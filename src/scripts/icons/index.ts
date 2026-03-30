@@ -48,6 +48,9 @@ export { magicWandIcon } from './magic-wand';                // generate config 
 export { exportIcon } from './export';                       // export config menu
 export { boxArrowDownIcon } from './box-arrow-down';         // outputs button
 
+// Label toggle
+export { textTIcon, textTSlashIcon } from './text-t';  // show/hide text labels beside icons
+
 // Roadmap: future features
 export { downloadIcon } from './download';                   // export data from layer context menu
 export { downloadSimpleIcon } from './download-simple';    // export datasets

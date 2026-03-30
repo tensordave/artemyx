@@ -15,6 +15,7 @@ import { buildStyleView, savePendingStyle } from '../layer-actions/style';
 import { createLayerRow, type Dataset } from '../layer-actions/layer-row';
 import { resyncLayerOrder } from '../layers';
 import type { OperationBuilderControl } from './operation-builder-control';
+import { createFocusTrap, type FocusTrap } from '../utils/focus-trap';
 
 /**
  * Custom control for toggling layer visibility
@@ -27,6 +28,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 	private contextMenuHandle: ContextMenuHandle | undefined;
 	private currentContextMenuDatasetId: string | undefined;
 	private onPanelOpen?: () => void;
+	private liveRegion: HTMLDivElement | undefined;
 	/** Cached ordered dataset list from last refreshPanel(), used for reorder logic */
 	private datasets: any[] = [];
 	/** Current view state: 'list' shows layer rows, 'style' shows style controls */
@@ -39,6 +41,8 @@ export class LayerToggleControl implements maplibregl.IControl {
 	private operationBuilderControl?: OperationBuilderControl;
 	/** Legend control, refreshed on PMTiles rename */
 	private legendControl?: LegendControl;
+	private focusTrap: FocusTrap | null = null;
+	private previousFocus: HTMLElement | null = null;
 
 	/**
 	 * Set the callback for when this panel opens (wired after both controls exist).
@@ -79,8 +83,17 @@ export class LayerToggleControl implements maplibregl.IControl {
 		this.button.type = 'button';
 		this.button.className = 'control-btn';
 		this.button.innerHTML = stackIcon;
-		this.button.title = 'Toggle layers';
+		this.button.title = 'Toggle layers (L)';
+		this.button.setAttribute('aria-label', 'Toggle layers');
+		this.button.setAttribute('aria-expanded', 'false');
 		this.container.appendChild(this.button);
+
+		// Visually-hidden live region for screen reader announcements
+		this.liveRegion = document.createElement('div');
+		this.liveRegion.setAttribute('aria-live', 'polite');
+		this.liveRegion.setAttribute('role', 'status');
+		this.liveRegion.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0';
+		this.container.appendChild(this.liveRegion);
 
 		// Panel (hidden by default, positioned absolutely)
 		this.panel = document.createElement('div');
@@ -91,9 +104,19 @@ export class LayerToggleControl implements maplibregl.IControl {
 		this.button.addEventListener('click', () => {
 			if (this.panel) {
 				const isOpen = this.panel.classList.toggle('control-panel--open');
+				this.button!.setAttribute('aria-expanded', String(isOpen));
 				if (isOpen) {
+					this.previousFocus = document.activeElement as HTMLElement | null;
 					this.onPanelOpen?.();
 					this.showListView();
+					this.focusTrap = createFocusTrap(this.panel);
+					this.focusTrap.activate();
+					this.focusTrap.focusFirst();
+				} else {
+					this.focusTrap?.deactivate();
+					this.focusTrap = null;
+					if (this.previousFocus?.isConnected) this.previousFocus.focus();
+					this.previousFocus = null;
 				}
 			}
 		});
@@ -110,6 +133,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 		this.currentView = 'list';
 		this.currentStyleDatasetId = undefined;
 		await this.refreshPanel();
+		this.focusTrap?.updateElements();
 	}
 
 	/**
@@ -131,7 +155,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 			dataset,
 			this.panel,
 			progressControl,
-			() => this.showListView(),
+			() => { this.showListView(); },
 			(newColor) => {
 				// Update the style view header border color to reflect the new color
 				const header = this.panel?.querySelector('.style-view-header') as HTMLElement | null;
@@ -183,6 +207,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 				}
 			}
 		);
+		this.focusTrap?.updateElements();
 	}
 
 	async refreshPanel() {
@@ -213,11 +238,13 @@ export class LayerToggleControl implements maplibregl.IControl {
 			const isLast = index === datasets.length - 1;
 
 			const handleMove = async (targetIndex: number) => {
+				const direction = targetIndex < index ? 'up' : 'down';
 				const targetDataset = this.datasets[targetIndex];
 				const success = await swapLayerOrder(dataset.id, targetDataset.id);
 				if (success) {
 					await this.refreshPanel();
 					resyncLayerOrder(this.map!, this.datasets.map((d: any) => d.id));
+					this.announce(`Layer ${dataset.name} moved ${direction}`);
 
 					// Highlight the moved row until the user moves their mouse
 					const movedRow = this.panel?.querySelector(`[data-dataset-id="${dataset.id}"]`) as HTMLDivElement | null;
@@ -234,6 +261,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 				onToggleVisibility: (datasetId, visible) => {
 					toggleLayerVisibility(this.map!, datasetId, visible);
 					updateDatasetVisible(datasetId, visible);
+					this.announce(`Layer ${dataset.name} ${visible ? 'shown' : 'hidden'}`);
 				},
 				onRowClick: (ds) => {
 					this.showStyleView(ds);
@@ -312,6 +340,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 				() => {
 					this.refreshPanel();
 					this.operationBuilderControl?.refreshDatasets();
+					this.announce(`Layer ${dataset.name} deleted`);
 				}
 			);
 		});
@@ -330,6 +359,29 @@ export class LayerToggleControl implements maplibregl.IControl {
 	}
 
 	/**
+	 * Toggle the panel open/closed (used by keyboard shortcuts).
+	 */
+	togglePanel(): void {
+		if (this.panel) {
+			const isOpen = this.panel.classList.toggle('control-panel--open');
+			this.button?.setAttribute('aria-expanded', String(isOpen));
+			if (isOpen) {
+				this.previousFocus = document.activeElement as HTMLElement | null;
+				this.onPanelOpen?.();
+				this.showListView();
+				this.focusTrap = createFocusTrap(this.panel);
+				this.focusTrap.activate();
+				this.focusTrap.focusFirst();
+			} else {
+				this.focusTrap?.deactivate();
+				this.focusTrap = null;
+				if (this.previousFocus?.isConnected) this.previousFocus.focus();
+				this.previousFocus = null;
+			}
+		}
+	}
+
+	/**
 	 * Close the panel (called externally for mutual exclusivity with storage control).
 	 */
 	async closePanel(): Promise<void> {
@@ -338,8 +390,22 @@ export class LayerToggleControl implements maplibregl.IControl {
 			this.currentView = 'list';
 			this.currentStyleDatasetId = undefined;
 		}
+		this.focusTrap?.deactivate();
+		this.focusTrap = null;
 		this.panel?.classList.remove('control-panel--open');
+		this.button?.setAttribute('aria-expanded', 'false');
 		this.closeContextMenu();
+		if (this.previousFocus?.isConnected) this.previousFocus.focus();
+		this.previousFocus = null;
+	}
+
+	/** Announce a message to screen readers via the live region. */
+	private announce(message: string): void {
+		if (!this.liveRegion) return;
+		this.liveRegion.textContent = '';
+		requestAnimationFrame(() => {
+			if (this.liveRegion) this.liveRegion.textContent = message;
+		});
 	}
 
 	onRemove() {

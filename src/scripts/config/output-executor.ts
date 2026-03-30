@@ -121,7 +121,7 @@ export async function executeOutputs(
 				}
 			}
 
-			const blob = new Blob([buffer.buffer as ArrayBuffer], { type: MIME_TYPES[output.format] });
+			const blob = new Blob([buffer as BlobPart], { type: MIME_TYPES[output.format] });
 			const blobUrl = URL.createObjectURL(blob);
 
 			const complete: OutputResult = {

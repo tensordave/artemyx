@@ -231,8 +231,8 @@ export async function loadPMTilesDataset(
 				);
 
 				if (layerIds.length > 0) {
-					const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: subName });
-					attachFeatureClickHandlers(map, layerIds, hoverPopup);
+					attachFeatureHoverHandlers(map, layerIds, { label: subName });
+					attachFeatureClickHandlers(map, layerIds);
 				}
 			}
 
@@ -261,8 +261,8 @@ export async function loadPMTilesDataset(
 		}
 
 		if (layerIds.length > 0) {
-			const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: displayName });
-			attachFeatureClickHandlers(map, layerIds, hoverPopup);
+			attachFeatureHoverHandlers(map, layerIds, { label: displayName });
+			attachFeatureClickHandlers(map, layerIds);
 		}
 
 		loadedDatasets.add(dataset.id);

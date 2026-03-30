@@ -40,7 +40,8 @@ export async function generatePMTiles(options: PMTilesGenerateOptions): Promise<
 
 	// 1. Read features from DuckDB (or use provided FeatureCollection)
 	onProgress?.('Reading features...', 0);
-	const fc = options.featureCollection ?? await getFeaturesAsGeoJSON(datasetId);
+	let fc: GeoJSON.FeatureCollection | null =
+		options.featureCollection ?? await getFeaturesAsGeoJSON(datasetId);
 
 	if (fc.features.length === 0) {
 		throw new Error(`Dataset '${datasetId}' has no features to tile`);
@@ -51,14 +52,21 @@ export async function generatePMTiles(options: PMTilesGenerateOptions): Promise<
 
 	// 3. Slice into vector tiles
 	onProgress?.(`Slicing ${fc.features.length} features into tiles...`, 0.05);
-	const tileIndex = geojsonvt(fc as GeoJSON.FeatureCollection<GeoJSON.Geometry>, {
-		maxZoom,
-		indexMaxZoom: maxZoom,
-		indexMaxPoints: 0, // index all points at all zoom levels
-		tolerance: 3,
-		extent: 4096,
-		buffer: 64,
-	});
+	let tileIndex: ReturnType<typeof geojsonvt> | null = geojsonvt(
+		fc as GeoJSON.FeatureCollection<GeoJSON.Geometry>,
+		{
+			maxZoom,
+			indexMaxZoom: maxZoom,
+			indexMaxPoints: 0, // index all points at all zoom levels
+			tolerance: 3,
+			extent: 4096,
+			buffer: 64,
+		},
+	);
+
+	// Release FeatureCollection — geojson-vt owns the data now
+	fc = null;
+	await new Promise(resolve => setTimeout(resolve, 0));
 
 	// 4. Enumerate tiles within data bounds, encode MVT, compress
 	const tileEntries: { tileId: number; data: Uint8Array }[] = [];
@@ -94,6 +102,10 @@ export async function generatePMTiles(options: PMTilesGenerateOptions): Promise<
 		onProgress?.(`Zoom ${z}/${maxZoom}: ${tileCount} tiles`, 0.1 + ((z - minZoom + 1) / totalZooms) * 0.8);
 	}
 
+	// Release tile index before archive assembly
+	tileIndex = null;
+	await new Promise(resolve => setTimeout(resolve, 0));
+
 	if (tileEntries.length === 0) {
 		throw new Error(`No tiles generated for dataset '${datasetId}'`);
 	}
@@ -126,7 +138,8 @@ export interface MultiLayerPMTilesOptions {
  * Used by the extraction pipeline for multi-layer PMTiles archives.
  */
 export async function generateMultiLayerPMTiles(options: MultiLayerPMTilesOptions): Promise<Uint8Array> {
-	const { layers, params, onProgress } = options;
+	const { params, onProgress } = options;
+	let { layers } = options;
 	const minZoom = params?.minzoom ?? 0;
 	const maxZoom = params?.maxzoom ?? 14;
 	const layerNames = [...layers.keys()];
@@ -135,11 +148,12 @@ export async function generateMultiLayerPMTiles(options: MultiLayerPMTilesOption
 
 	// 1. Compute combined bounds
 	onProgress?.('Computing bounds...', 0);
-	const allFeatures: GeoJSON.Feature[] = [];
+	let allFeatures: GeoJSON.Feature[] | null = [];
 	for (const fc of layers.values()) {
 		for (const f of fc.features) allFeatures.push(f);
 	}
 	const bounds = computeBounds({ type: 'FeatureCollection', features: allFeatures });
+	allFeatures = null;
 
 	// 2. Create a geojson-vt index per layer
 	onProgress?.('Slicing features into tiles...', 0.05);
@@ -154,6 +168,10 @@ export async function generateMultiLayerPMTiles(options: MultiLayerPMTilesOption
 			buffer: 64,
 		}));
 	}
+
+	// Release FeatureCollections — geojson-vt owns the data now
+	layers = null as any;
+	await new Promise(resolve => setTimeout(resolve, 0));
 
 	// 3. Enumerate tiles, encode MVT with all layers per tile
 	const tileEntries: { tileId: number; data: Uint8Array }[] = [];
@@ -199,6 +217,10 @@ export async function generateMultiLayerPMTiles(options: MultiLayerPMTilesOption
 
 		onProgress?.(`Zoom ${z}/${maxZoom}: ${tileCount} tiles`, 0.1 + ((z - minZoom + 1) / totalZooms) * 0.8);
 	}
+
+	// Release tile indices before archive assembly
+	tileIndices.clear();
+	await new Promise(resolve => setTimeout(resolve, 0));
 
 	if (tileEntries.length === 0) {
 		throw new Error('No tiles generated from extracted features');
@@ -325,6 +347,8 @@ async function buildPMTilesArchive(
 	for (let i = 0; i < tileDataParts.length; i++) {
 		archive.set(tileDataParts[i], writePos);
 		writePos += tileDataParts[i].length;
+		// Release individual tile buffer after copying into archive
+		tileDataParts[i] = null!;
 
 		if (++sinceLastYield >= 500) {
 			sinceLastYield = 0;

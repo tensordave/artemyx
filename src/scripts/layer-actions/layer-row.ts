@@ -42,6 +42,7 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 	visibilityBtn.className = 'layer-visibility-btn';
 	visibilityBtn.innerHTML = isVisible ? eyeIcon : eyeSlashIcon;
 	visibilityBtn.title = isVisible ? 'Hide layer' : 'Show layer';
+	visibilityBtn.setAttribute('aria-label', isVisible ? `Hide layer ${dataset.name}` : `Show layer ${dataset.name}`);
 
 	// Menu button (⋮) for context menu
 	const menuButton = document.createElement('button');
@@ -49,6 +50,7 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 	menuButton.className = 'layer-menu-btn';
 	menuButton.innerHTML = dotsThreeVerticalIcon;
 	menuButton.title = 'More options';
+	menuButton.setAttribute('aria-label', `More options for ${dataset.name}`);
 
 	// Label with dataset name and feature count
 	const label = document.createElement('label');
@@ -62,6 +64,7 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 		isVisible = !isVisible;
 		visibilityBtn.innerHTML = isVisible ? eyeIcon : eyeSlashIcon;
 		visibilityBtn.title = isVisible ? 'Hide layer' : 'Show layer';
+		visibilityBtn.setAttribute('aria-label', isVisible ? `Hide layer ${dataset.name}` : `Show layer ${dataset.name}`);
 		callbacks.onToggleVisibility(dataset.id, isVisible);
 	});
 
@@ -89,6 +92,7 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 	upBtn.className = 'layer-reorder-btn';
 	upBtn.innerHTML = arrowUpIcon;
 	upBtn.title = 'Move up';
+	upBtn.setAttribute('aria-label', `Move ${dataset.name} up`);
 	if (callbacks.onMoveUp) {
 		upBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
@@ -103,6 +107,7 @@ export function createLayerRow(dataset: Dataset, callbacks: LayerRowCallbacks): 
 	downBtn.className = 'layer-reorder-btn';
 	downBtn.innerHTML = arrowDownIcon;
 	downBtn.title = 'Move down';
+	downBtn.setAttribute('aria-label', `Move ${dataset.name} down`);
 	if (callbacks.onMoveDown) {
 		downBtn.addEventListener('click', (e) => {
 			e.stopPropagation();

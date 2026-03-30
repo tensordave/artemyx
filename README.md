@@ -29,8 +29,10 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - Address search via Photon geocoding (OSM data, no API key)
 - Scale bar (metric/imperial) and mouse coordinate display (decimal degrees / DMS toggle)
 - Feature inspection with property popups and hover tooltips
-- Config-driven outputs with format selection (GeoJSON, CSV, Parquet, PMTiles) and zip download
+- Config-driven outputs with format selection (GeoJSON, CSV, Parquet, PMTiles), visual form builder, and zip download
 - PMTiles extraction from remote vector tile archives with tile decoding and feature deduplication
+- Keyboard shortcuts for all controls with shortcut key tooltips
+- Accessibility: ARIA labels, focus trapping in panels, screen reader announcements, text-beside-icons toggle
 - Fully client-side - no backend required
 
 ## Tech Stack
@@ -47,7 +49,7 @@ src/scripts/
 ├── config/            # YAML parsing, validation, operations graph
 │   ├── parser.ts      # Config loading and validation
 │   ├── types.ts       # MapConfig, DatasetConfig, OperationConfig
-│   ├── validators/    # Domain-specific validation (datasets, operations, layers, shared)
+│   ├── validators/    # Domain-specific validation (datasets, operations, layers, outputs, shared)
 │   ├── operations-graph.ts  # Dependency resolution, topological sort
 │   ├── executor.ts    # Spatial operation execution
 │   ├── generator.ts   # Generate YAML config from current session state
@@ -55,7 +57,7 @@ src/scripts/
 │   ├── export-viewer.ts    # Export viewer-ready ZIP (config + data files)
 │   ├── output-executor.ts  # Config-driven output execution (GeoJSON, CSV, Parquet, PMTiles)
 │   ├── output-types.ts     # Output format types and PMTiles params
-│   └── operations/    # One file per operation (buffer, intersection, union, ...) + shared render.ts
+│   └── operations/    # One file per operation (buffer, intersection, union, ...) + unit-conversion.ts + shared render.ts
 ├── db/                # DuckDB-WASM (runs in Web Worker)
 │   ├── worker.ts      # Module worker entry point, message dispatch, full load pipeline
 │   ├── worker-types.ts # Typed discriminated union message protocol
@@ -87,6 +89,7 @@ src/scripts/
 │   ├── load-config.ts # YAML config batch loading
 │   └── load-pmtiles.ts # PMTiles vector tile loading (header, layers, sources)
 ├── logger/            # Logging abstraction
+│   ├── index.ts       # Barrel re-export
 │   ├── types.ts       # Logger interface (progress, info, warn)
 │   └── browser.ts     # BrowserLogger wrapping ProgressControl
 ├── layers/            # MapLibre layer creation
@@ -99,6 +102,7 @@ src/scripts/
 │   ├── layer-row.ts   # Row DOM, inline rename
 │   └── rename.ts      # Dataset ID cascading rename
 ├── controls/          # MapLibre custom map controls
+│   ├── index.ts              # Barrel re-export
 │   ├── data-control.ts       # Load data from URL with advanced options (CRS, format, columns)
 │   ├── upload-control.ts     # Local file upload (drag-and-drop, file picker)
 │   ├── config-control.ts     # Config editor (edit, run, clear, import, generate, export) with live Shiki highlighting
@@ -110,19 +114,23 @@ src/scripts/
 │   ├── geocoding-control.ts  # Address search via Photon geocoding
 │   ├── basemap-control.ts    # Basemap switcher
 │   ├── scale-control.ts      # Scale bar, coordinate display (DD/DMS)
+│   ├── label-toggle-control.ts  # Toggle text labels beside icon buttons
 │   ├── progress-control.ts   # Status log with expandable history
 │   └── popup.ts              # Feature popup and hover tooltip utilities
 ├── ui/                # Reusable UI components
 │   ├── error-dialog.ts
 │   ├── advanced-options.ts  # DataControl advanced options panel
+│   ├── button-labels.ts    # Expand/collapse text labels on control buttons
 │   └── safari-banner.ts    # Dismissible Safari compatibility warning
 ├── utils/             # Shared utilities
+│   ├── focus-trap.ts        # Focus trapping for modal panels
 │   ├── highlight-config.ts  # Shiki YAML highlighting helper
 │   ├── shiki.ts             # Shiki instance and theme management
 │   └── safari-detect.ts     # Safari/WebKit detection
 ├── examples/          # Example registry and routing
 ├── icons/             # Phosphor SVG icon strings
 ├── db.ts              # DuckDB singleton reference (main thread)
+├── shortcuts.ts       # Keyboard shortcut bindings for all controls
 ├── teardown.ts        # Clean teardown (remove all datasets, sources, layers)
 ├── map.ts             # MapLibre init + config loading (entry point)
 └── basemaps.ts        # Basemap tile configurations

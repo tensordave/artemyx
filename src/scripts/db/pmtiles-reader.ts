@@ -538,7 +538,7 @@ export async function extractPMTilesAndRebuild(
 	const { outputParams, onProgress } = options;
 
 	// Stage 1+2: Extract and deduplicate
-	const extracted = await extractPMTilesFeatures(options);
+	let extracted: ExtractedFeatures | null = await extractPMTilesFeatures(options);
 
 	// Stage 3: Re-tile into a new PMTiles archive
 	const layerNames = [...extracted.layers.keys()];
@@ -547,8 +547,11 @@ export async function extractPMTilesAndRebuild(
 	if (isMultiLayer) {
 		// Multi-layer: use the multi-layer writer
 		const { generateMultiLayerPMTiles } = await import('./pmtiles-writer');
+		// Pass layers to writer, then release extraction data
+		const layers = extracted.layers;
+		extracted = null;
 		return generateMultiLayerPMTiles({
-			layers: extracted.layers,
+			layers,
 			params: outputParams,
 			onProgress: (msg, p) => {
 				// Remap progress from 0-1 to 0.62-0.98
@@ -561,6 +564,8 @@ export async function extractPMTilesAndRebuild(
 		const { generatePMTiles } = await import('./pmtiles-writer');
 		const layerName = layerNames[0];
 		const fc = extracted.layers.get(layerName)!;
+		// Release extraction data — writer owns the FeatureCollection now
+		extracted = null;
 
 		return generatePMTiles({
 			datasetId: layerName,

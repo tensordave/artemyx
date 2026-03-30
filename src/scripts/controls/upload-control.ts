@@ -29,6 +29,7 @@ export class UploadControl implements maplibregl.IControl {
 	private onPanelOpenCb?: () => void;
 	private onEsc: (e: KeyboardEvent) => void;
 	private onDocPointerDown: (e: PointerEvent) => void;
+	private previousFocus: HTMLElement | null = null;
 
 	setOnPanelOpen(cb: () => void): void {
 		this.onPanelOpenCb = cb;
@@ -51,6 +52,7 @@ export class UploadControl implements maplibregl.IControl {
 
 		this.onDocPointerDown = (e: PointerEvent) => {
 			if (!this.container?.contains(e.target as Node)) {
+				this.previousFocus = null;
 				this.closePanel();
 			}
 		};
@@ -87,7 +89,9 @@ export class UploadControl implements maplibregl.IControl {
 		this.button.type = 'button';
 		this.button.className = 'control-btn';
 		this.button.innerHTML = fileArrowUpIcon;
-		this.button.title = 'Upload File';
+		this.button.title = 'Upload File (U)';
+		this.button.setAttribute('aria-label', 'Upload File');
+		this.button.setAttribute('aria-expanded', 'false');
 		this.container.appendChild(this.button);
 
 		// Panel
@@ -167,16 +171,30 @@ export class UploadControl implements maplibregl.IControl {
 	}
 
 	private openPanel() {
+		this.previousFocus = document.activeElement as HTMLElement | null;
 		this.panel?.classList.add('control-panel--open');
+		this.button?.setAttribute('aria-expanded', 'true');
 		this.onPanelOpenCb?.();
 		document.addEventListener('keydown', this.onEsc);
 		document.addEventListener('pointerdown', this.onDocPointerDown);
 	}
 
+	togglePanel(): void {
+		const isOpen = this.panel?.classList.contains('control-panel--open');
+		if (isOpen) {
+			this.closePanel();
+		} else {
+			this.openPanel();
+		}
+	}
+
 	closePanel() {
 		this.panel?.classList.remove('control-panel--open');
+		this.button?.setAttribute('aria-expanded', 'false');
 		document.removeEventListener('keydown', this.onEsc);
 		document.removeEventListener('pointerdown', this.onDocPointerDown);
+		if (this.previousFocus?.isConnected) this.previousFocus.focus();
+		this.previousFocus = null;
 	}
 
 	private clearDragState() {

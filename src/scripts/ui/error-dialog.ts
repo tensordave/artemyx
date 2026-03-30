@@ -1,14 +1,20 @@
+import { createFocusTrap } from '../utils/focus-trap';
+
 /**
  * Show a styled error dialog as a modal overlay.
  * Matches the dark theme styling used throughout the app.
  */
 export function showErrorDialog(title: string, message: string): Promise<void> {
 	return new Promise((resolve) => {
+		const previousFocus = document.activeElement as HTMLElement | null;
 		const overlay = document.createElement('div');
 		overlay.className = 'dialog-overlay';
 
 		const dialog = document.createElement('div');
 		dialog.className = 'dialog-box';
+		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
+		dialog.setAttribute('aria-label', title);
 
 		const titleEl = document.createElement('div');
 		titleEl.textContent = title;
@@ -26,7 +32,9 @@ export function showErrorDialog(title: string, message: string): Promise<void> {
 
 		// Close handlers
 		const close = () => {
+			trap.deactivate();
 			document.body.removeChild(overlay);
+			if (previousFocus?.isConnected) previousFocus.focus();
 			resolve();
 		};
 
@@ -53,7 +61,8 @@ export function showErrorDialog(title: string, message: string): Promise<void> {
 		overlay.appendChild(dialog);
 		document.body.appendChild(overlay);
 
-		// Focus OK button
+		const trap = createFocusTrap(dialog);
+		trap.activate();
 		okButton.focus();
 	});
 }
@@ -64,11 +73,15 @@ export function showErrorDialog(title: string, message: string): Promise<void> {
  */
 export function showCrsPromptDialog(): Promise<string | null> {
 	return new Promise((resolve) => {
+		const previousFocus = document.activeElement as HTMLElement | null;
 		const overlay = document.createElement('div');
 		overlay.className = 'dialog-overlay';
 
 		const dialog = document.createElement('div');
 		dialog.className = 'dialog-box';
+		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
+		dialog.setAttribute('aria-label', 'Projected Coordinate System Detected');
 
 		const titleEl = document.createElement('div');
 		titleEl.className = 'dialog-title dialog-title--warn';
@@ -102,8 +115,10 @@ export function showCrsPromptDialog(): Promise<string | null> {
 		reprojectButton.textContent = 'Reproject';
 
 		const close = (result: string | null) => {
+			trap.deactivate();
 			document.removeEventListener('keydown', handleKeydown);
 			document.body.removeChild(overlay);
+			if (previousFocus?.isConnected) previousFocus.focus();
 			resolve(result);
 		};
 
@@ -151,6 +166,8 @@ export function showCrsPromptDialog(): Promise<string | null> {
 		overlay.appendChild(dialog);
 		document.body.appendChild(overlay);
 
+		const trap = createFocusTrap(dialog);
+		trap.activate();
 		input.focus();
 	});
 }
@@ -164,11 +181,15 @@ export function showFilePromptDialog(
 	filenameHint?: string
 ): Promise<File | null> {
 	return new Promise((resolve) => {
+		const previousFocus = document.activeElement as HTMLElement | null;
 		const overlay = document.createElement('div');
 		overlay.className = 'dialog-overlay';
 
 		const dialog = document.createElement('div');
 		dialog.className = 'dialog-box';
+		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
+		dialog.setAttribute('aria-label', 'Missing Dataset');
 
 		const titleEl = document.createElement('div');
 		titleEl.className = 'dialog-title dialog-title--warn';
@@ -207,8 +228,10 @@ export function showFilePromptDialog(
 		let selectedFile: File | null = null;
 
 		const close = (result: File | null) => {
+			trap.deactivate();
 			document.removeEventListener('keydown', handleKeydown);
 			document.body.removeChild(overlay);
+			if (previousFocus?.isConnected) previousFocus.focus();
 			resolve(result);
 		};
 
@@ -248,6 +271,8 @@ export function showFilePromptDialog(
 		overlay.appendChild(dialog);
 		document.body.appendChild(overlay);
 
+		const trap = createFocusTrap(dialog);
+		trap.activate();
 		chooseButton.focus();
 	});
 }
@@ -258,11 +283,15 @@ export function showFilePromptDialog(
  */
 export function showConfirmDialog(title: string, message: string): Promise<boolean> {
 	return new Promise((resolve) => {
+		const previousFocus = document.activeElement as HTMLElement | null;
 		const overlay = document.createElement('div');
 		overlay.className = 'dialog-overlay';
 
 		const dialog = document.createElement('div');
 		dialog.className = 'dialog-box';
+		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
+		dialog.setAttribute('aria-label', title);
 
 		const titleEl = document.createElement('div');
 		titleEl.textContent = title;
@@ -286,7 +315,9 @@ export function showConfirmDialog(title: string, message: string): Promise<boole
 		continueButton.className = 'dialog-btn dialog-btn--primary';
 
 		const close = (result: boolean) => {
+			trap.deactivate();
 			document.body.removeChild(overlay);
+			if (previousFocus?.isConnected) previousFocus.focus();
 			resolve(result);
 		};
 
@@ -314,6 +345,8 @@ export function showConfirmDialog(title: string, message: string): Promise<boole
 		overlay.appendChild(dialog);
 		document.body.appendChild(overlay);
 
+		const trap = createFocusTrap(dialog);
+		trap.activate();
 		cancelButton.focus();
 	});
 }

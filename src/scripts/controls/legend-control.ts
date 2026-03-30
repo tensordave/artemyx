@@ -301,6 +301,7 @@ export class LegendControl implements IControl {
 	private map: MaplibreMap | null = null;
 	private container: HTMLDivElement | null = null;
 	private content: HTMLDivElement | null = null;
+	private header: HTMLDivElement | null = null;
 	private expanded: boolean;
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private boundScheduleRebuild = () => this.scheduleRebuild();
@@ -326,6 +327,18 @@ export class LegendControl implements IControl {
 		const header = document.createElement('div');
 		header.className = 'legend-header';
 		header.addEventListener('click', () => this.toggle());
+		header.title = 'Legend (E)';
+		header.setAttribute('aria-label', 'Legend');
+		header.setAttribute('role', 'button');
+		header.setAttribute('aria-expanded', String(this.expanded));
+		header.tabIndex = 0;
+		header.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				this.toggle();
+			}
+		});
+		this.header = header;
 
 		const icon = document.createElement('span');
 		icon.className = 'legend-header-icon';
@@ -367,6 +380,7 @@ export class LegendControl implements IControl {
 		this.map = null;
 		this.container = null;
 		this.content = null;
+		this.header = null;
 	}
 
 	/** Public: trigger a legend refresh from outside. */
@@ -374,9 +388,14 @@ export class LegendControl implements IControl {
 		this.scheduleRebuild();
 	}
 
+	togglePanel(): void {
+		this.toggle();
+	}
+
 	private toggle(): void {
 		this.expanded = !this.expanded;
 		this.container?.classList.toggle('legend-control--collapsed', !this.expanded);
+		this.header?.setAttribute('aria-expanded', String(this.expanded));
 		localStorage.setItem(STORAGE_KEY, String(this.expanded));
 	}
 

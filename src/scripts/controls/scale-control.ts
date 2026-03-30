@@ -74,6 +74,7 @@ export class ScaleBarControl implements IControl {
 		this.toggleBtn.type = 'button';
 		this.toggleBtn.className = 'scale-unit-btn';
 		this.toggleBtn.title = 'Toggle scale units';
+		this.toggleBtn.setAttribute('aria-label', 'Toggle scale units');
 		this.toggleBtn.addEventListener('click', () => this.toggle());
 
 		scaleRow.appendChild(this.bar);
@@ -91,6 +92,7 @@ export class ScaleBarControl implements IControl {
 		this.coordFormatBtn.type = 'button';
 		this.coordFormatBtn.className = 'coord-format-btn';
 		this.coordFormatBtn.title = 'Toggle coordinate format';
+		this.coordFormatBtn.setAttribute('aria-label', 'Toggle coordinate format');
 		this.coordFormatBtn.addEventListener('click', () => this.toggleCoordFormat());
 
 		coordRow.appendChild(this.coordLabel);

@@ -7,6 +7,7 @@
 	left: 50%;
 	transform: translate(-50%, -50%);
 	width: 380px;
+	max-height: 80vh;
 	background-color: rgba(26, 26, 26, 0.95);
 	border: 1px solid #444;
 	border-radius: 8px;
@@ -79,11 +80,17 @@
 	border-bottom: 2px solid #555;
 }
 
+/* ── Scroll wrapper (builder + body, everything below the header) */
+
+.outputs-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
 /* ── Body ─────────────────────────────────────────────────────── */
 
 .outputs-body {
-	flex: 1;
-	overflow-y: auto;
 	padding: 12px 0;
 }
 
@@ -491,6 +498,159 @@
 	color: #ef4444;
 }
 
+/* ── Output Builder (collapsible form) ───────────────────────── */
+
+.outputs-builder-section {
+	padding: 0 16px;
+}
+
+.outputs-builder-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	font-size: 11px;
+	font-weight: 600;
+	color: #94a3b8;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	padding: 8px 0;
+	user-select: none;
+}
+
+.outputs-builder-toggle:hover {
+	color: #d4d4d4;
+}
+
+.outputs-builder-chevron {
+	display: inline-block;
+	font-size: 10px;
+	transition: transform 0.15s;
+}
+
+.outputs-builder-chevron--open {
+	transform: rotate(90deg);
+}
+
+.outputs-builder {
+	display: none;
+	padding-bottom: 8px;
+}
+
+.outputs-builder--open {
+	display: block;
+}
+
+/* Source rows for multi-source PMTiles */
+
+.outputs-source-row {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.outputs-source-row select {
+	flex: 1;
+}
+
+.outputs-source-remove {
+	background: none;
+	border: 1px solid #444;
+	border-radius: 4px;
+	color: #888;
+	font-size: 14px;
+	width: 28px;
+	height: 28px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.outputs-source-remove:hover {
+	color: #ef4444;
+	border-color: #ef4444;
+}
+
+.outputs-source-remove:disabled {
+	opacity: 0.3;
+	cursor: not-allowed;
+}
+
+.outputs-add-source-btn {
+	background: none;
+	border: 1px dashed #444;
+	border-radius: 4px;
+	color: #94a3b8;
+	font-size: 12px;
+	padding: 4px 8px;
+	cursor: pointer;
+	width: 100%;
+	margin-bottom: 14px;
+}
+
+.outputs-add-source-btn:hover {
+	color: #d4d4d4;
+	border-color: #666;
+}
+
+/* Bbox grid and "Use current view" button */
+
+.outputs-bbox-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+
+.outputs-bbox-action {
+	margin-bottom: 14px;
+}
+
+.outputs-bbox-btn {
+	background: none;
+	border: 1px solid rgba(51, 136, 255, 0.25);
+	border-radius: 4px;
+	color: #94a3b8;
+	font-size: 11px;
+	padding: 4px 8px;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.outputs-bbox-btn:hover {
+	color: #3388ff;
+	border-color: #3388ff;
+}
+
+.outputs-bbox-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Add to Config button */
+
+.outputs-add-btn {
+	width: 100%;
+	padding: 8px 16px;
+	background-color: rgba(34, 197, 94, 0.15);
+	border: 1px solid rgba(34, 197, 94, 0.3);
+	border-radius: 4px;
+	color: #22c55e;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	margin-top: 8px;
+}
+
+.outputs-add-btn:hover {
+	background-color: rgba(34, 197, 94, 0.25);
+}
+
 /* ── Mobile ───────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -510,6 +670,10 @@
 	}
 
 	.outputs-resize-handle {
+		display: none;
+	}
+
+	.outputs-builder-section {
 		display: none;
 	}
 }

@@ -31,10 +31,12 @@ export class GeocodingControl implements IControl {
 	private currentFeatures: PhotonFeature[] = [];
 	private onPanelOpen?: () => void;
 	private onDocPointerDown: (e: PointerEvent) => void;
+	private previousFocus: HTMLElement | null = null;
 
 	constructor() {
 		this.onDocPointerDown = (e: PointerEvent) => {
 			if (!this.container?.contains(e.target as Node)) {
+				this.previousFocus = null;
 				this.closePanel();
 			}
 		};
@@ -55,7 +57,9 @@ export class GeocodingControl implements IControl {
 		this.button.type = 'button';
 		this.button.className = 'control-btn';
 		this.button.innerHTML = magnifyingGlassIcon;
-		this.button.title = 'Search location';
+		this.button.title = 'Search location (/)';
+		this.button.setAttribute('aria-label', 'Search location');
+		this.button.setAttribute('aria-expanded', 'false');
 		this.container.appendChild(this.button);
 
 		this.panel = document.createElement('div');
@@ -77,7 +81,9 @@ export class GeocodingControl implements IControl {
 		this.button.addEventListener('click', () => {
 			if (!this.panel) return;
 			const isOpen = this.panel.classList.toggle('control-panel--open');
+			this.button!.setAttribute('aria-expanded', String(isOpen));
 			if (isOpen) {
+				this.previousFocus = document.activeElement as HTMLElement | null;
 				this.onPanelOpen?.();
 				this.input?.focus();
 				document.addEventListener('pointerdown', this.onDocPointerDown);
@@ -139,9 +145,27 @@ export class GeocodingControl implements IControl {
 		this.resultsList = null;
 	}
 
+	togglePanel(): void {
+		if (!this.panel) return;
+		const isOpen = this.panel.classList.contains('control-panel--open');
+		if (isOpen) {
+			this.closePanel();
+		} else {
+			this.previousFocus = document.activeElement as HTMLElement | null;
+			this.panel.classList.add('control-panel--open');
+			this.button?.setAttribute('aria-expanded', 'true');
+			this.onPanelOpen?.();
+			this.input?.focus();
+			document.addEventListener('pointerdown', this.onDocPointerDown);
+		}
+	}
+
 	closePanel(): void {
 		this.panel?.classList.remove('control-panel--open');
+		this.button?.setAttribute('aria-expanded', 'false');
 		document.removeEventListener('pointerdown', this.onDocPointerDown);
+		if (this.previousFocus?.isConnected) this.previousFocus.focus();
+		this.previousFocus = null;
 	}
 
 	private clearDebounce(): void {

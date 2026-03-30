@@ -1,4 +1,5 @@
 export { BasemapControl } from './basemap-control';
+export { LabelToggleControl } from './label-toggle-control';
 export { ConfigControl } from './config-control';
 export { DataControl } from './data-control';
 export { OperationBuilderControl } from './operation-builder-control';

@@ -125,8 +125,8 @@ export async function loadDatasetsFromConfig(
 						if (restoredSourceLayer && !skipLayers) {
 							const layerIds = addDefaultVectorLayers(map, sourceId, dataset.id, color, style, restoredSourceLayer);
 							if (layerIds.length > 0) {
-								const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label: displayName });
-								attachFeatureClickHandlers(map, layerIds, hoverPopup);
+								attachFeatureHoverHandlers(map, layerIds, { label: displayName });
+								attachFeatureClickHandlers(map, layerIds);
 							}
 						}
 					}

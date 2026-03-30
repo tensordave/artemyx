@@ -26,6 +26,27 @@
 	background-color: rgba(51, 136, 255, 0.3) !important;
 }
 
+/* Focus-visible ring for keyboard navigation */
+.control-btn:focus-visible,
+.control-submit:focus-visible,
+.dialog-btn:focus-visible,
+.basemap-option:focus-visible,
+.layer-visibility-btn:focus-visible,
+.layer-menu-btn:focus-visible,
+.layer-reorder-btn:focus-visible,
+.config-viewer-action-btn:focus-visible,
+.config-viewer-close:focus-visible,
+.outputs-run-btn:focus-visible,
+.outputs-dl:focus-visible,
+.storage-action-btn:focus-visible,
+.upload-browse-btn:focus-visible,
+.geocoding-result-item:focus-visible,
+.ob-select:focus-visible,
+.ob-run-btn:focus-visible {
+	outline: 2px solid #3388ff;
+	outline-offset: -2px;
+}
+
 /* Control dropdown panel */
 .control-panel {
 	display: none;
@@ -43,11 +64,11 @@
 }
 
 .control-panel--left {
-	left: 40px;
+	left: calc(100% + 11px);
 }
 
 .control-panel--right {
-	right: 40px;
+	right: calc(100% + 11px);
 }
 
 /* Control text input */
@@ -93,6 +114,25 @@
 	cursor: not-allowed;
 }
 
+/* Button text labels (toggle via .show-labels on map container) */
+.control-btn-label {
+	display: none;
+	font-size: 11px;
+	font-weight: 500;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+.show-labels .maplibregl-ctrl .control-btn {
+	width: auto !important;
+	padding: 0 8px 0 6px;
+	gap: 4px;
+}
+
+.show-labels .control-btn-label {
+	display: inline;
+}
+
 /* Prevent iOS Safari auto-zoom on input focus (triggers at font-size < 16px) */
 @media screen and (max-width: 767px) {
 	.control-input,
@@ -101,5 +141,15 @@
 	.layer-rename-input,
 	.style-select {
 		font-size: 16px !important;
+	}
+
+	/* Force-hide button labels on mobile regardless of toggle */
+	.show-labels .control-btn-label {
+		display: none;
+	}
+
+	.show-labels .maplibregl-ctrl .control-btn {
+		width: 29px !important;
+		padding: 0;
 	}
 }

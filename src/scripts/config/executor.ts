@@ -69,8 +69,8 @@ export async function executeOperations(
 
 	// Centralized popup/hover handler attachment for all operations
 	const onLayersCreated = (layerIds: string[], label: string) => {
-		const hoverPopup = attachFeatureHoverHandlers(map, layerIds, { label });
-		attachFeatureClickHandlers(map, layerIds, hoverPopup);
+		attachFeatureHoverHandlers(map, layerIds, { label });
+		attachFeatureClickHandlers(map, layerIds);
 	};
 
 	for (let i = 0; i < plan.order.length; i++) {
