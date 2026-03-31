@@ -171,6 +171,9 @@ Items worth building eventually but not yet assigned to a version:
 
 ## Completed
 
+### v0.8.1 - Outputs for Local Files
+- Outputs panel config detection fix (render refresh after Outputs Helper injection), streamlined local file output workflow (direct output generation without config editor roundtrip), PMTiles operation gate (exclude PMTile-based datasets from Operation Builder selection)
+
 ### v0.8.0 - Accessibility, Shortcuts and Polish
 - Keyboard shortcuts (L/P/I/U/C/T/O/X/B/E/Esc/WASD/R/F) with tooltip hints and text-beside-icons toggle, ARIA labels and roles on interactive elements with screen reader announcements, focus trapping in open panels with return-to-trigger on close, feature popup fix for overlapping layers (single top-most popup), Outputs Helper form builder (format-aware fields, PMTiles params, live YAML preview, config injection), PMTiles first-run reload fix, Outputs panel scroll fix
 

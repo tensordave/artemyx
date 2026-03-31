@@ -4,7 +4,7 @@ import type { OutputResult } from '../config/output-types';
 import { revokeOutputBlobs } from '../config/output-types';
 import { executeOutputs, checkSourcesExist } from '../config/output-executor';
 import { exportViewerZip } from '../config/export-viewer';
-import { parseConfig, VALID_OUTPUT_FORMATS } from '../config/parser';
+import { VALID_OUTPUT_FORMATS } from '../config/parser';
 import { validateOutput } from '../config/validators/outputs';
 import { addProgressListener, removeProgressListener, getDatasets } from '../db';
 import type { ProgressListener } from '../db';
@@ -793,6 +793,14 @@ export class OutputsControl implements IControl {
 		this.showBuilderStatus('success', 'Output added to config');
 		this.updateRunButtonState();
 
+		// Refresh empty-state message to reflect newly-injected outputs
+		const emptyEl = this.outputsBody?.querySelector('.outputs-empty');
+		if (emptyEl) {
+			emptyEl.textContent = this.hasOutputsInConfig()
+				? 'Click "Run Outputs" to generate files.'
+				: 'No outputs defined in config.';
+		}
+
 		// Reset filename for next entry
 		if (this.filenameInput) this.filenameInput.value = '';
 		this.schedulePreviewUpdate();
@@ -925,8 +933,8 @@ export class OutputsControl implements IControl {
 
 	private hasOutputsInConfig(): boolean {
 		try {
-			const config = parseConfig(this.options.getYaml());
-			return !!(config.outputs && config.outputs.length > 0);
+			const parsed = yaml.load(this.options.getYaml()) as Record<string, unknown> | null;
+			return !!(parsed && Array.isArray(parsed.outputs) && parsed.outputs.length > 0);
 		} catch {
 			return false;
 		}
@@ -981,20 +989,37 @@ export class OutputsControl implements IControl {
 	private async handleRunOutputs(): Promise<void> {
 		if (this.isOutputsExecuting) return;
 
-		let config;
+		// Parse outputs from raw YAML to support sources not in config datasets
+		// (e.g. locally uploaded files stored only in DuckDB)
+		let parsed: Record<string, unknown> | null;
 		try {
-			config = parseConfig(this.options.getYaml());
+			parsed = yaml.load(this.options.getYaml()) as Record<string, unknown> | null;
 		} catch {
 			return;
 		}
-		if (!config.outputs || config.outputs.length === 0) return;
+		if (!parsed || !Array.isArray(parsed.outputs) || parsed.outputs.length === 0) return;
 
-		// Pre-check sources
-		const { allExist, missing } = await checkSourcesExist(config.outputs);
+		// Validate each output's structure (format, source fields, params)
+		const outputs = parsed.outputs as import('../config/types').OutputConfig[];
+		for (let i = 0; i < outputs.length; i++) {
+			const errors = validateOutput(outputs[i], i);
+			if (errors.length > 0) {
+				this.showNotice(errors);
+				return;
+			}
+		}
+
+		// Pre-check sources exist in DuckDB
+		const { allExist, missing } = await checkSourcesExist(outputs);
 		if (!allExist) {
 			this.showNotice(missing);
 			return;
 		}
+
+		// Resolve config datasets for PMTiles extraction URL lookup
+		const datasets = Array.isArray(parsed.datasets)
+			? parsed.datasets as import('../config/types').DatasetConfig[]
+			: undefined;
 
 		// Start execution
 		this.isOutputsExecuting = true;
@@ -1003,11 +1028,11 @@ export class OutputsControl implements IControl {
 
 		revokeOutputBlobs(this.outputResults);
 		this.pmtilesSourceIds = new Set(
-			config.outputs.filter(o => o.format === 'pmtiles').map(o =>
+			outputs.filter(o => o.format === 'pmtiles').map(o =>
 				Array.isArray(o.source) ? (o.filename || o.source[0]) : o.source
 			)
 		);
-		this.outputResults = config.outputs.map(o => {
+		this.outputResults = outputs.map(o => {
 			const sourceKey = Array.isArray(o.source) ? (o.filename || o.source[0]) : o.source;
 			return {
 				source: sourceKey,
@@ -1051,11 +1076,11 @@ export class OutputsControl implements IControl {
 		addProgressListener(this.statusLineListener);
 
 		try {
-			const finalResults = await executeOutputs(config.outputs, (i, result) => {
+			const finalResults = await executeOutputs(outputs, (i, result) => {
 				this.outputResults[i] = result;
 				this.updateOutputRow(i);
 				this.updateOverallProgress();
-			}, config.datasets);
+			}, datasets);
 			this.outputResults = finalResults;
 			this.renderBody();
 		} catch (e) {

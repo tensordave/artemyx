@@ -123,18 +123,23 @@ function validateConfig(config: unknown): ValidationResult {
 
 	// Collect dataset IDs for operation validation (needed to check for shadowing)
 	const datasetIds = new Set<string>();
+	const pmtilesDatasetIds = new Set<string>();
 	if (Array.isArray(obj.datasets)) {
 		obj.datasets.forEach((d) => {
 			const dataset = d as Record<string, unknown>;
 			if (typeof dataset?.id === 'string') {
 				datasetIds.add(dataset.id);
+				if (dataset.format === 'pmtiles' ||
+					(typeof dataset.url === 'string' && dataset.url.endsWith('.pmtiles'))) {
+					pmtilesDatasetIds.add(dataset.id);
+				}
 			}
 		});
 	}
 
 	// Validate operations (optional section)
 	if ('operations' in obj) {
-		errors.push(...validateOperations(obj.operations, datasetIds));
+		errors.push(...validateOperations(obj.operations, datasetIds, pmtilesDatasetIds));
 	}
 
 	// Collect operation output IDs for layer source validation
@@ -154,20 +159,6 @@ function validateConfig(config: unknown): ValidationResult {
 	// Validate layers (optional section)
 	if ('layers' in obj) {
 		errors.push(...validateLayers(obj.layers, validSourceIds));
-	}
-
-	// Collect PMTiles dataset IDs for output validation (PMTiles sources rejected)
-	const pmtilesDatasetIds = new Set<string>();
-	if (Array.isArray(obj.datasets)) {
-		obj.datasets.forEach((d) => {
-			const dataset = d as Record<string, unknown>;
-			if (typeof dataset?.id === 'string') {
-				if (dataset.format === 'pmtiles' ||
-					(typeof dataset.url === 'string' && dataset.url.endsWith('.pmtiles'))) {
-					pmtilesDatasetIds.add(dataset.id);
-				}
-			}
-		});
 	}
 
 	// Validate outputs (optional section)

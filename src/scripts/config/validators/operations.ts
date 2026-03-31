@@ -246,7 +246,11 @@ export function validateOperation(op: unknown, index: number): string[] {
  * Validate the operations array if present.
  * Checks structure and duplicate outputs. Does NOT validate dependency graph.
  */
-export function validateOperations(operations: unknown, datasetIds: Set<string>): string[] {
+export function validateOperations(
+	operations: unknown,
+	datasetIds: Set<string>,
+	pmtilesDatasetIds: Set<string> = new Set(),
+): string[] {
 	const errors: string[] = [];
 
 	if (!Array.isArray(operations)) {
@@ -277,6 +281,23 @@ export function validateOperations(operations: unknown, datasetIds: Set<string>)
 	// Validate each operation
 	operations.forEach((op, index) => {
 		errors.push(...validateOperation(op, index));
+
+		// Reject PMTiles datasets as operation inputs (no feature data in DuckDB)
+		const o = op as Record<string, unknown>;
+		if (typeof o?.input === 'string' && pmtilesDatasetIds.has(o.input)) {
+			errors.push(
+				`operations[${index}].input: '${o.input}' is a PMTiles dataset (no feature data for operations)`,
+			);
+		}
+		if (Array.isArray(o?.inputs)) {
+			o.inputs.forEach((inp, i) => {
+				if (typeof inp === 'string' && pmtilesDatasetIds.has(inp)) {
+					errors.push(
+						`operations[${index}].inputs[${i}]: '${inp}' is a PMTiles dataset (no feature data for operations)`,
+					);
+				}
+			});
+		}
 	});
 
 	return errors;

@@ -29,6 +29,7 @@ export interface OperationBuilderOptions {
 interface DatasetOption {
 	id: string;
 	name: string;
+	format: string | null;
 }
 
 export class OperationBuilderControl implements IControl {
@@ -367,7 +368,9 @@ export class OperationBuilderControl implements IControl {
 		for (const ds of this.datasetOptions) {
 			const opt = document.createElement('option');
 			opt.value = ds.id;
-			opt.textContent = ds.name;
+			const isPMTiles = ds.format === 'pmtiles';
+			opt.textContent = isPMTiles ? `${ds.name} (PMTiles)` : ds.name;
+			if (isPMTiles) opt.disabled = true;
 			select.appendChild(opt);
 		}
 
@@ -720,10 +723,14 @@ export class OperationBuilderControl implements IControl {
 
 		const inputA = this.getInputSelect('input-a')?.value;
 		if (!inputA) return 'Select an input dataset';
+		if (this.datasetOptions.find((d) => d.id === inputA)?.format === 'pmtiles')
+			return 'PMTiles datasets cannot be used in operations';
 
 		if (!this.isUnary()) {
 			const inputB = this.getInputSelect('input-b')?.value;
 			if (!inputB) return 'Select Input B dataset';
+			if (this.datasetOptions.find((d) => d.id === inputB)?.format === 'pmtiles')
+				return 'PMTiles datasets cannot be used in operations';
 		}
 
 		const type = this.getSelectedType();
@@ -1036,6 +1043,7 @@ export class OperationBuilderControl implements IControl {
 			this.datasetOptions = datasets.map((d: any) => ({
 				id: d.id,
 				name: d.name || d.id,
+				format: d.format ?? null,
 			}));
 		} catch {
 			this.datasetOptions = [];

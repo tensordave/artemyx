@@ -9,8 +9,8 @@ import { progressControl } from '../map';
 import { toggleLayerVisibility } from '../layer-actions/visibility';
 import { showDeleteConfirmation, deleteDatasetWithLayers } from '../layer-actions/delete';
 import { createContextMenu, type ContextMenuHandle } from '../layer-actions/context-menu';
-import { createExportItem, createDeleteItem, createMenuDivider } from '../layer-actions/context-menu-items';
-import { exportDatasetAsGeoJSON } from '../layer-actions/export';
+import { createExportItems, createDeleteItem, createMenuDivider } from '../layer-actions/context-menu-items';
+import { exportDatasetAs } from '../layer-actions/export';
 import { buildStyleView, savePendingStyle } from '../layer-actions/style';
 import { createLayerRow, type Dataset } from '../layer-actions/layer-row';
 import { resyncLayerOrder } from '../layers';
@@ -298,20 +298,23 @@ export class LayerToggleControl implements maplibregl.IControl {
 
 		const { menu } = this.contextMenuHandle;
 
-		// Add export item (not available for PMTiles - no feature data in DuckDB)
+		// Add export items (not available for PMTiles - no feature data in DuckDB)
 		if (dataset.format !== 'pmtiles') {
-			const exportItem = createExportItem(async () => {
+			const exportItems = createExportItems(async (format) => {
 				this.closeContextMenu();
-				progressControl.updateProgress(`Exporting "${dataset.name}"...`, 'processing');
+				const formatLabel = format.toUpperCase();
+				progressControl.updateProgress(`Exporting "${dataset.name}" as ${formatLabel}...`, 'processing');
 				try {
-					await exportDatasetAsGeoJSON(dataset.id, dataset.name);
-					progressControl.updateProgress(`Exported "${dataset.name}"`, 'success');
+					await exportDatasetAs(dataset.id, dataset.name, format);
+					progressControl.updateProgress(`Exported "${dataset.name}" as ${formatLabel}`, 'success');
 				} catch (err) {
-					console.error('Export failed:', err);
-					progressControl.updateProgress('Export failed', 'error');
+					console.error(`Export as ${formatLabel} failed:`, err);
+					progressControl.updateProgress(`Export as ${formatLabel} failed`, 'error');
 				}
 			});
-			menu.appendChild(exportItem);
+			for (const item of exportItems) {
+				menu.appendChild(item);
+			}
 		}
 
 		// Add divider before delete

@@ -53,6 +53,26 @@ export function createExportItem(onExport: () => void): HTMLDivElement {
 	return createMenuItem(downloadIcon, 'Export GeoJSON', onExport);
 }
 
+import type { ExportFormat } from './export';
+
+const FORMAT_LABELS: Record<ExportFormat, string> = {
+	geojson: 'Export GeoJSON',
+	csv: 'Export CSV',
+	parquet: 'Export Parquet',
+	pmtiles: 'Export PMTiles',
+};
+
+/**
+ * Create export menu items for all supported formats.
+ */
+export function createExportItems(
+	onExport: (format: ExportFormat) => void
+): HTMLDivElement[] {
+	return (['geojson', 'csv', 'parquet', 'pmtiles'] as ExportFormat[]).map(format =>
+		createMenuItem(downloadIcon, FORMAT_LABELS[format], () => onExport(format))
+	);
+}
+
 /**
  * Create a delete dataset menu item
  *

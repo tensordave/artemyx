@@ -144,6 +144,10 @@
 	border-color: #3388ff;
 }
 
+.ob-select option:disabled {
+	color: #666;
+}
+
 .ob-text-input {
 	width: 100%;
 	padding: 6px 8px;
