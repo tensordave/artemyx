@@ -1,7 +1,7 @@
 {
   "name": "artemyx",
   "type": "module",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
@@ -11,6 +11,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@deck.gl/core": "^9.2.11",
+    "@deck.gl/layers": "^9.2.11",
+    "@deck.gl/mapbox": "^9.2.11",
     "@duckdb/duckdb-wasm": "^1.33.1-dev18.0",
     "@mapbox/vector-tile": "^2.0.4",
     "@maplibre/maplibre-gl-style-spec": "^24.6.0",

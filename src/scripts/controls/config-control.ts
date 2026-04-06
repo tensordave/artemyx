@@ -49,6 +49,7 @@ export class ConfigControl implements IControl {
 	private originalHtml = '';
 	private rawYaml = '';
 	private hasBeenEdited = false;
+	private editorEl: HTMLDivElement | null = null;
 	private highlightEl: HTMLDivElement | null = null;
 	private highlightRafId: number | null = null;
 
@@ -191,6 +192,7 @@ export class ConfigControl implements IControl {
 		this.bodyEl = null;
 		this.fileInput = null;
 		this.highlightEl = null;
+		this.editorEl = null;
 		this.mainBtn = null;
 	}
 
@@ -450,6 +452,7 @@ export class ConfigControl implements IControl {
 		// Build overlay structure: highlight layer (background) + textarea (foreground)
 		const editor = document.createElement('div');
 		editor.className = 'config-viewer-editor';
+		this.editorEl = editor;
 
 		this.highlightEl = document.createElement('div');
 		this.highlightEl.className = 'config-viewer-highlight';
@@ -474,6 +477,7 @@ export class ConfigControl implements IControl {
 
 		// Preserve scroll position across view -> edit transition
 		const savedScroll = this.bodyEl.scrollTop;
+		const savedScrollLeft = this.bodyEl.scrollLeft;
 
 		this.bodyEl.innerHTML = '';
 		this.bodyEl.appendChild(editor);
@@ -488,15 +492,31 @@ export class ConfigControl implements IControl {
 		// Defer until layout settles: auto-grow textarea and restore body scroll
 		requestAnimationFrame(() => {
 			this.autoGrow(textarea);
-			if (this.bodyEl) this.bodyEl.scrollTop = savedScroll;
+			if (this.bodyEl) {
+				this.bodyEl.scrollTop = savedScroll;
+				this.bodyEl.scrollLeft = savedScrollLeft;
+			}
 		});
 	}
 
 	private autoGrow(textarea: HTMLTextAreaElement): void {
 		const savedScroll = this.bodyEl?.scrollTop ?? 0;
+		const savedScrollLeft = this.bodyEl?.scrollLeft ?? 0;
 		textarea.style.height = 'auto';
 		textarea.style.height = `${textarea.scrollHeight}px`;
-		if (this.bodyEl) this.bodyEl.scrollTop = savedScroll;
+
+		// Horizontal: expand editor to fit widest line so body scrolls
+		if (this.editorEl && this.bodyEl) {
+			this.editorEl.style.width = 'auto';
+			const contentWidth = textarea.scrollWidth;
+			const bodyWidth = this.bodyEl.clientWidth;
+			this.editorEl.style.width = contentWidth > bodyWidth ? `${contentWidth}px` : '';
+		}
+
+		if (this.bodyEl) {
+			this.bodyEl.scrollTop = savedScroll;
+			this.bodyEl.scrollLeft = savedScrollLeft;
+		}
 	}
 
 	private autoExpandPanel(textarea: HTMLTextAreaElement, maxRatio = 0.6): void {
@@ -546,6 +566,7 @@ export class ConfigControl implements IControl {
 		// Capture textarea content, scroll position, and clean up highlight state
 		const textarea = this.bodyEl.querySelector('textarea');
 		const savedScroll = this.bodyEl.scrollTop;
+		const savedScrollLeft = this.bodyEl.scrollLeft;
 		if (textarea) {
 			this.rawYaml = textarea.value;
 			this.hasBeenEdited = true;
@@ -553,6 +574,7 @@ export class ConfigControl implements IControl {
 		if (this.highlightRafId) cancelAnimationFrame(this.highlightRafId);
 		this.highlightRafId = null;
 		this.highlightEl = null;
+		this.editorEl = null;
 
 		// Re-enable Run
 		if (this.runBtn) this.runBtn.disabled = false;
@@ -567,12 +589,15 @@ export class ConfigControl implements IControl {
 		pre.appendChild(code);
 		this.bodyEl.appendChild(pre);
 		this.bodyEl.scrollTop = savedScroll;
+		this.bodyEl.scrollLeft = savedScrollLeft;
 
 		highlightAsync(this.rawYaml).then((html) => {
 			if (this.bodyEl && !this.isEditing) {
 				const scrollPos = this.bodyEl.scrollTop;
+				const scrollLeft = this.bodyEl.scrollLeft;
 				this.bodyEl.innerHTML = html;
 				this.bodyEl.scrollTop = scrollPos;
+				this.bodyEl.scrollLeft = scrollLeft;
 			}
 		});
 		this.focusTrap?.updateElements();
@@ -728,6 +753,12 @@ export class ConfigControl implements IControl {
 			document.removeEventListener('pointerup', this.boundPointerUp!);
 			this.boundPointerMove = null;
 			this.boundPointerUp = null;
+
+			// Recalculate editor width after resize
+			if (this.isEditing) {
+				const textarea = this.bodyEl?.querySelector('textarea');
+				if (textarea) this.autoGrow(textarea);
+			}
 		};
 
 		document.addEventListener('pointermove', this.boundPointerMove);
@@ -773,6 +804,7 @@ export class ConfigControl implements IControl {
 			if (this.highlightRafId) cancelAnimationFrame(this.highlightRafId);
 			this.highlightRafId = null;
 			this.highlightEl = null;
+		this.editorEl = null;
 			this.isEditing = false;
 			this.editBtn?.classList.remove('config-viewer-action-btn--active');
 			if (this.editBtn) {

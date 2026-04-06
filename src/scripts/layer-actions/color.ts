@@ -2,6 +2,8 @@ import maplibregl from 'maplibre-gl';
 import { updateDatasetColor } from '../db';
 import { ProgressControl } from '../controls/progress-control';
 import { getLayersForDataset, type SourceLayerInfo } from '../layers/layers';
+import { getLayersByDataset } from '../deckgl/registry';
+import { buildDeckColorProps } from '../deckgl/color';
 
 /**
  * Maps layer types to their primary color paint property.
@@ -30,6 +32,9 @@ function isExpression(value: unknown): boolean {
  * Mirrors getEditableProperties() logic in style.ts.
  */
 export function isColorPickerEnabled(map: maplibregl.Map, datasetId: string): boolean {
+	// deck.gl layers are always color-editable (no expression support)
+	if (getLayersByDataset(datasetId, 'deckgl').length > 0) return true;
+
 	const layers = getLayersForDataset(map, datasetId);
 
 	for (const layer of layers) {
@@ -112,7 +117,18 @@ export async function updateLayerColor(
 		appliedCount++;
 	}
 
-	console.log(`[LayerColor] Updated ${appliedCount}/${layers.length} layers for dataset ${datasetId}`);
+	// deck.gl layers
+	const deckLayerIds = getLayersByDataset(datasetId, 'deckgl');
+	if (deckLayerIds.length > 0) {
+		const { updateLayer } = await import('../deckgl/manager');
+		const deckProps = buildDeckColorProps(newColor);
+		for (const id of deckLayerIds) {
+			updateLayer(id, deckProps);
+			appliedCount++;
+		}
+	}
+
+	console.log(`[LayerColor] Updated ${appliedCount}/${layers.length + deckLayerIds.length} layers for dataset ${datasetId}`);
 
 	progressControl.updateProgress(datasetName, 'success', 'Color updated');
 	progressControl.scheduleIdle(2000);

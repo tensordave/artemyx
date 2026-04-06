@@ -3,8 +3,8 @@
  */
 
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
-import { VALID_LAYER_TYPES } from '../parser';
-import type { LayerType } from '../types';
+import { VALID_LAYER_TYPES, VALID_RENDERERS } from '../parser';
+import type { LayerType, RendererType } from '../types';
 
 /**
  * Validate paint/layout properties against the MapLibre style spec.
@@ -155,6 +155,24 @@ export function validateLayer(layer: unknown, index: number): string[] {
 			});
 		} else {
 			errors.push(`${prefix}.tooltip: must be a string or array of strings`);
+		}
+	}
+
+	// Optional: renderer (valid renderer type)
+	if ('renderer' in l && l.renderer !== undefined) {
+		if (typeof l.renderer !== 'string') {
+			errors.push(`${prefix}.renderer: must be a string`);
+		} else if (!VALID_RENDERERS.includes(l.renderer as RendererType)) {
+			errors.push(`${prefix}.renderer: invalid renderer '${l.renderer}'. Valid renderers: ${VALID_RENDERERS.join(', ')}`);
+		}
+	}
+
+	// Optional: deckProps (must be a non-null, non-array object; warn if renderer is not deckgl)
+	if ('deckProps' in l && l.deckProps !== undefined) {
+		if (typeof l.deckProps !== 'object' || l.deckProps === null || Array.isArray(l.deckProps)) {
+			errors.push(`${prefix}.deckProps: must be an object`);
+		} else if (l.renderer !== 'deckgl') {
+			console.warn(`[config] ${prefix}.deckProps: deckProps has no effect without renderer: 'deckgl'`);
 		}
 	}
 

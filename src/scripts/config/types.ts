@@ -276,6 +276,13 @@ export type LayerType =
 	| 'fill-extrusion'; // 3D buildings
 
 /**
+ * Rendering engine for a layer.
+ * - 'maplibre': Default. Rendered via MapLibre GL JS.
+ * - 'deckgl': Rendered via deck.gl MapboxOverlay.
+ */
+export type RendererType = 'maplibre' | 'deckgl';
+
+/**
  * Layer configuration for explicit rendering control.
  * Decouples data sources (datasets/operations) from visual representation.
  *
@@ -323,6 +330,14 @@ export interface LayerConfig {
 	 * When omitted, tooltip shows only the layer/dataset display name.
 	 */
 	tooltip?: string | string[];
+	/** Rendering engine for this layer. Defaults to 'maplibre'. Set to 'deckgl' to render via deck.gl overlay. */
+	renderer?: RendererType;
+	/**
+	 * Raw deck.gl layer properties passed through without validation.
+	 * Only meaningful when renderer is 'deckgl'.
+	 * Properties are spread directly into the deck.gl layer spec (e.g. color accessors, radius scale).
+	 */
+	deckProps?: Record<string, unknown>;
 }
 
 /** Supported output formats (distinct from input ConfigFormat) */

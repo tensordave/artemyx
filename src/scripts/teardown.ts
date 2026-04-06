@@ -42,6 +42,14 @@ export async function teardownAll(options: TeardownOptions): Promise<void> {
 	// 3. Clear all hover/click handler registrations
 	clearAllFeatureHandlers();
 
+	// 3b. Tear down deck.gl overlay and registry
+	const { isInitialized, destroy } = await import('./deckgl/manager');
+	if (isInitialized()) {
+		destroy();
+	}
+	const { clearRegistry } = await import('./deckgl/registry');
+	clearRegistry();
+
 	// 4. Delete datasets from DuckDB
 	if (preserveFileUploads) {
 		// Selectively delete only non-file datasets; file uploads stay in DB

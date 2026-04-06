@@ -5,10 +5,12 @@
 
 import { gearIcon } from '../icons';
 import type { ConfigFormat } from '../loaders/types';
+import type { RendererType } from '../config/types';
 
 /** Values returned by the advanced options panel */
 export interface AdvancedOptionsValues {
 	format?: ConfigFormat;
+	renderer?: RendererType;
 	crs?: string;
 	latColumn?: string;
 	lngColumn?: string;
@@ -64,6 +66,19 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 	}
 	formatGroup.appendChild(formatSelect);
 	body.appendChild(formatGroup);
+
+	// -- Renderer select --
+	const rendererGroup = makeFieldGroup('Renderer');
+	const rendererSelect = document.createElement('select');
+	rendererSelect.className = 'advanced-options-select';
+	for (const [value, label] of [['', 'Auto'], ['maplibre', 'MapLibre'], ['deckgl', 'deck.gl']] as const) {
+		const opt = document.createElement('option');
+		opt.value = value;
+		opt.textContent = label;
+		rendererSelect.appendChild(opt);
+	}
+	rendererGroup.appendChild(rendererSelect);
+	body.appendChild(rendererGroup);
 
 	// -- CRS input --
 	const crsGroup = makeFieldGroup('CRS');
@@ -151,6 +166,9 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 		const format = formatSelect.value as ConfigFormat | '';
 		if (format) values.format = format;
 
+		const renderer = rendererSelect.value as RendererType | '';
+		if (renderer) values.renderer = renderer;
+
 		const crs = crsInput.value.trim();
 		if (crs && CRS_PATTERN.test(crs)) values.crs = crs;
 
@@ -168,6 +186,7 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 
 	function reset() {
 		formatSelect.value = '';
+		rendererSelect.value = '';
 		crsInput.value = '';
 		crsInput.classList.remove('advanced-options-input--invalid');
 		crsHint.textContent = '';

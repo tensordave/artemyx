@@ -12,6 +12,7 @@ import {
 	validateUrl,
 	checkQuota,
 	addDatasetToMap,
+	addDatasetToMapDeckGL,
 	fitMapToBounds,
 } from './shared';
 import { loadPMTilesDataset } from './load-pmtiles';
@@ -90,10 +91,15 @@ export async function loadDataFromUrl(
 
 		// Render on main thread
 		if (!result.hidden) {
-			const layerIds = addDatasetToMap(map, result.datasetId, result.color, result.style, result.geoJson, skipLayers);
-
-			// Release GeoJSON reference early - MapLibre owns the data now
-			result.geoJson = null as any;
+			const resolvedRenderer = options.renderer === 'deckgl' ? 'deckgl' : 'maplibre';
+			let layerIds: string[];
+			if (resolvedRenderer === 'deckgl') {
+				layerIds = await addDatasetToMapDeckGL(map, result.datasetId, result.color, result.style, datasetName);
+				result.geoJson = null as any;
+			} else {
+				layerIds = addDatasetToMap(map, result.datasetId, result.color, result.style, result.geoJson, skipLayers);
+				result.geoJson = null as any;
+			}
 
 			if (!skipFitBounds && result.bounds) {
 				fitMapToBounds(map, result.bounds);
@@ -101,7 +107,7 @@ export async function loadDataFromUrl(
 
 			loadedDatasets.add(result.datasetId);
 
-			if (layerIds.length > 0) {
+			if (layerIds.length > 0 && resolvedRenderer !== 'deckgl') {
 				attachFeatureHoverHandlers(map, layerIds, { label: datasetName });
 				attachFeatureClickHandlers(map, layerIds);
 			}

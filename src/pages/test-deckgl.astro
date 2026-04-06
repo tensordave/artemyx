@@ -1,0 +1,61 @@
+---
+import Header from '../components/Header.astro';
+import { highlightConfigYaml } from '../scripts/utils/highlight-config';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import '../styles/global.css';
+
+const configFile = 'test-deckgl-config.yaml';
+const highlightedYaml = await highlightConfigYaml(configFile);
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>artemyx — deck.gl test</title>
+	</head>
+	<body>
+		<Header />
+		<aside class="header-sidebar" id="header-sidebar">
+			<button class="header-sidebar-close" id="header-sidebar-close" aria-label="Close menu">&times;</button>
+			<a href="/#about" class="header-sidebar-link">About</a>
+			<a href="/app" class="header-sidebar-link">App</a>
+			<a href="/examples" class="header-sidebar-link">Examples</a>
+			<a href="https://github.com/tensordave/artemyx" class="header-sidebar-link">GitHub</a>
+		</aside>
+
+		<div id="map" data-config="/test-deckgl-config.yaml"></div>
+		<div id="config-highlighted" data-config-filename={configFile} hidden set:html={highlightedYaml} />
+
+		<script>
+			import '../scripts/map.ts';
+		</script>
+		<script>
+			const hamburger = document.getElementById('header-hamburger');
+			const sidebar = document.getElementById('header-sidebar');
+			const sidebarClose = document.getElementById('header-sidebar-close');
+
+			if (hamburger && sidebar) {
+				hamburger.addEventListener('click', () => {
+					sidebar.classList.toggle('header-sidebar--open');
+				});
+
+				sidebar.querySelectorAll('.header-sidebar-link').forEach(link => {
+					link.addEventListener('click', () => {
+						sidebar.classList.remove('header-sidebar--open');
+					});
+				});
+			}
+
+			if (sidebarClose && sidebar) {
+				sidebarClose.addEventListener('click', () => {
+					sidebar.classList.remove('header-sidebar--open');
+				});
+			}
+		</script>
+	</body>
+</html>

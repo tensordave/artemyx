@@ -13,6 +13,7 @@ import { buildLabelSection } from './labels';
 import { arrowLeftIcon, pencilIcon } from '../icons';
 import { isColorPickerEnabled, getDisplayColor, updateLayerColor } from './color';
 import type { Dataset } from './layer-row';
+import { getLayersByDataset } from '../deckgl/registry';
 
 /** Geometry style properties (excludes label fields) */
 type GeometryStyleProperty = 'fillOpacity' | 'lineOpacity' | 'pointOpacity' | 'lineWidth' | 'pointRadius';
@@ -47,8 +48,6 @@ function getEditableProperties(
 	map: maplibregl.Map,
 	datasetId: string
 ): Record<GeometryStyleProperty, boolean> {
-	const layers = getLayersForDataset(map, datasetId);
-
 	const result: Record<GeometryStyleProperty, boolean> = {
 		fillOpacity: false,
 		lineOpacity: false,
@@ -56,6 +55,19 @@ function getEditableProperties(
 		lineWidth: false,
 		pointRadius: false
 	};
+
+	// deck.gl layers are always editable (no expression support)
+	if (getLayersByDataset(datasetId, 'deckgl').length > 0) {
+		return {
+			fillOpacity: true,
+			lineOpacity: true,
+			pointOpacity: true,
+			lineWidth: true,
+			pointRadius: true
+		};
+	}
+
+	const layers = getLayersForDataset(map, datasetId);
 
 	for (const property of Object.keys(STYLE_PROPERTY_MAP) as GeometryStyleProperty[]) {
 		const mapping = STYLE_PROPERTY_MAP[property];
@@ -167,6 +179,25 @@ const SLIDER_CONFIGS: SliderConfig[] = [
  *
  * @returns true if at least one layer was updated, false if none (e.g., all use expressions)
  */
+/** Map a style slider property to deck.gl updateLayer props. */
+function mapStyleToDeckProps(property: GeometryStyleProperty, value: number): Record<string, unknown> {
+	switch (property) {
+		case 'lineWidth':
+			return { lineWidthMinPixels: value };
+		case 'pointRadius':
+			return { getPointRadius: value, pointRadiusMinPixels: Math.min(3, value) };
+		case 'fillOpacity':
+			return { opacity: value };
+		case 'lineOpacity':
+			// GeoJsonLayer doesn't have a separate line opacity -- use lineWidthMinPixels with alpha
+			return {};
+		case 'pointOpacity':
+			return {};
+		default:
+			return {};
+	}
+}
+
 function applyStyleToMap(
 	map: maplibregl.Map,
 	datasetId: string,
@@ -193,6 +224,20 @@ function applyStyleToMap(
 
 		map.setPaintProperty(layer.id, mapping.paintProperty, value);
 		appliedCount++;
+	}
+
+	// deck.gl layers
+	const deckLayerIds = getLayersByDataset(datasetId, 'deckgl');
+	if (deckLayerIds.length > 0) {
+		const deckProps = mapStyleToDeckProps(property, value);
+		if (Object.keys(deckProps).length > 0) {
+			void import('../deckgl/manager').then(({ updateLayer }) => {
+				for (const id of deckLayerIds) {
+					updateLayer(id, deckProps);
+				}
+			});
+			appliedCount += deckLayerIds.length;
+		}
 	}
 
 	return appliedCount > 0;

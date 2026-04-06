@@ -14,6 +14,7 @@ import {
 	formatBytes,
 	checkQuota,
 	addDatasetToMap,
+	addDatasetToMapDeckGL,
 	fitMapToBounds,
 } from './shared';
 
@@ -28,7 +29,7 @@ export async function loadDataFromFile(
 ): Promise<boolean> {
 	const { map, logger, layerToggleControl, loadedDatasets } = options;
 
-	const MAX_SIZE_MB = 100;
+	const MAX_SIZE_MB = 2048;
 	const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 	if (file.size > MAX_SIZE_BYTES) {
 		if (!options.skipErrorDialog) {
@@ -85,14 +86,21 @@ export async function loadDataFromFile(
 		}
 
 		// Render on main thread
-		const layerIds = addDatasetToMap(map, result.datasetId, result.color, result.style, result.geoJson);
-
-		// Release GeoJSON reference early - MapLibre owns the data now
-		result.geoJson = null as any;
+		const resolvedRenderer = options.renderer === 'deckgl' ? 'deckgl' : 'maplibre';
+		let layerIds: string[];
+		if (resolvedRenderer === 'deckgl') {
+			layerIds = await addDatasetToMapDeckGL(map, result.datasetId, result.color, result.style, displayName);
+			result.geoJson = null as any;
+		} else {
+			layerIds = addDatasetToMap(map, result.datasetId, result.color, result.style, result.geoJson);
+			result.geoJson = null as any;
+		}
 
 		loadedDatasets.add(result.datasetId);
-		attachFeatureHoverHandlers(map, layerIds, { label: displayName });
-		attachFeatureClickHandlers(map, layerIds);
+		if (resolvedRenderer !== 'deckgl') {
+			attachFeatureHoverHandlers(map, layerIds, { label: displayName });
+			attachFeatureClickHandlers(map, layerIds);
+		}
 
 		if (result.bounds && !options.skipFitBounds) fitMapToBounds(map, result.bounds);
 		layerToggleControl.refreshPanel();

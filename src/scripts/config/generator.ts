@@ -32,6 +32,8 @@ interface GeneratedLayerConfig {
 	minzoom?: number;
 	maxzoom?: number;
 	tooltip?: string | string[];
+	renderer?: string;
+	deckProps?: Record<string, unknown>;
 }
 
 /** Result of layer extraction including which datasets are covered. */

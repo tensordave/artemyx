@@ -15,6 +15,7 @@ import type {
 	UnaryOperationType,
 	BinaryOperationType,
 	LayerType,
+	RendererType,
 	OutputFormat,
 } from './types';
 import type { ConfigFormat } from '../loaders/types';
@@ -43,6 +44,9 @@ export const ALL_OPERATIONS = [...UNARY_OPERATIONS, ...BINARY_OPERATIONS];
 
 /** Valid MapLibre layer types */
 export const VALID_LAYER_TYPES: LayerType[] = ['fill', 'line', 'circle', 'symbol', 'heatmap', 'fill-extrusion'];
+
+/** Valid renderer values for layers */
+export const VALID_RENDERERS: RendererType[] = ['maplibre', 'deckgl'];
 
 /** Valid output format values */
 export const VALID_OUTPUT_FORMATS: OutputFormat[] = ['geojson', 'csv', 'parquet', 'pmtiles'];

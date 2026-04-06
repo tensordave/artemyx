@@ -4,6 +4,7 @@ import { DEFAULT_STYLE, type StyleConfig, type LoadGeoJSONOptions as DBLoadOptio
 import { getSourceId, addSource, removeDefaultLayers, addDefaultLayers } from '../layers';
 import { showErrorDialog, showConfirmDialog } from '../ui/error-dialog';
 import type { ConfigFormat } from '../loaders';
+import type { RendererType } from '../config/types';
 import type { LayerToggleControl } from '../controls/layer-control';
 import type { Logger } from '../logger';
 
@@ -112,6 +113,8 @@ export interface LoadDataOptions {
 	crs?: string;
 	/** Fallback CRS from map-level config (for formats without file metadata) */
 	mapCrs?: string;
+	/** Renderer override: 'maplibre', 'deckgl', or undefined (auto — defaults to maplibre for now) */
+	renderer?: RendererType;
 }
 
 /**
@@ -165,6 +168,67 @@ export function addDatasetToMap(
 	}
 
 	return [];
+}
+
+/**
+ * Add a dataset to the map via deck.gl.
+ * Fetches data from DuckDB (binary preferred, GeoJSON fallback) and creates
+ * a single GeoJsonLayer that handles all geometry types natively.
+ * All deck.gl imports are dynamic to preserve lazy-loading.
+ *
+ * @returns Layer IDs created (single deck.gl layer).
+ */
+export async function addDatasetToMapDeckGL(
+	map: maplibregl.Map,
+	datasetId: string,
+	datasetColor: string,
+	style: StyleConfig,
+	displayName: string
+): Promise<string[]> {
+	const layerId = `dataset-${datasetId}-deckgl`;
+
+	// Fetch data from DuckDB — binary path for zero-copy typed arrays, GeoJSON fallback
+	let data: unknown;
+	let globalProps: Record<string, unknown>[] | undefined;
+	try {
+		const { getFeaturesAsBinary } = await import('../db');
+		const binary = await getFeaturesAsBinary(datasetId);
+		data = binary;
+		const { buildGlobalProperties } = await import('../controls/popup');
+		globalProps = buildGlobalProperties(binary);
+		console.log(`[DeckGL] Using binary data path for '${layerId}'`);
+	} catch (err) {
+		console.warn(`[DeckGL] Binary path failed for '${layerId}', falling back to GeoJSON:`, err);
+		const { getFeaturesAsGeoJSON } = await import('../db');
+		data = await getFeaturesAsGeoJSON(datasetId);
+	}
+
+	// Build color + style props
+	const { buildDeckColorProps } = await import('../deckgl/color');
+	const colorProps = buildDeckColorProps(datasetColor, style.fillOpacity, style.lineOpacity, style.pointOpacity);
+
+	// Hover/click callbacks for popup parity
+	const { buildDeckHoverCallback, buildDeckClickCallback } = await import('../controls/popup');
+
+	const props: Record<string, unknown> = {
+		data,
+		...colorProps,
+		lineWidthMinPixels: style.lineWidth,
+		getPointRadius: style.pointRadius,
+		pointRadiusMinPixels: 3,
+		onHover: buildDeckHoverCallback(map, layerId, { label: displayName }, globalProps),
+		onClick: buildDeckClickCallback(map, layerId, globalProps),
+	};
+
+	// Create layer via deck.gl manager
+	const { addLayer } = await import('../deckgl/manager');
+	await addLayer(map, layerId, props);
+
+	// Register in renderer registry for action routing (visibility, color, delete, style)
+	const { registerLayer } = await import('../deckgl/registry');
+	registerLayer(layerId, 'deckgl', datasetId);
+
+	return [layerId];
 }
 
 /**

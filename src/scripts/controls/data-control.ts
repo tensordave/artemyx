@@ -118,6 +118,7 @@ export class DataControl implements maplibregl.IControl {
 					layerToggleControl: this.layerToggleControl,
 					loadedDatasets: this.loadedDatasets,
 					format: opts.format,
+					renderer: opts.renderer,
 					crs: opts.crs,
 					latColumn: opts.latColumn,
 					lngColumn: opts.lngColumn,

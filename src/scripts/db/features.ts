@@ -3,6 +3,8 @@
  */
 
 import { getConnection, getDB } from './core';
+import { parseWKB } from './wkb';
+import type { GeometryType } from './wkb';
 
 /**
  * Get features from DuckDB as a GeoJSON string.
@@ -275,4 +277,266 @@ export async function exportAsParquet(datasetId: string): Promise<Uint8Array> {
 		await connection.query('DROP TABLE IF EXISTS _export_tmp').catch(() => {});
 		await db.dropFile(filename).catch(() => {});
 	}
+}
+
+// ── Binary feature collection (deck.gl) ────────────────────────────────────
+
+/**
+ * Binary attribute: typed array + component size.
+ * Matches @loaders.gl/schema BinaryAttribute shape.
+ */
+interface BinaryAttribute {
+	value: Float64Array | Uint32Array;
+	size: number;
+}
+
+interface BinaryPointFeature {
+	type: 'Point';
+	positions: BinaryAttribute;
+	featureIds: BinaryAttribute;
+	globalFeatureIds: BinaryAttribute;
+	numericProps: Record<string, BinaryAttribute>;
+	properties: object[];
+}
+
+interface BinaryLineFeature {
+	type: 'LineString';
+	positions: BinaryAttribute;
+	pathIndices: BinaryAttribute;
+	featureIds: BinaryAttribute;
+	globalFeatureIds: BinaryAttribute;
+	numericProps: Record<string, BinaryAttribute>;
+	properties: object[];
+}
+
+interface BinaryPolygonFeature {
+	type: 'Polygon';
+	positions: BinaryAttribute;
+	polygonIndices: BinaryAttribute;
+	primitivePolygonIndices: BinaryAttribute;
+	featureIds: BinaryAttribute;
+	globalFeatureIds: BinaryAttribute;
+	numericProps: Record<string, BinaryAttribute>;
+	properties: object[];
+}
+
+export interface BinaryFeatureCollection {
+	shape: 'binary-feature-collection';
+	points: BinaryPointFeature;
+	lines: BinaryLineFeature;
+	polygons: BinaryPolygonFeature;
+}
+
+/** Accumulator for building typed arrays incrementally. */
+interface GeomAccumulator {
+	coords: number[];
+	featureIds: number[];
+	globalFeatureIds: number[];
+	/** Start indices for lines (pathIndices) or polygon rings (primitivePolygonIndices) */
+	startIndices: number[];
+	/** Polygon-level start indices (polygonIndices) -- polygons only */
+	polygonIndices?: number[];
+	properties: object[];
+	numericValues: Map<string, number[]>;
+	featureCount: number;
+}
+
+function createAccumulator(withPolygonIndices: boolean): GeomAccumulator {
+	const acc: GeomAccumulator = {
+		coords: [],
+		featureIds: [],
+		globalFeatureIds: [],
+		startIndices: [0],
+		properties: [],
+		numericValues: new Map(),
+		featureCount: 0
+	};
+	if (withPolygonIndices) acc.polygonIndices = [0];
+	return acc;
+}
+
+/**
+ * Get features from DuckDB as a BinaryFeatureCollection for deck.gl.
+ * Bypasses GeoJSON string serialization -- queries WKB geometry and flattened
+ * properties, then builds flat typed arrays that deck.gl GeoJsonLayer
+ * consumes directly in binary mode.
+ *
+ * @returns The binary collection and an array of ArrayBuffers for Transferable zero-copy.
+ */
+export async function getFeaturesAsBinaryCollection(
+	datasetId: string
+): Promise<{ binary: BinaryFeatureCollection; transfers: ArrayBuffer[] }> {
+	const connection = await getConnection();
+
+	// Get all property keys for flattened column access
+	const keys = await getAllPropertyKeys(datasetId);
+
+	// Build query with WKB geometry + flattened properties
+	const selectExpr = buildFlattenedSelect(keys, 'ST_AsWKB(geometry) as geom_wkb');
+	const sql = `SELECT ${selectExpr} FROM features WHERE dataset_id = ? AND geometry IS NOT NULL`;
+	const stmt = await connection.prepare(sql);
+	const result = await stmt.query(datasetId);
+	await stmt.close();
+
+	const rows = result.toArray();
+
+	// Detect which property keys are numeric across all rows
+	const numericKeys = new Set<string>();
+	const nonNumericKeys = new Set<string>();
+	if (rows.length > 0 && keys.length > 0) {
+		// Sample up to 100 rows to detect types
+		const sampleSize = Math.min(rows.length, 100);
+		for (let i = 0; i < sampleSize; i++) {
+			for (const key of keys) {
+				if (nonNumericKeys.has(key)) continue;
+				const val = rows[i][key];
+				if (val === null || val === undefined) continue;
+				const num = Number(val);
+				if (Number.isFinite(num)) {
+					numericKeys.add(key);
+				} else {
+					numericKeys.delete(key);
+					nonNumericKeys.add(key);
+				}
+			}
+		}
+	}
+
+	// Build accumulators for each geometry type
+	const points = createAccumulator(false);
+	const lines = createAccumulator(false);
+	const polygons = createAccumulator(true);
+
+	// Initialize numeric property arrays in each accumulator
+	for (const key of numericKeys) {
+		points.numericValues.set(key, []);
+		lines.numericValues.set(key, []);
+		polygons.numericValues.set(key, []);
+	}
+
+	let globalFeatureId = 0;
+
+	for (const row of rows) {
+		// Extract WKB buffer from the Arrow result
+		const wkbRaw = row.geom_wkb;
+		if (!wkbRaw) continue;
+		const wkb = wkbRaw instanceof Uint8Array ? wkbRaw : new Uint8Array(wkbRaw);
+
+		// Build properties object for this feature (all keys, including numeric).
+		// Numeric columns are duplicated into numericProps as typed arrays for
+		// rendering performance, but the properties array must be complete so
+		// deck.gl picking callbacks can display all fields in tooltips/popups.
+		const props: Record<string, unknown> = {};
+		for (const key of keys) {
+			props[key] = row[key] ?? null;
+		}
+
+		// Parse WKB into one or more geometries (Multi* -> multiple entries)
+		const geometries = parseWKB(wkb);
+
+		for (const geom of geometries) {
+			let acc: GeomAccumulator;
+			if (geom.type === 'Point') acc = points;
+			else if (geom.type === 'LineString') acc = lines;
+			else acc = polygons;
+
+			const coordStart = acc.coords.length / 2;
+			const numCoords = geom.flatCoords.length / 2;
+
+			// Append coordinates
+			for (let i = 0; i < geom.flatCoords.length; i++) {
+				acc.coords.push(geom.flatCoords[i]);
+			}
+
+			if (geom.type === 'Point') {
+				// Points: one featureId per vertex (1:1)
+				acc.featureIds.push(acc.featureCount);
+				acc.globalFeatureIds.push(globalFeatureId);
+			} else if (geom.type === 'LineString') {
+				// Lines: featureId per vertex, pathIndices marks line starts
+				for (let i = 0; i < numCoords; i++) {
+					acc.featureIds.push(acc.featureCount);
+					acc.globalFeatureIds.push(globalFeatureId);
+				}
+				acc.startIndices.push(coordStart + numCoords);
+			} else {
+				// Polygon: featureId per vertex, ring and polygon indices
+				for (let i = 0; i < numCoords; i++) {
+					acc.featureIds.push(acc.featureCount);
+					acc.globalFeatureIds.push(globalFeatureId);
+				}
+				// primitivePolygonIndices: each ring boundary
+				if (geom.ringOffsets) {
+					for (let r = 1; r < geom.ringOffsets.length; r++) {
+						acc.startIndices.push(coordStart + geom.ringOffsets[r]);
+					}
+				} else {
+					acc.startIndices.push(coordStart + numCoords);
+				}
+				// polygonIndices: each polygon boundary (one polygon per parsed geometry)
+				acc.polygonIndices!.push(acc.startIndices.length - 1);
+			}
+
+			// Properties and numeric props: one entry per feature in this accumulator
+			acc.properties.push(props);
+			for (const key of numericKeys) {
+				const val = row[key];
+				acc.numericValues.get(key)!.push(val === null || val === undefined ? NaN : Number(val));
+			}
+			acc.featureCount++;
+		}
+
+		globalFeatureId++;
+	}
+
+	// Build the final typed arrays
+	const transfers: ArrayBuffer[] = [];
+
+	function buildNumericProps(acc: GeomAccumulator): Record<string, BinaryAttribute> {
+		const result: Record<string, BinaryAttribute> = {};
+		for (const [key, values] of acc.numericValues) {
+			const arr = new Float64Array(values);
+			result[key] = { value: arr, size: 1 };
+			transfers.push(arr.buffer as ArrayBuffer);
+		}
+		return result;
+	}
+
+	function makeAttr(arr: Float64Array | Uint32Array, size: number): BinaryAttribute {
+		transfers.push(arr.buffer as ArrayBuffer);
+		return { value: arr, size };
+	}
+
+	const binary: BinaryFeatureCollection = {
+		shape: 'binary-feature-collection',
+		points: {
+			type: 'Point',
+			positions: makeAttr(new Float64Array(points.coords), 2),
+			featureIds: makeAttr(new Uint32Array(points.featureIds), 1),
+			globalFeatureIds: makeAttr(new Uint32Array(points.globalFeatureIds), 1),
+			numericProps: buildNumericProps(points),
+			properties: points.properties
+		},
+		lines: {
+			type: 'LineString',
+			positions: makeAttr(new Float64Array(lines.coords), 2),
+			pathIndices: makeAttr(new Uint32Array(lines.startIndices), 1),
+			featureIds: makeAttr(new Uint32Array(lines.featureIds), 1),
+			globalFeatureIds: makeAttr(new Uint32Array(lines.globalFeatureIds), 1),
+			numericProps: buildNumericProps(lines),
+			properties: lines.properties
+		},
+		polygons: {
+			type: 'Polygon',
+			positions: makeAttr(new Float64Array(polygons.coords), 2),
+			polygonIndices: makeAttr(new Uint32Array(polygons.polygonIndices!), 1),
+			primitivePolygonIndices: makeAttr(new Uint32Array(polygons.startIndices), 1),
+			featureIds: makeAttr(new Uint32Array(polygons.featureIds), 1),
+			globalFeatureIds: makeAttr(new Uint32Array(polygons.globalFeatureIds), 1),
+			numericProps: buildNumericProps(polygons),
+			properties: polygons.properties
+		}
+	};
+
+	return { binary, transfers };
 }

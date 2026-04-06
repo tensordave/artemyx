@@ -128,6 +128,11 @@ export interface GetFeaturesAsGeoJSONRequest extends RequestBase {
 	datasetId?: string;
 }
 
+export interface GetFeaturesAsBinaryRequest extends RequestBase {
+	type: 'getFeaturesAsBinary';
+	datasetId: string;
+}
+
 export interface GetPropertyKeysRequest extends RequestBase {
 	type: 'getPropertyKeys';
 	datasetId: string;
@@ -343,6 +348,7 @@ export type WorkerRequest =
 	| GetDatasetStyleRequest
 	| UpdateDatasetStyleRequest
 	| GetFeaturesAsGeoJSONRequest
+	| GetFeaturesAsBinaryRequest
 	| GetDatasetBoundsRequest
 	| GetPropertyKeysRequest
 	| GetDistinctGeometryTypesRequest

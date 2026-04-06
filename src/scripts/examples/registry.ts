@@ -109,6 +109,15 @@ export const examples: Example[] = [
 		description: 'Vancouver cycling network filtered by infrastructure quality - safer routes via advanced SQL filter, protected lanes via structured filter, walkshed coverage buffered from the result.',
 		configPath: '/examples/configs/attribute.yaml',
 	},
+	// --- deck.gl ---
+	{
+		slug: 'deckgl-meteorites',
+		name: 'deck.gl Meteorite Landings',
+		group: 'deck.gl',
+		description:
+			'NASA meteorite landings rendered with deck.gl GeoJsonLayer - 45,000+ recorded impacts visualized from GeoParquet.',
+		configPath: '/examples/configs/deckgl-meteorites.yaml',
+	},
 	// --- PMTiles ---
 	{
 		slug: 'pmtiles',

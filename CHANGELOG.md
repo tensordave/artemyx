@@ -1,5 +1,6 @@
 # Changelog
 
+- [v0.9](changelogs/v0.9.md) - deck.gl integration, binary Arrow data
 - [v0.8](changelogs/v0.8.md) - Keyboard shortcuts, accessibility, outputs helper
 - [v0.7](changelogs/v0.7.md) - PMTiles loading, outputs config, CLI pipeline, worker timeout
 - [v0.6](changelogs/v0.6.md) - Operation builder, config editor, OPFS export/import, Safari gate

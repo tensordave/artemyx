@@ -5,18 +5,6 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.9.0 - deck.gl and Binary Arrow
-
-Goal: establish the full deck.gl integration path, handling all geometry types in parallel with the existing MapLibre pipeline, powered by Arrow binary data to eliminate GeoJSON round-trips.
-
-- **Arrow binary data path** - `getFeaturesAsArrow()` in `features.ts` returns the raw Arrow table from DuckDB, bypassing `ST_AsGeoJSON` string serialization; coordinate columns extracted as `Float64Array` for direct consumption by deck.gl binary input format; eliminates the GeoJSON round-trip for large datasets; deck.gl optional renderer is to use this instead of GeoJSON round trips
-- **`MapboxOverlay` manager** - Singleton `DeckGLManager` (`src/scripts/deckgl/manager.ts`) holds the `MapboxOverlay` instance added to the map on load; exposes `addLayer`, `removeLayer`, `updateLayer`; composites all deck.gl layers into a single WebGL context; deck.gl loaded via dynamic `import()` only when first deck.gl layer is requested to avoid bundling cost when unused
-- **Config schema: `renderer` field** - Optional `renderer: maplibre | deckgl` on `LayerConfig` (defaults to `maplibre`); `deckProps` passthrough for raw deck.gl layer props (color accessors, radius scale, etc.) that have no MapLibre paint equivalent; parser validation rejects deck.gl-only `type` values when `renderer: maplibre` and vice versa
-- **Layer creation branch** - `executeLayersFromConfig` in `layers.ts` branches on `renderer`: MapLibre path unchanged; deck.gl path constructs a `GeoJsonLayer` spec and calls the manager; both paths feed data from `getFeaturesAsGeoJSON` initially
-- **Layer registry** - Small dataset-ID-to-renderer map shared between the manager and `layer-actions/`; enables visibility, color, and delete actions to route to the correct API without per-action renderer detection
-- **Layer control renderer-awareness** - `visibility.ts`, `color.ts`, and `delete.ts` in `layer-actions/` consult the registry; call deck.gl manager when deck.gl-managed instead of MapLibre style API
-- **Popup/hover parity** - `attachDeckHoverHandlers` / `attachDeckClickHandlers` wired via deck.gl `onHover` / `onClick` callbacks on the layer spec; reuse existing popup DOM and CSS from `popup.ts`; matches current MapLibre popup behavior for feature properties and layer name display
-
 ### v0.9.1 - ArcLayer
 
 - **`ArcLayer`** - Flow and OD (origin-destination) visualization; requires source and target coordinate columns in feature properties; distinct from GeoJsonLayer line rendering - draws curved great-circle arcs between point pairs
@@ -30,7 +18,15 @@ Goal: establish the full deck.gl integration path, handling all geometry types i
 
 ### v0.9.3 - Auto-promote
 
-- **Auto-promote large datasets** - Datasets exceeding a configurable feature count threshold (default: 50k) are automatically assigned `renderer: deckgl` using a `GeoJsonLayer`; explicit `renderer` in config always wins; threshold configurable via `map.deckglThreshold` in YAML
+- **Auto-promote large datasets** - Datasets exceeding a configurable feature count threshold (dependent on feature type; higher threshold for points, versus lines, versus polygons) are automatically assigned `renderer: deckgl` using a `GeoJsonLayer`; explicit `renderer` in config always wins; threshold configurable via `map.deckglThreshold` in YAML
+
+### v0.9.4 - Examples
+
+- **GeoJSON layer example** - 
+- **ArcLayer example** - 
+- **ScatterplotLayer example** - 
+- **HexagonLayer example** - 
+- **ColumnLayer example** - 
 
 ### v0.10.0 - Monorepo Split and Shared Core
 
@@ -170,6 +166,9 @@ Items worth building eventually but not yet assigned to a version:
 
 
 ## Completed
+
+### v0.9.0 - deck.gl and Binary Arrow
+- deck.gl rendering pipeline via `MapboxOverlay` singleton manager with `renderer: deckgl` config field and `deckProps` passthrough, layer creation branching and dataset-to-renderer registry for routing visibility/color/style/delete actions, popup/hover parity reusing shared singletons, Arrow binary data path bypassing GeoJSON serialization for large datasets; renderer chooser in Load Data/Upload Files forms; config editor horizontal scrolling in view and edit modes
 
 ### v0.8.1 - Outputs for Local Files
 - Outputs panel config detection fix (render refresh after Outputs Helper injection), streamlined local file output workflow (direct output generation without config editor roundtrip), PMTiles operation gate (exclude PMTile-based datasets from Operation Builder selection)

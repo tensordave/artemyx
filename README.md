@@ -8,7 +8,7 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 
 ## Overview
 
-- **Mapping:** MapLibre GL JS with WebGL-based rendering for smooth panning/zooming
+- **Mapping:** MapLibre GL JS with WebGL-based rendering, deck.gl overlay for large dataset visualization
 - **Data Storage:** DuckDB-WASM with spatial extension for in-browser SQL queries
 - **Data Loading:** Fetch GeoJSON, CSV, GeoParquet, JSON arrays, and PMTiles from public API endpoints or local files, with paginated fetching and CRS auto-detection
 
@@ -25,6 +25,7 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - Local file upload via drag-and-drop or file picker
 - CRS detection and automatic reprojection to WGS84
 - OPFS persistence - sessions survive page refresh, with viewport restore and database export/import for portable sessions
+- deck.gl rendering path with `renderer: deckgl` config field, Arrow binary data transfer, and `deckProps` passthrough
 - Multi-geometry rendering (Point, LineString, Polygon, Multi* variants)
 - Address search via Photon geocoding (OSM data, no API key)
 - Scale bar (metric/imperial) and mouse coordinate display (decimal degrees / DMS toggle)
@@ -39,6 +40,7 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 
 - **Astro** - Static site generator
 - **MapLibre GL JS** - Open-source WebGL mapping library
+- **deck.gl** - GPU-accelerated large dataset rendering via `MapboxOverlay`
 - **DuckDB-WASM** - In-browser analytical SQL database with spatial extension
 - **TypeScript** - Type-safe development
 
@@ -92,9 +94,14 @@ src/scripts/
 │   ├── index.ts       # Barrel re-export
 │   ├── types.ts       # Logger interface (progress, info, warn)
 │   └── browser.ts     # BrowserLogger wrapping ProgressControl
+├── deckgl/            # deck.gl rendering pipeline
+│   ├── index.ts       # Barrel re-export
+│   ├── manager.ts     # Singleton DeckGLManager (MapboxOverlay, layer CRUD, visibility)
+│   ├── registry.ts    # Dataset-to-renderer map for routing layer actions
+│   └── color.ts       # deck.gl color utilities
 ├── layers/            # MapLibre layer creation
 │   ├── index.ts       # Barrel re-export
-│   ├── layers.ts      # addLayerFromConfig, executeLayersFromConfig
+│   ├── layers.ts      # addLayerFromConfig, executeLayersFromConfig (branches on renderer)
 │   └── sources.ts     # Source management (GeoJSON and vector tile sources)
 ├── layer-actions/     # Layer control UI handlers
 │   ├── color.ts, style.ts, labels.ts, visibility.ts, delete.ts, export.ts  # Action handlers
@@ -116,7 +123,7 @@ src/scripts/
 │   ├── scale-control.ts      # Scale bar, coordinate display (DD/DMS)
 │   ├── label-toggle-control.ts  # Toggle text labels beside icon buttons
 │   ├── progress-control.ts   # Status log with expandable history
-│   └── popup.ts              # Feature popup and hover tooltip utilities
+│   └── popup.ts              # Feature popup and hover tooltip utilities (MapLibre and deck.gl)
 ├── ui/                # Reusable UI components
 │   ├── error-dialog.ts
 │   ├── advanced-options.ts  # DataControl advanced options panel
@@ -136,7 +143,7 @@ src/scripts/
 └── basemaps.ts        # Basemap tile configurations
 ```
 
-Data flows through: **YAML config** -> **Web Worker** (DuckDB-WASM storage + spatial ops) -> **Main thread** (MapLibre rendering + UI)
+Data flows through: **YAML config** -> **Web Worker** (DuckDB-WASM storage + spatial ops) -> **Main thread** (MapLibre or deck.gl rendering + UI)
 
 ## Development
 
@@ -206,6 +213,13 @@ layers:
     paint:
       fill-color: "#f59e0b"
       fill-opacity: 0.15
+
+  - id: bikeways-deck
+    source: bikeways
+    type: line
+    renderer: deckgl              # Render via deck.gl instead of MapLibre
+    deckProps:                     # Raw deck.gl layer props (optional)
+      widthMinPixels: 2
 
   - id: bikeways-line
     source: bikeways

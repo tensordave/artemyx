@@ -1,5 +1,10 @@
 /* MapLibre GL overrides: popups, tooltips, attribution, control groups */
 
+/* Ensure popups render above the deck.gl overlay canvas */
+.maplibregl-popup {
+	z-index: 3 !important;
+}
+
 /* Dark mode popup styling */
 .maplibregl-popup-content {
 	background: #2c2c2c !important;
@@ -73,7 +78,7 @@
 
 /* Hover Tooltip Styles */
 .hover-tooltip .maplibregl-popup-content {
-	background: rgba(20, 20, 20, 0.92) !important;
+	background: #2c2c2c !important;
 	padding: 6px 10px !important;
 	font-size: 12px !important;
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;

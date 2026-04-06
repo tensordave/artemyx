@@ -3,6 +3,7 @@
  */
 
 import maplibregl from 'maplibre-gl';
+import { isDeckGL } from '../deckgl/registry';
 
 /**
  * Escape HTML special characters to prevent XSS
@@ -117,6 +118,57 @@ export function createPopupContent(properties: any): HTMLElement {
 	return container;
 }
 
+/** Minimal deck.gl picking info (avoids importing @deck.gl/core) */
+interface DeckPickInfo {
+	object?: Record<string, unknown>;
+	coordinate?: [number, number];
+	picked?: boolean;
+	index?: number;
+}
+
+/**
+ * Extract properties from a deck.gl picked object.
+ * With GeoJSON data, info.object is a Feature: { type: 'Feature', properties: {...} }.
+ * With binary data, info.object IS the properties object directly.
+ */
+function extractPickedProperties(object: Record<string, unknown>): Record<string, unknown> | undefined {
+	if (object.type === 'Feature' && object.properties && typeof object.properties === 'object') {
+		return object.properties as Record<string, unknown>;
+	}
+	return object;
+}
+
+/**
+ * Build a flat properties lookup indexed by globalFeatureId from a
+ * BinaryFeatureCollection.  deck.gl v9 does not populate `info.object`
+ * for binary data, so hover/click callbacks use this array with
+ * `info.index` (which equals the globalFeatureId) to resolve properties.
+ */
+export function buildGlobalProperties(
+	binary: { points: BinaryGeomSub; lines: BinaryGeomSub; polygons: BinaryGeomSub }
+): Record<string, unknown>[] {
+	const result: Record<string, unknown>[] = [];
+	for (const key of ['points', 'lines', 'polygons'] as const) {
+		const geom = binary[key];
+		const gfids = geom.globalFeatureIds.value;
+		const fids = geom.featureIds.value;
+		for (let v = 0; v < gfids.length; v++) {
+			const gfid = gfids[v];
+			if (result[gfid] === undefined) {
+				result[gfid] = geom.properties[fids[v]] as Record<string, unknown>;
+			}
+		}
+	}
+	return result;
+}
+
+/** Minimal shape needed by buildGlobalProperties (avoids importing full BinaryFeatureCollection). */
+interface BinaryGeomSub {
+	globalFeatureIds: { value: ArrayLike<number> };
+	featureIds: { value: ArrayLike<number> };
+	properties: object[];
+}
+
 // Shared click popup state — single popup + registry ensures only the
 // topmost layer shows a popup when multiple layers overlap.
 let sharedClickPopup: maplibregl.Popup | null = null;
@@ -147,13 +199,16 @@ export function attachFeatureClickHandlers(
 		if (!clickRegistry.has(layerId)) {
 			clickRegistry.add(layerId);
 
-			map.on('mouseenter', layerId, () => {
-				map.getCanvas().style.cursor = 'pointer';
-			});
+			// Skip MapLibre layer-specific events for deck.gl layers
+			if (!isDeckGL(layerId)) {
+				map.on('mouseenter', layerId, () => {
+					map.getCanvas().style.cursor = 'pointer';
+				});
 
-			map.on('mouseleave', layerId, () => {
-				map.getCanvas().style.cursor = '';
-			});
+				map.on('mouseleave', layerId, () => {
+					map.getCanvas().style.cursor = '';
+				});
+			}
 		}
 	}
 
@@ -163,13 +218,17 @@ export function attachFeatureClickHandlers(
 			const registeredIds = [...clickRegistry];
 			if (registeredIds.length === 0) return;
 
-			const features = map.queryRenderedFeatures(e.point, { layers: registeredIds });
+			const maplibreIds = registeredIds.filter(id => !isDeckGL(id));
+			if (maplibreIds.length === 0) return;
+
+			const features = map.queryRenderedFeatures(e.point, { layers: maplibreIds });
 			if (features.length === 0) return;
 
 			const topFeature = features[0];
 
 			// Hide hover tooltip when click popup opens
 			sharedHoverPopup?.remove();
+			hoverPopupOwner = null;
 
 			const content = createPopupContent(topFeature.properties);
 
@@ -233,6 +292,8 @@ function buildTooltipHTML(label: string, properties?: Record<string, unknown>, f
 let sharedHoverPopup: maplibregl.Popup | null = null;
 const hoverRegistry = new Map<string, HoverTooltipOptions>();
 let hoverHandlerAttached = false;
+/** Which renderer currently owns the hover popup. Prevents cross-renderer removal. */
+let hoverPopupOwner: 'maplibre' | 'deckgl' | null = null;
 
 /**
  * Attach hover tooltip handlers to feature layers.
@@ -271,11 +332,18 @@ export function attachFeatureHoverHandlers(
 				const registeredIds = [...hoverRegistry.keys()];
 				if (registeredIds.length === 0) return;
 
+				// Filter to MapLibre-only layers — deck.gl layers handle hover via their own callbacks
+				const maplibreIds = registeredIds.filter(id => !isDeckGL(id));
+				if (maplibreIds.length === 0) return;
+
 				// Query only our registered layers — topmost feature is first
-				const features = map.queryRenderedFeatures(e.point, { layers: registeredIds });
+				const features = map.queryRenderedFeatures(e.point, { layers: maplibreIds });
 
 				if (features.length === 0) {
-					sharedHoverPopup!.remove();
+					if (hoverPopupOwner !== 'deckgl') {
+						sharedHoverPopup!.remove();
+						hoverPopupOwner = null;
+					}
 					return;
 				}
 
@@ -290,6 +358,7 @@ export function attachFeatureHoverHandlers(
 					.setLngLat(e.lngLat)
 					.setHTML(html)
 					.addTo(map);
+				hoverPopupOwner = 'maplibre';
 			});
 		});
 
@@ -315,6 +384,7 @@ export function removeFeatureHandlers(layerIds: string[]): void {
 export function clearAllFeatureHandlers(): void {
 	hoverRegistry.clear();
 	clickRegistry.clear();
+	hoverPopupOwner = null;
 }
 
 /**
@@ -345,4 +415,109 @@ export function updateHoverLabel(layerIds: string[], newLabel: string): void {
 			hoverRegistry.set(id, { ...opts, label: newLabel });
 		}
 	}
+}
+
+// ── deck.gl callback builders ──────────────────────────────────────────
+// These return closures that drive the shared MapLibre popup singletons
+// from deck.gl onHover / onClick callbacks, giving both renderers
+// identical popup/tooltip behavior.
+
+/**
+ * Build a deck.gl `onHover` callback for a layer.
+ * Registers the layer in `hoverRegistry` (parity with config generator,
+ * `getTooltipFields`, `removeFeatureHandlers`, etc.) and returns a
+ * closure that shows/hides the shared hover tooltip.
+ */
+export function buildDeckHoverCallback(
+	map: maplibregl.Map,
+	layerId: string,
+	options: HoverTooltipOptions,
+	globalProperties?: Record<string, unknown>[]
+): (info: DeckPickInfo) => void {
+	// Register so getTooltipFields / getHoverOptions / config generator work
+	hoverRegistry.set(layerId, options);
+
+	// Lazy-create shared popup (same pattern as attachFeatureHoverHandlers)
+	if (!sharedHoverPopup) {
+		sharedHoverPopup = new maplibregl.Popup({
+			closeButton: false,
+			closeOnClick: false,
+			className: 'hover-tooltip',
+			offset: 15
+		});
+	}
+
+	return (info: DeckPickInfo) => {
+		// Resolve object: info.object is set for GeoJSON data but undefined for
+		// binary data (deck.gl v9 doesn't populate it). Fall back to the
+		// globalProperties lookup using info.index (== globalFeatureId).
+		const object = info.object
+			?? (globalProperties && info.index != null && info.index >= 0
+				? globalProperties[info.index] as Record<string, unknown> | undefined
+				: undefined);
+
+		if (!info.picked || !object) {
+			if (hoverPopupOwner === 'deckgl') {
+				sharedHoverPopup!.remove();
+				hoverPopupOwner = null;
+			}
+			map.getCanvas().style.cursor = '';
+			return;
+		}
+
+		map.getCanvas().style.cursor = 'pointer';
+
+		const properties = extractPickedProperties(object);
+		const html = buildTooltipHTML(options.label, properties, options.fields);
+
+		sharedHoverPopup!
+			.setLngLat(info.coordinate as [number, number])
+			.setHTML(html)
+			.addTo(map);
+		hoverPopupOwner = 'deckgl';
+	};
+}
+
+/**
+ * Build a deck.gl `onClick` callback for a layer.
+ * Registers the layer in `clickRegistry` and returns a closure that
+ * shows the shared click popup with all feature properties.
+ */
+export function buildDeckClickCallback(
+	map: maplibregl.Map,
+	layerId: string,
+	globalProperties?: Record<string, unknown>[]
+): (info: DeckPickInfo) => void {
+	// Register so removeFeatureHandlers cleanup works
+	clickRegistry.add(layerId);
+
+	// Lazy-create shared popup (same pattern as attachFeatureClickHandlers)
+	if (!sharedClickPopup) {
+		sharedClickPopup = new maplibregl.Popup({
+			closeButton: true,
+			closeOnClick: true,
+			maxWidth: '350px',
+			className: 'feature-popup'
+		});
+	}
+
+	return (info: DeckPickInfo) => {
+		const object = info.object
+			?? (globalProperties && info.index != null && info.index >= 0
+				? globalProperties[info.index] as Record<string, unknown> | undefined
+				: undefined);
+
+		if (!object) return;
+
+		// Dismiss hover tooltip when click popup opens
+		sharedHoverPopup?.remove();
+		hoverPopupOwner = null;
+
+		const content = createPopupContent(extractPickedProperties(object));
+
+		sharedClickPopup!
+			.setLngLat(info.coordinate as [number, number])
+			.setDOMContent(content)
+			.addTo(map);
+	};
 }

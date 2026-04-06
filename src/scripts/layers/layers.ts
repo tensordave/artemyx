@@ -8,6 +8,8 @@ import type { StyleConfig } from '../db/constants';
 import type { LayerConfig } from '../config/types';
 import { getSourceId } from './sources';
 import { getDistinctGeometryTypes } from '../db';
+import { registerLayer } from '../deckgl/registry';
+import { hexToRGBA } from '../deckgl/color';
 
 /**
  * Layer info returned by getLayersBySource.
@@ -358,18 +360,93 @@ export interface LayerExecutionResult {
 }
 
 /**
+ * Build deck.gl GeoJsonLayer props from a LayerConfig's paint properties.
+ * Provides sensible defaults so `renderer: deckgl` works without explicit deckProps.
+ */
+function buildDeckGLPropsFromConfig(config: LayerConfig): Record<string, unknown> {
+	const props: Record<string, unknown> = {};
+	const paint = config.paint ?? {};
+
+	const fillColor = paint['fill-color'] as string | undefined;
+	const lineColor = paint['line-color'] as string | undefined;
+	const circleColor = paint['circle-color'] as string | undefined;
+	const primaryColor = fillColor || lineColor || circleColor;
+
+	if (primaryColor && typeof primaryColor === 'string') {
+		const fillOpacity = typeof paint['fill-opacity'] === 'number' ? paint['fill-opacity'] : 0.2;
+		const lineOpacity = typeof paint['line-opacity'] === 'number' ? paint['line-opacity'] : 0.6;
+		props.getFillColor = hexToRGBA(primaryColor, Math.round(fillOpacity * 255));
+		props.getLineColor = hexToRGBA(lineColor || primaryColor, Math.round(lineOpacity * 255));
+	}
+
+	if (typeof paint['line-width'] === 'number') {
+		props.lineWidthMinPixels = paint['line-width'];
+	}
+
+	if (typeof paint['circle-radius'] === 'number') {
+		props.getPointRadius = paint['circle-radius'];
+		props.pointRadiusMinPixels = 3;
+	}
+
+	return props;
+}
+
+/**
+ * Add a deck.gl layer from a LayerConfig.
+ * Fetches GeoJSON data from DuckDB and delegates to the deck.gl manager.
+ * Wires onHover / onClick callbacks for popup/tooltip parity with MapLibre layers.
+ */
+async function addDeckGLLayerFromConfig(map: maplibregl.Map, config: LayerConfig, label: string): Promise<void> {
+	let data: unknown;
+	let globalProps: Record<string, unknown>[] | undefined;
+	try {
+		// Binary path: bypasses GeoJSON serialization, transfers typed arrays zero-copy
+		const { getFeaturesAsBinary } = await import('../db');
+		const binary = await getFeaturesAsBinary(config.source);
+		data = binary;
+		const { buildGlobalProperties } = await import('../controls/popup');
+		globalProps = buildGlobalProperties(binary);
+		console.log(`[Layers] Using binary data path for deck.gl layer '${config.id}'`);
+	} catch (err) {
+		// Fallback to GeoJSON if binary path fails (e.g., unsupported geometry type)
+		console.warn(`[Layers] Binary path failed for '${config.id}', falling back to GeoJSON:`, err);
+		const { getFeaturesAsGeoJSON } = await import('../db');
+		data = await getFeaturesAsGeoJSON(config.source);
+	}
+
+	const { buildDeckHoverCallback, buildDeckClickCallback } = await import('../controls/popup');
+	const tooltipFields = config.tooltip
+		? (Array.isArray(config.tooltip) ? config.tooltip : [config.tooltip])
+		: undefined;
+
+	const props: Record<string, unknown> = {
+		data,
+		...buildDeckGLPropsFromConfig(config),
+		onHover: buildDeckHoverCallback(map, config.id, { label, fields: tooltipFields }, globalProps),
+		onClick: buildDeckClickCallback(map, config.id, globalProps),
+		...(config.deckProps ?? {})
+	};
+
+	const { addLayer } = await import('../deckgl/manager');
+	await addLayer(map, config.id, props);
+}
+
+/**
  * Execute all layers from config.
- * Creates MapLibre layers in config order (first = bottom, last = top).
+ * Creates layers in config order (first = bottom, last = top).
+ * Branches on `renderer`: MapLibre path unchanged, deck.gl path constructs
+ * a GeoJsonLayer spec and delegates to the MapboxOverlay manager.
  * Continues on errors to create as many layers as possible.
  *
  * @param map - MapLibre map instance
  * @param layers - Layer configurations from YAML
  * @returns Result with created layer IDs and any errors
  */
-export function executeLayersFromConfig(
+export async function executeLayersFromConfig(
 	map: maplibregl.Map,
-	layers: LayerConfig[]
-): LayerExecutionResult {
+	layers: LayerConfig[],
+	sourceNameMap?: Map<string, string>
+): Promise<LayerExecutionResult> {
 	const result: LayerExecutionResult = {
 		created: 0,
 		failed: 0,
@@ -382,11 +459,18 @@ export function executeLayersFromConfig(
 	}
 
 	for (const layerConfig of layers) {
+		const renderer = layerConfig.renderer ?? 'maplibre';
 		try {
-			addLayerFromConfig(map, layerConfig);
+			if (renderer === 'deckgl') {
+				const label = sourceNameMap?.get(layerConfig.source) || layerConfig.source || layerConfig.id;
+				await addDeckGLLayerFromConfig(map, layerConfig, label);
+			} else {
+				addLayerFromConfig(map, layerConfig);
+			}
+			registerLayer(layerConfig.id, renderer, layerConfig.source);
 			result.layerIds.push(layerConfig.id);
 			result.created++;
-			console.log(`[Layers] Created layer '${layerConfig.id}' (type: ${layerConfig.type}, source: ${layerConfig.source})`);
+			console.log(`[Layers] Created layer '${layerConfig.id}' (type: ${layerConfig.type}, source: ${layerConfig.source}, renderer: ${renderer})`);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 			result.errors.push(`${layerConfig.id}: ${errorMsg}`);

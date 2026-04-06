@@ -1,0 +1,25 @@
+map:
+  center: [20, 20]
+  zoom: 2
+  basemap: carto-dark
+
+datasets:
+  - id: meteorites
+    url: "https://assets.artemyx.org/parquet/meteorite-landings.parquet"
+    format: geoparquet
+    name: Meteorite Landings
+    color: "#e5a50a"
+
+layers:
+  - id: meteorite-points
+    source: meteorites
+    type: circle
+    renderer: deckgl
+    paint:
+      circle-color: "#e5a50a"
+      circle-radius: 3
+      fill-opacity: 0.7
+    deckProps:
+      pointRadiusMinPixels: 2
+      pointRadiusMaxPixels: 100
+      radiusScale: 10

@@ -344,6 +344,10 @@ export async function getFeaturesAsGeoJSON(datasetId?: string): Promise<GeoJSON.
 	return decodeGeoJsonBuffer(buffer);
 }
 
+export async function getFeaturesAsBinary(datasetId: string): Promise<import('./features').BinaryFeatureCollection> {
+	return rpc<import('./features').BinaryFeatureCollection>('getFeaturesAsBinary', { datasetId });
+}
+
 // ── Export functions (return raw buffers for download) ───────────────────
 
 /** Export dataset as GeoJSON buffer (reuses getFeaturesAsGeoJSON RPC, returns raw bytes). */

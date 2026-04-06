@@ -15,6 +15,7 @@ import { createExecutionPlan } from './config/operations-graph';
 import { executeOperations } from './config/executor';
 import { executeLayersFromConfig, resyncLayerOrder, restoreLabelIfConfigured, restoreStoredPaint } from './layers';
 import { toggleLayerVisibility } from './layer-actions/visibility';
+import { isDeckGL, getLayersByDataset } from './deckgl/registry';
 import { getDisplayColor } from './layer-actions/color';
 import { BrowserLogger } from './logger';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getDatasets, getDatasetBounds, getFeaturesAsGeoJSON, setLayerOrders, saveViewport, getCachedViewport, setEventHandler, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig, updateDatasetColor, updateDatasetStyle } from './db';
@@ -576,7 +577,17 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 		console.log(`Creating ${config.layers.length} layer(s) from config...`);
 		progressControl.updateProgress('layers', 'processing', `Creating ${config.layers.length} layer(s)...`);
 
-		const layerResult = executeLayersFromConfig(map, config.layers);
+		// Build source name map before layer creation so deck.gl layers
+		// can use it for popup labels during addDeckGLLayerFromConfig.
+		const sourceNameMap = new Map<string, string>();
+		for (const d of config.datasets ?? []) {
+			sourceNameMap.set(d.id, d.name || d.id);
+		}
+		for (const op of config.operations ?? []) {
+			sourceNameMap.set(op.output, op.name || op.output);
+		}
+
+		const layerResult = await executeLayersFromConfig(map, config.layers, sourceNameMap);
 
 		// Recompute layer_order so it matches the config's visual intent.
 		// For PMTiles sub-entries, index by {source}/{source-layer} so each
@@ -605,18 +616,14 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 			progressControl.updateProgress('layers', 'success', `${layerResult.created} layer(s) created`);
 		}
 
-		// Attach popup and hover handlers to created layers
+		// Attach popup and hover handlers to MapLibre layers
+		// (deck.gl layers get hover/click wired in addDeckGLLayerFromConfig)
 		if (layerResult.layerIds.length > 0) {
 			const layerConfigMap = new Map(config.layers.map(lc => [lc.id, lc]));
-			const sourceNameMap = new Map<string, string>();
-			for (const d of config.datasets ?? []) {
-				sourceNameMap.set(d.id, d.name || d.id);
-			}
-			for (const op of config.operations ?? []) {
-				sourceNameMap.set(op.output, op.name || op.output);
-			}
 
 			for (const layerId of layerResult.layerIds) {
+				if (isDeckGL(layerId)) continue;
+
 				const lc = layerConfigMap.get(layerId);
 				const tooltipFields = lc?.tooltip
 					? (Array.isArray(lc.tooltip) ? lc.tooltip : [lc.tooltip])
@@ -641,6 +648,8 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 			const configSources = new Set(config.layers.map(l => l.source));
 			for (const ds of allDs) {
 				if (!configSources.has(ds.id)) continue;
+				// deck.gl layers don't have MapLibre paint to sync
+				if (getLayersByDataset(ds.id, 'deckgl').length > 0) continue;
 				if (ds.color && ds.color !== '#3388ff') continue;
 				const mapColor = getDisplayColor(map, ds.id, '#3388ff');
 				if (mapColor !== '#3388ff') {
@@ -659,6 +668,7 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 			const configSourcesStyle = new Set(config.layers!.map(l => l.source));
 			for (const ds of allDsStyle) {
 				if (!configSourcesStyle.has(ds.id)) continue;
+				if (getLayersByDataset(ds.id, 'deckgl').length > 0) continue;
 				const styleOverrides = resolveSubLayerStyle(config.layers, ds.id);
 				if (Object.keys(styleOverrides).length > 0) {
 					const currentStyle = ds.style ? { ...DEFAULT_STYLE, ...JSON.parse(ds.style) } : { ...DEFAULT_STYLE };

@@ -287,10 +287,10 @@ async function workerLoadFromResponse(
 	options: WorkerLoadUrlOptions
 ): Promise<LoadPipelineRawResult> {
 	// Size check
-	const MAX_SIZE_BYTES = 100 * 1024 * 1024;
+	const MAX_SIZE_BYTES = 2048 * 1024 * 1024;
 	const contentLength = response.headers.get('Content-Length');
 	if (contentLength && parseInt(contentLength, 10) > MAX_SIZE_BYTES) {
-		throw new Error(`File too large (>100MB). Content-Length: ${contentLength} bytes`);
+		throw new Error(`File too large (>2GB). Content-Length: ${contentLength} bytes`);
 	}
 
 	const contentType = response.headers.get('Content-Type');
@@ -778,6 +778,13 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 				const geoJsonStr = await getFeaturesAsGeoJSONString(req.datasetId);
 				const geoJsonBuf = textEncoder.encode(geoJsonStr);
 				respondTransfer(requestId, geoJsonBuf, [geoJsonBuf.buffer]);
+				break;
+			}
+
+			case 'getFeaturesAsBinary': {
+				const { getFeaturesAsBinaryCollection } = await import('./features');
+				const { binary, transfers } = await getFeaturesAsBinaryCollection(req.datasetId);
+				respondTransfer(requestId, binary, transfers);
 				break;
 			}
 

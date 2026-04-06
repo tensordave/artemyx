@@ -1,0 +1,41 @@
+# deck.gl Arrow binary path A/B test
+# Same dataset rendered via both MapLibre (GeoJSON path) and deck.gl (binary path).
+# 66,000 line features -- performance difference should be visible.
+# Orange = MapLibre/GeoJSON, Blue = deck.gl/Binary.
+
+map:
+  center: [-123.1207, 49.2827]
+  zoom: 12
+  basemap: carto-dark
+
+datasets:
+  - id: water-mains-deckgl
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/water-distribution-mains/exports/parquet?lang=en&timezone=America%2FLos_Angeles"
+    name: Water Distribution Mains deckgl
+    color: "#62a0ea"
+    format: geoparquet
+  - id: water-mains-geojson
+    url: "https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/water-distribution-mains/exports/parquet?lang=en&timezone=America%2FLos_Angeles"
+    name: Water Distribution Mains geojson
+    color: "#62a0ea"
+    format: geoparquet
+
+layers:
+  # MapLibre: GeoJSON path (string_agg + JSON.parse)
+  - id: water-mains-maplibre
+    source: water-mains-geojson
+    type: line
+    renderer: maplibre
+    paint:
+      line-color: "#f97316"
+      line-width: 1.5
+      line-opacity: 0.5
+
+  # deck.gl: Binary path (BinaryFeatureCollection, zero-copy transfer)
+  - id: water-mains-deckgl
+    source: water-mains-deckgl
+    type: line
+    renderer: deckgl
+    paint:
+      line-color: "#62a0ea"
+      line-width: 2

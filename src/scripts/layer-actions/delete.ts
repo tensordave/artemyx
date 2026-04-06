@@ -4,6 +4,7 @@ import { getLayersForDataset, getLayersBySource, getSourceId } from '../layers';
 import { removeFeatureHandlers } from '../controls/popup';
 import { ProgressControl } from '../controls/progress-control';
 import { showErrorDialog } from '../ui/error-dialog';
+import { getLayersByDataset, unregisterLayer } from '../deckgl/registry';
 
 /**
  * Show inline confirmation dialog within a panel
@@ -109,6 +110,18 @@ export async function deleteDatasetWithLayers(
 
 	for (const layer of layers) {
 		map.removeLayer(layer.id);
+		unregisterLayer(layer.id);
+	}
+
+	// Remove deck.gl layers for this dataset
+	const deckLayerIds = getLayersByDataset(datasetId, 'deckgl');
+	if (deckLayerIds.length > 0) {
+		removeFeatureHandlers(deckLayerIds);
+		const { removeLayer: removeDeckLayer } = await import('../deckgl/manager');
+		for (const id of deckLayerIds) {
+			removeDeckLayer(id);
+			unregisterLayer(id);
+		}
 	}
 
 	// Only remove the shared source if no other layers remain on it

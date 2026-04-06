@@ -168,7 +168,7 @@
 
 .config-viewer-body {
 	flex: 1;
-	overflow-y: auto;
+	overflow: auto;
 	padding: 0;
 }
 
@@ -186,7 +186,7 @@
 
 .config-viewer-editor {
 	position: relative;
-	width: 100%;
+	min-width: 100%;
 	min-height: 200px;
 }
 
