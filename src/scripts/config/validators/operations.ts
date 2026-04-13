@@ -136,6 +136,36 @@ function validateAttributeParams(params: Record<string, unknown>, prefix: string
 }
 
 /**
+ * Validate join operation params.
+ */
+function validateJoinParams(params: Record<string, unknown>, prefix: string): string[] {
+	const errors: string[] = [];
+
+	// Required: sourceKey (non-empty string)
+	if (!('sourceKey' in params)) {
+		errors.push(`${prefix}.params: join operation requires 'sourceKey'`);
+	} else if (typeof params.sourceKey !== 'string' || params.sourceKey.trim() === '') {
+		errors.push(`${prefix}.params.sourceKey: must be a non-empty string`);
+	}
+
+	// Required: targetKey (non-empty string)
+	if (!('targetKey' in params)) {
+		errors.push(`${prefix}.params: join operation requires 'targetKey'`);
+	} else if (typeof params.targetKey !== 'string' || params.targetKey.trim() === '') {
+		errors.push(`${prefix}.params.targetKey: must be a non-empty string`);
+	}
+
+	// Optional: mode ('inner' or 'left')
+	if ('mode' in params && params.mode !== undefined) {
+		if (params.mode !== 'inner' && params.mode !== 'left') {
+			errors.push(`${prefix}.params.mode: must be 'inner' or 'left'`);
+		}
+	}
+
+	return errors;
+}
+
+/**
  * Validate a single operation config entry.
  * Checks structure only - dependency graph validation happens separately.
  */
@@ -214,6 +244,9 @@ export function validateOperation(op: unknown, index: number): string[] {
 	if (opType === 'attribute' && !('params' in o)) {
 		errors.push(`${prefix}: attribute operation requires 'params' (structured filter or where clause)`);
 	}
+	if (opType === 'join' && !('params' in o)) {
+		errors.push(`${prefix}: join operation requires 'params' (sourceKey, targetKey)`);
+	}
 	if ('params' in o && o.params !== undefined) {
 		if (typeof o.params !== 'object' || o.params === null || Array.isArray(o.params)) {
 			errors.push(`${prefix}.params: must be an object`);
@@ -225,6 +258,8 @@ export function validateOperation(op: unknown, index: number): string[] {
 				errors.push(...validateDistanceParams(o.params as Record<string, unknown>, prefix));
 			} else if (opType === 'attribute') {
 				errors.push(...validateAttributeParams(o.params as Record<string, unknown>, prefix));
+			} else if (opType === 'join') {
+				errors.push(...validateJoinParams(o.params as Record<string, unknown>, prefix));
 			}
 		}
 	}

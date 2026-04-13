@@ -52,7 +52,7 @@ export function getInitLog(): InitLogEntry[] {
 /**
  * Initialize database schema for multi-dataset support
  */
-async function initSchema(): Promise<void> {
+export async function initSchema(): Promise<void> {
 	if (!conn) {
 		throw new Error('Database connection not initialized');
 	}
@@ -106,6 +106,11 @@ async function initSchema(): Promise<void> {
 	`);
 	await conn.query(`
 		ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_layer TEXT DEFAULT NULL
+	`);
+
+	// Migration: add is_spatial column for non-spatial (table-only) datasets
+	await conn.query(`
+		ALTER TABLE datasets ADD COLUMN IF NOT EXISTS is_spatial BOOLEAN DEFAULT true
 	`);
 
 	// Backfill layer_order for existing rows that still have the default (0)

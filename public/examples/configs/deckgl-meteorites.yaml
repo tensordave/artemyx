@@ -1,3 +1,9 @@
+# Artemyx Example - deck.gl Meteorite Landings
+# 45,000+ recorded meteorite landings rendered as a deck.gl scatterplot layer.
+# Uses GeoParquet for efficient binary data transfer, bypassing GeoJSON serialization.
+# Data source: NASA Open Data Portal - Meteorite Landings
+# https://data.nasa.gov/dataset/meteorite-landings
+
 map:
   center: [20, 20]
   zoom: 2

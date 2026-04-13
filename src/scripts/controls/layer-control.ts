@@ -2,6 +2,7 @@ import maplibregl from 'maplibre-gl';
 import { getDatasets, updateDatasetVisible, swapLayerOrder, updateDatasetName } from '../db';
 import { renameDataset } from '../layer-actions/rename';
 import type { LegendControl } from './legend-control';
+import type { DatasetControl } from './dataset-control';
 import { updateHoverLabel } from '../controls/popup';
 import { getLayersForDataset } from '../layers';
 import { stackIcon } from '../icons';
@@ -41,6 +42,8 @@ export class LayerToggleControl implements maplibregl.IControl {
 	private operationBuilderControl?: OperationBuilderControl;
 	/** Legend control, refreshed on PMTiles rename */
 	private legendControl?: LegendControl;
+	/** Dataset control, icon color updated on dataset changes */
+	private datasetControl?: DatasetControl;
 	private focusTrap: FocusTrap | null = null;
 	private previousFocus: HTMLElement | null = null;
 
@@ -70,6 +73,10 @@ export class LayerToggleControl implements maplibregl.IControl {
 	 */
 	setLegendControl(lc: LegendControl): void {
 		this.legendControl = lc;
+	}
+
+	setDatasetControl(dc: DatasetControl): void {
+		this.datasetControl = dc;
 	}
 
 	onAdd(map: maplibregl.Map) {
@@ -261,6 +268,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 				onToggleVisibility: (datasetId, visible) => {
 					toggleLayerVisibility(this.map!, datasetId, visible);
 					updateDatasetVisible(datasetId, visible);
+					this.legendControl?.refresh();
 					this.announce(`Layer ${dataset.name} ${visible ? 'shown' : 'hidden'}`);
 				},
 				onRowClick: (ds) => {
@@ -279,6 +287,8 @@ export class LayerToggleControl implements maplibregl.IControl {
 			});
 			this.panel!.appendChild(row);
 		});
+
+		this.legendControl?.refresh();
 	}
 
 	/**
@@ -343,6 +353,7 @@ export class LayerToggleControl implements maplibregl.IControl {
 				() => {
 					this.refreshPanel();
 					this.operationBuilderControl?.refreshDatasets();
+					this.datasetControl?.updateIconColor();
 					this.announce(`Layer ${dataset.name} deleted`);
 				}
 			);

@@ -14,7 +14,7 @@ export type { FallbackReason } from './db/core';
 export { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, deleteDataset, deleteAllDatasets, deleteSubDatasets, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, createMetadataDataset, checkpoint, vacuum } from './db/client';
 
 // Feature query operations (via worker RPC)
-export { getFeaturesAsGeoJSON, getFeaturesAsBinary, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes, exportAsGeoJSON, exportAsCSV, exportAsParquet, exportAsPMTiles, exportAsMultiLayerPMTiles, extractPMTiles } from './db/client';
+export { getFeaturesAsGeoJSON, getFeaturesAsBinary, getDatasetBounds, getPropertyKeys, getPreviewRows, getDistinctGeometryTypes, exportAsGeoJSON, exportAsCSV, exportAsParquet, exportAsPMTiles, exportAsMultiLayerPMTiles, extractPMTiles } from './db/client';
 
 // Full pipeline operations (worker-side fetch + parse + insert)
 export { loadFromUrl, loadFromBuffer, executeOperationInWorker, getOperations, clearOperations, saveOperationMetadata } from './db/client';

@@ -5,28 +5,35 @@ Completed work is listed at the bottom. For full detail on each release, see [CH
 
 ## Roadmap
 
-### v0.9.1 - ArcLayer
+### v0.9.2 - ArcLayer
 
 - **`ArcLayer`** - Flow and OD (origin-destination) visualization; requires source and target coordinate columns in feature properties; distinct from GeoJsonLayer line rendering - draws curved great-circle arcs between point pairs
 
-### v0.9.2 - Additional Render Types
+### v0.9.3 - Additional Render Types
 
 - **`ScatterplotLayer`** - deck.gl large point cloud rendering with radius scale and fill/stroke color accessors; suited for transit stops, parcel centroids, and other high-count point datasets
 - **`HeatmapLayer`** - deck.gl GPU-accelerated continuous density; distinct from MapLibre's `heatmap` type, operates entirely on the deck.gl pipeline
 - **`HexagonLayer`** - deck.gl aggregation hexbins; count or sum of features per cell; configurable radius and elevation scale
 - **`ColumnLayer`** - deck.gl 3D vertical bars driven by a numeric property; pairs with `fill-extrusion` use cases that need deck.gl's rendering scale
 
-### v0.9.3 - Auto-promote
+### v0.9.4 - Auto-promote - 
 
 - **Auto-promote large datasets** - Datasets exceeding a configurable feature count threshold (dependent on feature type; higher threshold for points, versus lines, versus polygons) are automatically assigned `renderer: deckgl` using a `GeoJsonLayer`; explicit `renderer` in config always wins; threshold configurable via `map.deckglThreshold` in YAML
 
-### v0.9.4 - Examples
+### v0.9.5 - Examples & Polish
 
-- **GeoJSON layer example** - 
+- **GeoJSON layer example** - Meteorites (done)
 - **ArcLayer example** - 
 - **ScatterplotLayer example** - 
 - **HexagonLayer example** - 
 - **ColumnLayer example** - 
+- **imported datasets should list geo layers** - in some cases, like specifying a local file to upload with deck.gl rendering. The dataset shows up properly in dataset control, but Show Layers does not show any layers. 
+- **layer control opacity issues** - in some circumstances, like when interacting with styling editor for deck.gl rendered layers, layer control's panels get too transparent to read easily. 
+- **dataset control window refreshes** - changing names on layer controls should trigger Datasets window's refresh (instead of having to toggle the window closed and opened again), there might be other situations where we'd want to trigger the Dataset control window's refresh.
+- **Deck.gl layer functionality** - bring layer controls to parity for deck.gl layers. Ex: cannot toggle off and on visibility for deck.gl layers. (this might be a bug in some circumstances because it's worked sometimes; tbd)
+- **Deck.gl Styling editor update** - bring the styling editor to parity as much as possible with deck.gl rendering. And where we can't we should gate the controls with a mention that it's not available with deck.gl. 
+- **Delete Dataset and Clear Data (config editor) fix** - the layer control's context menu "Delete Dataset" and the Clear All Data in the config editor seem to be O(N) in processing complexity. Should investigate and improve this performance. 
+- **Operation Builder attribute operations support** - Tabular data would work with the attribute operation, we should enable that functionality. 
 
 ### v0.10.0 - Monorepo Split and Shared Core
 
@@ -137,7 +144,6 @@ Items worth building eventually but not yet assigned to a version:
 - **Layer Expression Editor** - Raw MapLibre expression input per layer paint property; JSON validation before applying; updates MapLibre directly without modifying the config file
 - **Feature selection** - Click or box-select features on the map to create a subset dataset; selected features visually distinguished; selection available as input to operations
 - **Tabular view** - Bottom panel with sortable, filterable data grid; row click highlights feature on map
-- **`join` operation** - Tabular join: attach a CSV or JSON dataset to a spatial dataset by a shared key field; enables workflows like coloring parcels by census data or enriching transit stops with ridership counts; config references a tabular `source`, a spatial `target`, and an `on` key; joined properties merged into the output feature's attributes
 - **`spatial-join` operation** - Attach attributes from layer B to layer A based on geometric relationship (intersects, contains, nearest); distinct from tabular join - no shared key required, relationship is spatial; e.g., tag parcels with their containing neighbourhood or find the nearest transit stop to each school
 - **Undo/redo** - Session history stack for operations and dataset changes; step backward and forward through state; covers dataset loads, operation executions, and layer modifications
 - **`attribute` annotate mode** - Extend the `attribute` operation with a second mode that enriches features with computed properties via SQL expressions (e.g., derive a `category` field from `speed_limit` thresholds, or normalize a string column); structured params for simple computed fields, raw SQL expression escape hatch for advanced transformations; adds to the existing filter mode introduced in v0.4.0
@@ -149,6 +155,7 @@ Items worth building eventually but not yet assigned to a version:
 - **`geometryColumn` config field** - explicit geometry column name override on `DatasetConfig` for GeoParquet and similar tabular formats where auto-detection fails or is ambiguous; paired with an input in the load UI for manual datasets
 - **Smarter URL label extraction** - Progress control currently shows raw URLs in loading messages; extract human-readable dataset names from well-known portal URL patterns (Socrata `/resource/<4x4>`, ArcGIS REST `/FeatureServer/0/query`, OGC `/collections/<id>/items`); fall back to hostname or full URL for unrecognized patterns
 - **Scale bar unit config field** - `map.unit: metric | imperial` in YAML config to set the default scale bar unit for a given map; useful for configs targeting a specific regional audience; defaults to metric when omitted
+- **Batch geocoding operation** - Resolve a text column (place names, addresses) to coordinates using an open-source geocoding engine (Pelias, Nominatim); extends the existing geocoding search infrastructure to batch column-level lookups; fallback for OD/flow data where no structured code-to-coordinate reference table exists
 - **Persist scale bar unit preference** - store the user's last-selected metric/imperial toggle choice in `localStorage`; restored on next session; overrides config default but can itself be overridden by explicit `map.unit` in config
 - **DB mutation error feedback** - Surface failures from color, style, and visibility DB updates in the progress control; currently callers don't check return values, leaving the UI appearing to succeed when the DB write failed (hard to test - DB mutations have been rock-solid in practice)
 - **Geometry validation** - Add `ST_IsValid` + `ST_MakeValid` to the DuckDB INSERT pipeline so invalid geometries (self-intersections, degenerate rings) are repaired on load
@@ -166,6 +173,9 @@ Items worth building eventually but not yet assigned to a version:
 
 
 ## Completed
+
+### v0.9.1 - Datasets and Join
+- Dataset preview panel (draggable/resizable, row/column preview, schema inspection, geo/tabular icons with layer cross-reference), non-spatial dataset ingestion (CSV/JSON without geometry stored as plain tables for joins and tabular operations), `join` operation with Operation Builder support (tabular join by shared key field), dataset button status colour (teal for tabular-only, green for geo data), deck.gl legend parity, StorageControl icon change (hard-drives, G shortcut), clear session performance fix for large datasets
 
 ### v0.9.0 - deck.gl and Binary Arrow
 - deck.gl rendering pipeline via `MapboxOverlay` singleton manager with `renderer: deckgl` config field and `deckProps` passthrough, layer creation branching and dataset-to-renderer registry for routing visibility/color/style/delete actions, popup/hover parity reusing shared singletons, Arrow binary data path bypassing GeoJSON serialization for large datasets; renderer chooser in Load Data/Upload Files forms; config editor horizontal scrolling in view and edit modes

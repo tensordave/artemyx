@@ -10,6 +10,7 @@ interface UploadControlOptions {
 	logger: Logger;
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
+	onDatasetChange?: () => void;
 }
 
 export class UploadControl implements maplibregl.IControl {
@@ -25,6 +26,7 @@ export class UploadControl implements maplibregl.IControl {
 	private logger: Logger;
 	private layerToggleControl: LayerToggleControl;
 	private loadedDatasets: Set<string>;
+	private onDatasetChange?: () => void;
 
 	private onPanelOpenCb?: () => void;
 	private onEsc: (e: KeyboardEvent) => void;
@@ -45,6 +47,7 @@ export class UploadControl implements maplibregl.IControl {
 		this.logger = options.logger;
 		this.layerToggleControl = options.layerToggleControl;
 		this.loadedDatasets = options.loadedDatasets;
+		this.onDatasetChange = options.onDatasetChange;
 
 		this.onEsc = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') this.closePanel();
@@ -106,7 +109,7 @@ export class UploadControl implements maplibregl.IControl {
 
 		const label = document.createElement('p');
 		label.className = 'upload-drop-label';
-		label.textContent = 'Drag a GeoJSON, CSV, or Parquet file onto the map, or click below to browse.';
+		label.textContent = 'Drag a GeoJSON, CSV, Parquet, or JSON file onto the map, or click below to browse.';
 		this.dropZone.appendChild(label);
 
 		const browseBtn = document.createElement('button');
@@ -122,7 +125,7 @@ export class UploadControl implements maplibregl.IControl {
 		// Hidden file input
 		this.fileInput = document.createElement('input');
 		this.fileInput.type = 'file';
-		this.fileInput.accept = '.geojson,.json,.csv,.parquet,.geoparquet,.pmtiles';
+		this.fileInput.accept = '.geojson,.json,.csv,.tsv,.parquet,.geoparquet,.pmtiles';
 		this.fileInput.style.display = 'none';
 		this.container.appendChild(this.fileInput);
 
@@ -217,10 +220,12 @@ export class UploadControl implements maplibregl.IControl {
 			latColumn: opts.latColumn,
 			lngColumn: opts.lngColumn,
 			geoColumn: opts.geoColumn,
+			tableOnly: opts.tableOnly,
 		});
 
 		if (success) {
 			this.advancedOptions?.reset();
+			this.onDatasetChange?.();
 		}
 	}
 }

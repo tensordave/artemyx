@@ -52,7 +52,7 @@ async function detectParquetCrs(
 async function loadParquet(
 	buffer: ArrayBuffer,
 	configCrs?: string,
-): Promise<{ data: GeoJSON.FeatureCollection; detectedCrs?: string; crsHandled?: boolean }> {
+): Promise<{ data: GeoJSON.FeatureCollection; detectedCrs?: string; crsHandled?: boolean; nonSpatial?: boolean }> {
 	const db = await getDB();
 	const conn = await getConnection();
 
@@ -72,10 +72,24 @@ async function loadParquet(
 		// then fall back to any BLOB column
 		const geomMatch = findGeometryColumn(columns);
 		if (!geomMatch) {
-			throw new Error(
-				`No geometry column found in Parquet file. ` +
-				`Columns: ${columns.map(c => `${c.name} (${c.type})`).join(', ')}`
+			// No geometry column — load as non-spatial (table-only) dataset
+			const propCols = columns.map(c => c.name);
+			const propSelect = propCols.map(c => `"${c}"`).join(', ');
+			const result = await conn.query(
+				`SELECT ${propSelect} FROM read_parquet('${fileName}')`
 			);
+			const rows = result.toArray();
+			const features = rows.map((row: any) => {
+				const properties: Record<string, unknown> = {};
+				for (const col of propCols) {
+					const val = row[col];
+					properties[col] = typeof val === 'bigint'
+						? (val >= Number.MIN_SAFE_INTEGER && val <= Number.MAX_SAFE_INTEGER ? Number(val) : String(val))
+						: val;
+				}
+				return { type: 'Feature' as const, geometry: null as unknown as GeoJSON.Geometry, properties };
+			});
+			return { data: { type: 'FeatureCollection', features }, nonSpatial: true };
 		}
 
 		const geomCol = geomMatch.name;
@@ -186,7 +200,7 @@ export const geoparquetLoader: FormatLoader = {
 		const buffer = data as ArrayBuffer;
 		const result = await loadParquet(buffer, options?.crs);
 
-		if (result.data.features.length === 0) {
+		if (result.data.features.length === 0 && !result.nonSpatial) {
 			throw new Error('GeoParquet file contains no valid geometry features');
 		}
 

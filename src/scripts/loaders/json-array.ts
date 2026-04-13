@@ -202,7 +202,12 @@ export function tryLoadJsonArray(
 		if (fc.features.length > 0) return { data: fc };
 	}
 
-	return null;
+	// No geometry detected — load as non-spatial (table-only) dataset
+	const features = items.map(item => {
+		const properties: Record<string, unknown> = { ...item };
+		return { type: 'Feature' as const, geometry: null as unknown as GeoJSON.Geometry, properties };
+	});
+	return { data: { type: 'FeatureCollection', features }, nonSpatial: true };
 }
 
 export const jsonArrayLoader: FormatLoader = {

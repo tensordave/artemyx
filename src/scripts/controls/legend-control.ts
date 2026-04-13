@@ -7,6 +7,8 @@ import type { Map as MaplibreMap, IControl } from 'maplibre-gl';
 import type { SourceLayerInfo } from '../layers/layers';
 import { listIcon } from '../icons';
 import { getDatasets } from '../db';
+import { getLayersByDataset } from '../deckgl/registry';
+import { getLayerEntry } from '../deckgl/manager';
 
 const STORAGE_KEY = 'artemyx-legend-expanded';
 const DEBOUNCE_MS = 200;
@@ -96,9 +98,15 @@ function parseColorValue(value: unknown, layerType: SourceLayerInfo['type']): Le
 
 // ── Helpers ──
 
-function buildLegendGroups(map: MaplibreMap, datasetNames: Record<string, string>): LegendGroup[] {
+interface LegendBuildResult {
+	groups: LegendGroup[];
+	/** Dataset IDs that have at least one MapLibre legend entry */
+	coveredDatasetIds: Set<string>;
+}
+
+function buildLegendGroups(map: MaplibreMap, datasetNames: Record<string, string>): LegendBuildResult {
 	const style = map.getStyle();
-	if (!style?.layers) return [];
+	if (!style?.layers) return { groups: [], coveredDatasetIds: new Set() };
 
 	// Group layers by source
 	const sourceMap = new Map<string, Array<{ type: SourceLayerInfo['type']; paint: Record<string, unknown> }>>();
@@ -128,6 +136,7 @@ function buildLegendGroups(map: MaplibreMap, datasetNames: Record<string, string
 	}
 
 	const groups: LegendGroup[] = [];
+	const coveredDatasetIds = new Set<string>();
 
 	for (const [groupKey, layers] of sourceMap) {
 		// Parse composite key: "dataset-parent|sourceLayer" or plain "dataset-id"
@@ -163,7 +172,39 @@ function buildLegendGroups(map: MaplibreMap, datasetNames: Record<string, string
 
 		if (entries.length > 0) {
 			groups.push({ label, entries });
+			coveredDatasetIds.add(datasetId);
 		}
+	}
+
+	return { groups, coveredDatasetIds };
+}
+
+// ── deck.gl legend groups ──
+
+function buildDeckLegendGroups(
+	datasets: Array<{ id: string; name: string; color: string }>,
+	excludeIds: Set<string>
+): LegendGroup[] {
+	const groups: LegendGroup[] = [];
+
+	for (const ds of datasets) {
+		if (excludeIds.has(ds.id)) continue;
+
+		const deckLayerIds = getLayersByDataset(ds.id, 'deckgl');
+		if (deckLayerIds.length === 0) continue;
+
+		// Check authoritative visibility from the manager
+		const entry = getLayerEntry(deckLayerIds[0]);
+		if (entry && !entry.visible) continue;
+
+		groups.push({
+			label: ds.name || ds.id,
+			entries: [{
+				type: 'solid',
+				color: ds.color || '#3388ff',
+				layerType: 'fill'
+			}]
+		});
 	}
 
 	return groups;
@@ -414,7 +455,9 @@ export class LegendControl implements IControl {
 			nameMap[ds.id] = ds.name || ds.id;
 		}
 
-		const groups = buildLegendGroups(this.map, nameMap);
+		const { groups: maplibreGroups, coveredDatasetIds } = buildLegendGroups(this.map, nameMap);
+		const deckGroups = buildDeckLegendGroups(datasets, coveredDatasetIds);
+		const groups = [...maplibreGroups, ...deckGroups];
 
 		// Clear and re-render
 		this.content.innerHTML = '';

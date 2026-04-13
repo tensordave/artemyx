@@ -19,7 +19,7 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - Auto-generated legend from active layer styles (color swatches, gradient ramps, category entries)
 - YAML-driven configuration with in-browser editor (live syntax highlighting, edit/run/clear/import/generate/export)
 - Visual operation builder UI for constructing spatial operations without editing YAML directly
-- Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter)
+- Spatial operations via DuckDB-WASM (buffer, intersection, union, difference, contains, distance, centroid, attribute filter, join)
 - Multi-format loading (GeoJSON, CSV, GeoParquet, JSON arrays, PMTiles) with paginated fetching
 - PMTiles vector tile support with multi-layer archives, per-layer panel entries, and automatic style detection
 - Local file upload via drag-and-drop or file picker
@@ -34,6 +34,8 @@ A declarative GIS application using MapLibre GL JS with client-side data process
 - PMTiles extraction from remote vector tile archives with tile decoding and feature deduplication
 - Keyboard shortcuts for all controls with shortcut key tooltips
 - Accessibility: ARIA labels, focus trapping in panels, screen reader announcements, text-beside-icons toggle
+- Dataset preview panel with row/column inspection and schema overview
+- Non-spatial dataset ingestion (CSV/JSON without geometry) for tabular joins and operations
 - Fully client-side - no backend required
 
 ## Tech Stack
@@ -59,7 +61,7 @@ src/scripts/
 │   ├── export-viewer.ts    # Export viewer-ready ZIP (config + data files)
 │   ├── output-executor.ts  # Config-driven output execution (GeoJSON, CSV, Parquet, PMTiles)
 │   ├── output-types.ts     # Output format types and PMTiles params
-│   └── operations/    # One file per operation (buffer, intersection, union, ...) + unit-conversion.ts + shared render.ts
+│   └── operations/    # One file per operation (buffer, intersection, union, join, ...) + unit-conversion.ts + shared render.ts
 ├── db/                # DuckDB-WASM (runs in Web Worker)
 │   ├── worker.ts      # Module worker entry point, message dispatch, full load pipeline
 │   ├── worker-types.ts # Typed discriminated union message protocol
@@ -67,6 +69,7 @@ src/scripts/
 │   ├── core.ts        # DB init, OPFS persistence, spatial extension (worker-side)
 │   ├── datasets.ts    # Dataset CRUD operations (worker-side)
 │   ├── features.ts    # Feature queries, GeoJSON export (worker-side)
+│   ├── wkb.ts         # WKB geometry parsing utilities
 │   ├── constants.ts   # Pure constants, types, localStorage helpers (shared)
 │   ├── pmtiles-reader.ts  # PMTiles tile fetching, MVT decoding, feature deduplication
 │   ├── pmtiles-writer.ts  # PMTiles archive generation (geojson-vt + vt-pbf)
@@ -110,6 +113,8 @@ src/scripts/
 │   └── rename.ts      # Dataset ID cascading rename
 ├── controls/          # MapLibre custom map controls
 │   ├── index.ts              # Barrel re-export
+│   ├── dataset-control.ts    # Dataset preview panel (row/column inspection, schema, layer cross-reference)
+│   ├── table-preview-panel.ts # Tabular data preview for dataset inspection
 │   ├── data-control.ts       # Load data from URL with advanced options (CRS, format, columns)
 │   ├── upload-control.ts     # Local file upload (drag-and-drop, file picker)
 │   ├── config-control.ts     # Config editor (edit, run, clear, import, generate, export) with live Shiki highlighting
@@ -117,7 +122,7 @@ src/scripts/
 │   ├── operation-builder-control.ts  # Visual operation builder with live YAML preview
 │   ├── layer-control.ts      # Layer visibility, color, rename, delete, reorder
 │   ├── legend-control.ts     # Auto-generated legend from active layer styles
-│   ├── storage-control.ts    # OPFS status, session management, database export/import
+│   ├── storage-control.ts    # OPFS status, session management, database export/import (G)
 │   ├── geocoding-control.ts  # Address search via Photon geocoding
 │   ├── basemap-control.ts    # Basemap switcher
 │   ├── scale-control.ts      # Scale bar, coordinate display (DD/DMS)

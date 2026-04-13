@@ -37,7 +37,7 @@ export const VALID_BASEMAPS: BasemapId[] = ['carto-dark', 'carto-light', 'carto-
 export const UNARY_OPERATIONS: UnaryOperationType[] = ['buffer', 'centroid', 'attribute'];
 
 /** Binary operations (multiple inputs) */
-export const BINARY_OPERATIONS: BinaryOperationType[] = ['intersection', 'union', 'difference', 'contains', 'distance'];
+export const BINARY_OPERATIONS: BinaryOperationType[] = ['intersection', 'union', 'difference', 'contains', 'distance', 'join'];
 
 /** All valid operation types */
 export const ALL_OPERATIONS = [...UNARY_OPERATIONS, ...BINARY_OPERATIONS];

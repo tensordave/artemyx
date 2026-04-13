@@ -102,7 +102,7 @@ import type { DistanceUnit } from './operations/unit-conversion';
  * Unary operations take a single input, binary operations take multiple inputs.
  */
 export type UnaryOperationType = 'buffer' | 'centroid' | 'attribute';
-export type BinaryOperationType = 'intersection' | 'union' | 'difference' | 'contains' | 'distance';
+export type BinaryOperationType = 'intersection' | 'union' | 'difference' | 'contains' | 'distance' | 'join';
 export type OperationType = UnaryOperationType | BinaryOperationType;
 
 /** Buffer operation parameters */
@@ -207,6 +207,20 @@ export interface AttributeParams {
 	 * Example: "json_extract_string(properties, '$.streetuse') IN ('Arterial', 'Collector')"
 	 */
 	where?: string;
+}
+
+/** Join operation parameters */
+export interface JoinParams {
+	/** Property key in the source (tabular) dataset to join on */
+	sourceKey: string;
+	/** Property key in the target (spatial) dataset to join on */
+	targetKey: string;
+	/**
+	 * Join mode:
+	 * - 'left': Keep all target features, merging source properties where keys match (default)
+	 * - 'inner': Keep only target features that have a matching source row
+	 */
+	mode?: 'inner' | 'left';
 }
 
 /** Base fields common to all operations */

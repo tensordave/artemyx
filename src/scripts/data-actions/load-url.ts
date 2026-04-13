@@ -82,6 +82,7 @@ export async function loadDataFromUrl(
 			mapCrs: options.mapCrs,
 			hidden: options.hidden,
 			skipCrsPrompt: options.skipErrorDialog,
+			tableOnly: options.tableOnly,
 		};
 
 		// Delegate entire pipeline to worker
@@ -90,7 +91,11 @@ export async function loadDataFromUrl(
 		const result = await loadFromUrl(url, workerOptions);
 
 		// Render on main thread
-		if (!result.hidden) {
+		if (result.nonSpatial) {
+			// Non-spatial (table-only) datasets: no map rendering, just track and refresh panel
+			loadedDatasets.add(result.datasetId);
+			layerToggleControl.refreshPanel();
+		} else if (!result.hidden) {
 			const resolvedRenderer = options.renderer === 'deckgl' ? 'deckgl' : 'maplibre';
 			let layerIds: string[];
 			if (resolvedRenderer === 'deckgl') {

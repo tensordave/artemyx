@@ -115,6 +115,8 @@ export interface LoadDataOptions {
 	mapCrs?: string;
 	/** Renderer override: 'maplibre', 'deckgl', or undefined (auto — defaults to maplibre for now) */
 	renderer?: RendererType;
+	/** When true, skip geometry detection and load as table-only (non-spatial) dataset */
+	tableOnly?: boolean;
 }
 
 /**

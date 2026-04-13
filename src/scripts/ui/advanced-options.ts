@@ -15,6 +15,8 @@ export interface AdvancedOptionsValues {
 	latColumn?: string;
 	lngColumn?: string;
 	geoColumn?: string;
+	/** When true, skip geometry detection and load as table-only dataset */
+	tableOnly?: boolean;
 }
 
 /** Result of building the advanced options panel */
@@ -66,6 +68,23 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 	}
 	formatGroup.appendChild(formatSelect);
 	body.appendChild(formatGroup);
+
+	// -- Table only checkbox --
+	const tableOnlyGroup = document.createElement('div');
+	tableOnlyGroup.className = 'advanced-options-field advanced-options-field--checkbox';
+	const tableOnlyLabel = document.createElement('label');
+	tableOnlyLabel.className = 'advanced-options-label advanced-options-label--checkbox';
+	const tableOnlyCheckbox = document.createElement('input');
+	tableOnlyCheckbox.type = 'checkbox';
+	tableOnlyCheckbox.className = 'advanced-options-checkbox';
+	tableOnlyLabel.appendChild(tableOnlyCheckbox);
+	tableOnlyLabel.appendChild(document.createTextNode(' Table only'));
+	tableOnlyGroup.appendChild(tableOnlyLabel);
+	const tableOnlyHint = document.createElement('span');
+	tableOnlyHint.className = 'advanced-options-hint';
+	tableOnlyHint.textContent = 'Skip geometry detection, load as tabular data';
+	tableOnlyGroup.appendChild(tableOnlyHint);
+	body.appendChild(tableOnlyGroup);
 
 	// -- Renderer select --
 	const rendererGroup = makeFieldGroup('Renderer');
@@ -145,23 +164,30 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 		}
 	});
 
-	// -- Mutual exclusivity: geoColumn vs latColumn/lngColumn --
+	// -- Mutual exclusivity: geoColumn vs latColumn/lngColumn, and tableOnly disables spatial fields --
 	const updateColumnExclusivity = () => {
+		const isTableOnly = tableOnlyCheckbox.checked;
 		const geoHasValue = geoInput.value.trim().length > 0;
 		const latLngHasValue = latInput.value.trim().length > 0 || lngInput.value.trim().length > 0;
 
-		latInput.disabled = geoHasValue;
-		lngInput.disabled = geoHasValue;
-		geoInput.disabled = latLngHasValue;
+		// Table-only mode disables all spatial-related fields
+		crsInput.disabled = isTableOnly;
+		rendererSelect.disabled = isTableOnly;
+		latInput.disabled = isTableOnly || geoHasValue;
+		lngInput.disabled = isTableOnly || geoHasValue;
+		geoInput.disabled = isTableOnly || latLngHasValue;
 	};
 
 	latInput.addEventListener('input', updateColumnExclusivity);
 	lngInput.addEventListener('input', updateColumnExclusivity);
 	geoInput.addEventListener('input', updateColumnExclusivity);
+	tableOnlyCheckbox.addEventListener('change', updateColumnExclusivity);
 
 	// -- Public API --
 	function getValues(): AdvancedOptionsValues {
 		const values: AdvancedOptionsValues = {};
+
+		if (tableOnlyCheckbox.checked) values.tableOnly = true;
 
 		const format = formatSelect.value as ConfigFormat | '';
 		if (format) values.format = format;
@@ -185,6 +211,7 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 	}
 
 	function reset() {
+		tableOnlyCheckbox.checked = false;
 		formatSelect.value = '';
 		rendererSelect.value = '';
 		crsInput.value = '';
@@ -193,6 +220,8 @@ export function buildAdvancedOptions(): AdvancedOptionsHandle {
 		latInput.value = '';
 		lngInput.value = '';
 		geoInput.value = '';
+		crsInput.disabled = false;
+		rendererSelect.disabled = false;
 		latInput.disabled = false;
 		lngInput.disabled = false;
 		geoInput.disabled = false;

@@ -66,6 +66,7 @@ export interface DatasetExistsRequest extends RequestBase {
 export interface DeleteDatasetRequest extends RequestBase {
 	type: 'deleteDataset';
 	datasetId: string;
+	skipMaintenance?: boolean;
 }
 
 export interface DeleteAllDatasetsRequest extends RequestBase {
@@ -138,6 +139,12 @@ export interface GetPropertyKeysRequest extends RequestBase {
 	datasetId: string;
 }
 
+export interface GetPreviewRowsRequest extends RequestBase {
+	type: 'getPreviewRows';
+	datasetId: string;
+	limit?: number;
+}
+
 export interface GetDatasetBoundsRequest extends RequestBase {
 	type: 'getDatasetBounds';
 	datasetId: string;
@@ -192,6 +199,8 @@ export interface WorkerLoadUrlOptions {
 	hidden?: boolean;
 	/** When true, skip CRS prompt and throw on projected coordinates */
 	skipCrsPrompt?: boolean;
+	/** When true, skip geometry detection and load as table-only dataset */
+	tableOnly?: boolean;
 }
 
 export interface LoadFromUrlRequest extends RequestBase {
@@ -209,6 +218,8 @@ export interface WorkerLoadFileOptions {
 	geoColumn?: string;
 	crs?: string;
 	configOverrides?: LoadGeoJSONOptions;
+	/** When true, skip geometry detection and load as table-only dataset */
+	tableOnly?: boolean;
 }
 
 export interface LoadFromBufferRequest extends RequestBase {
@@ -351,6 +362,7 @@ export type WorkerRequest =
 	| GetFeaturesAsBinaryRequest
 	| GetDatasetBoundsRequest
 	| GetPropertyKeysRequest
+	| GetPreviewRowsRequest
 	| GetDistinctGeometryTypesRequest
 	| CheckpointRequest
 	| ClearOPFSRequest
@@ -459,6 +471,8 @@ export interface LoadPipelineRawResult {
 	featureCount: number;
 	hidden: boolean;
 	bounds: [number, number, number, number] | null;
+	/** When true, dataset has no geometry (table-only, not renderable on map). */
+	nonSpatial?: boolean;
 }
 
 /** Decoded result after client-side buffer decode. */
@@ -470,6 +484,8 @@ export interface LoadPipelineResult {
 	featureCount: number;
 	hidden: boolean;
 	bounds: [number, number, number, number] | null;
+	/** When true, dataset has no geometry (table-only, not renderable on map). */
+	nonSpatial?: boolean;
 }
 
 /** Raw result from executeOperation worker pipeline (GeoJSON as Transferable buffer). */

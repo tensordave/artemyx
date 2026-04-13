@@ -448,15 +448,19 @@ describe('csvLoader geometry integration', () => {
 		expect(f0.properties).toEqual({ name: 'Downtown', population: 50000 });
 	});
 
-	it('throws on column with all invalid values', async () => {
+	it('treats column with all invalid values as non-spatial', async () => {
 		const csv = [
 			'geometry,name',
 			'INVALID,Park',
 			'BROKEN,Plaza',
 		].join('\n');
 
-		// No geometry detected (isGeometryValue fails), falls through to lat/lng which also fails
-		await expect(csvLoader.load(csv)).rejects.toThrow('Could not detect geometry columns');
+		// No geometry detected (isGeometryValue fails), falls through to non-spatial
+		const result = await csvLoader.load(csv);
+		expect(result.nonSpatial).toBe(true);
+		expect(result.data.features).toHaveLength(2);
+		expect(result.data.features[0].geometry).toBeNull();
+		expect(result.data.features[0].properties).toEqual({ geometry: 'INVALID', name: 'Park' });
 	});
 
 	it('loads CSV with GeoJSON geometry strings (Vancouver open data style)', async () => {

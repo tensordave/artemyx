@@ -3,7 +3,7 @@ import { Protocol as PMTilesProtocol } from 'pmtiles';
 import {
 	LayerToggleControl, ProgressControl, DataControl, UploadControl,
 	StorageControl, BasemapControl, GeocodingControl, ScaleBarControl,
-	ConfigControl, OutputsControl, LegendControl, OperationBuilderControl,
+	ConfigControl, OutputsControl, DatasetControl, LegendControl, OperationBuilderControl,
 	LabelToggleControl,
 	attachFeatureClickHandlers, attachFeatureHoverHandlers,
 } from './controls';
@@ -21,6 +21,7 @@ import { BrowserLogger } from './logger';
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getDatasets, getDatasetBounds, getFeaturesAsGeoJSON, setLayerOrders, saveViewport, getCachedViewport, setEventHandler, terminateWorker, saveConfig, getSavedConfig, deleteSavedConfig, updateDatasetColor, updateDatasetStyle } from './db';
 import { addOperationResultToMap } from './config/operations/render';
 import { initShortcuts } from './shortcuts';
+import { TablePreviewPanel } from './controls/table-preview-panel';
 import { resolveSubLayerStyle } from './data-actions/load-pmtiles';
 import { DEFAULT_STYLE } from './db/constants';
 import { isSafari } from './utils/safari-detect';
@@ -180,13 +181,15 @@ const dataControl = new DataControl({
 	map,
 	logger,
 	layerToggleControl,
-	loadedDatasets
+	loadedDatasets,
+	onDatasetChange: () => datasetControl.updateIconColor(),
 });
 const uploadControl = new UploadControl({
 	map,
 	logger,
 	layerToggleControl,
-	loadedDatasets
+	loadedDatasets,
+	onDatasetChange: () => datasetControl.updateIconColor(),
 });
 const configControl = new ConfigControl({
 	getBasemapId: () => basemapControl.getCurrentBasemapId(),
@@ -253,11 +256,15 @@ const outputsControl = new OutputsControl({
 	updateYaml: (yaml: string) => configControl.updateConfig(yaml),
 });
 
+const tablePreviewPanel = new TablePreviewPanel(map);
+const datasetControl = new DatasetControl({ tablePreviewPanel });
+
 // Right-hand controls: only one panel open at a time
-dataControl.setOnPanelOpen(() => { uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); storageControl.closePanel(); });
-uploadControl.setOnPanelOpen(() => { dataControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); storageControl.closePanel(); });
-operationBuilderControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); storageControl.closePanel(); });
-storageControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); });
+dataControl.setOnPanelOpen(() => { uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); datasetControl.closePanel(); storageControl.closePanel(); });
+uploadControl.setOnPanelOpen(() => { dataControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); datasetControl.closePanel(); storageControl.closePanel(); });
+operationBuilderControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); datasetControl.closePanel(); storageControl.closePanel(); });
+datasetControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); storageControl.closePanel(); });
+storageControl.setOnPanelOpen(() => { dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); configControl.closePanel(); outputsControl.closePanel(); datasetControl.closePanel(); });
 
 // ── Side-by-side panel coordinator ──────────────────────────────
 // When both Config Editor (680px) and Outputs (380px) are open,
@@ -293,12 +300,12 @@ function arrangePanels(): void {
 }
 
 configControl.setOnPanelOpen(() => {
-	dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); storageControl.closePanel();
+	dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); datasetControl.closePanel(); storageControl.closePanel();
 	arrangePanels();
 });
 configControl.setOnPanelClose(() => arrangePanels());
 outputsControl.setOnPanelOpen(() => {
-	dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); storageControl.closePanel();
+	dataControl.closePanel(); uploadControl.closePanel(); operationBuilderControl.closePanel(); datasetControl.closePanel(); storageControl.closePanel();
 	arrangePanels();
 });
 outputsControl.setOnPanelClose(() => arrangePanels());
@@ -308,6 +315,7 @@ map.addControl(uploadControl, 'top-right');
 map.addControl(operationBuilderControl, 'top-right');
 map.addControl(configControl, 'top-right');
 map.addControl(outputsControl, 'top-right');
+map.addControl(datasetControl, 'top-right');
 map.addControl(storageControl, 'top-right');
 map.addControl(layerToggleControl, 'top-left');
 map.addControl(basemapControl, 'top-left');
@@ -315,6 +323,7 @@ map.addControl(geocodingControl, 'top-left');
 const legendControl = new LegendControl();
 map.addControl(legendControl, 'bottom-right');
 layerToggleControl.setLegendControl(legendControl);
+layerToggleControl.setDatasetControl(datasetControl);
 map.addControl(new ScaleBarControl(), 'bottom-right');
 map.addControl(attributionControl, 'bottom-right');
 map.addControl(progressControl, 'bottom-left');
@@ -331,10 +340,11 @@ initShortcuts({
 		{ key: 'i', action: () => dataControl.togglePanel() },
 		{ key: 'u', action: () => uploadControl.togglePanel() },
 		{ key: 'c', action: () => configControl.togglePanel() },
-		{ key: 't', action: () => storageControl.togglePanel() },
+		{ key: 'g', action: () => storageControl.togglePanel() },
 		{ key: '/', action: () => geocodingControl.togglePanel() },
 		{ key: 'o', action: () => operationBuilderControl.togglePanel() },
 		{ key: 'x', action: () => outputsControl.togglePanel() },
+		{ key: 't', action: () => datasetControl.togglePanel() },
 		{ key: 'b', action: () => basemapControl.togglePanel() },
 		{ key: 'e', action: () => legendControl.togglePanel() },
 		{ key: 'n', action: () => labelToggleControl.toggle() },
@@ -346,6 +356,7 @@ initShortcuts({
 		() => configControl.closePanel(),
 		() => operationBuilderControl.closePanel(),
 		() => outputsControl.closePanel(),
+		() => datasetControl.closePanel(),
 		() => storageControl.closePanel(),
 		() => basemapControl.closePanel(),
 		() => geocodingControl.closePanel(),
@@ -461,6 +472,7 @@ async function restoreNonConfigDatasets(config: MapConfig | null): Promise<void>
 	}
 
 	layerToggleControl.refreshPanel();
+	datasetControl.updateIconColor();
 }
 
 // Await DB init — progress steps are logged inside the worker's initDB()
@@ -498,6 +510,7 @@ if (restoredDatasets.length > 0) {
 
 // DB is now initialized — update storage icon to reflect actual state
 storageControl.updateIconColor();
+datasetControl.updateIconColor();
 
 // Warn before navigating away when data is in-memory (would be lost on refresh)
 window.addEventListener('beforeunload', (e) => {
@@ -708,6 +721,7 @@ async function runConfigPipeline(config: MapConfig): Promise<void> {
 
 		resyncLayerOrder(map, currentDatasets.filter((d: any) => !d.hidden).map((d: any) => d.id));
 		layerToggleControl.refreshPanel();
+		datasetControl.updateIconColor();
 	} catch (e) {
 		console.warn('[Visibility] Failed to restore visibility state:', e);
 	}

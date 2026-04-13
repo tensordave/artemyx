@@ -10,7 +10,8 @@ export {
 	setLayerVisibility,
 	destroy,
 	isInitialized,
-	hasLayer
+	hasLayer,
+	getLayerEntry
 } from './manager';
 
 export type { DeckLayerEntry } from './manager';

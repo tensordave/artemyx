@@ -284,8 +284,8 @@ export async function datasetExists(id: string): Promise<boolean> {
 	return rpc<boolean>('datasetExists', { id });
 }
 
-export async function deleteDataset(datasetId: string): Promise<boolean> {
-	return rpc<boolean>('deleteDataset', { datasetId });
+export async function deleteDataset(datasetId: string, skipMaintenance = false): Promise<boolean> {
+	return rpc<boolean>('deleteDataset', { datasetId, skipMaintenance });
 }
 
 export async function deleteSubDatasets(parentId: string): Promise<void> {
@@ -395,6 +395,10 @@ export async function getPropertyKeys(datasetId: string): Promise<string[]> {
 	return rpc<string[]>('getPropertyKeys', { datasetId });
 }
 
+export async function getPreviewRows(datasetId: string, limit?: number): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
+	return rpc<{ columns: string[]; rows: Record<string, unknown>[] }>('getPreviewRows', { datasetId, limit });
+}
+
 export async function getDistinctGeometryTypes(datasetId: string): Promise<Set<string>> {
 	const arr = await rpc<string[]>('getDistinctGeometryTypes', { datasetId });
 	return new Set(arr);
@@ -456,17 +460,20 @@ function decodeGeoJsonBuffer(buffer: Uint8Array): GeoJSON.FeatureCollection {
 
 export async function loadFromUrl(url: string, options: WorkerLoadUrlOptions): Promise<LoadPipelineResult> {
 	const raw = await rpc<LoadPipelineRawResult>('loadFromUrl', { url, options });
-	// Hidden datasets return an empty buffer - skip the decode/parse cycle
+	// Hidden and non-spatial datasets return an empty buffer - skip the decode/parse cycle
 	const geoJson = raw.geoJsonBuffer.byteLength > 0
 		? decodeGeoJsonBuffer(raw.geoJsonBuffer)
 		: { type: 'FeatureCollection' as const, features: [] };
-	return { datasetId: raw.datasetId, color: raw.color, style: raw.style, geoJson, featureCount: raw.featureCount, hidden: raw.hidden, bounds: raw.bounds };
+	return { datasetId: raw.datasetId, color: raw.color, style: raw.style, geoJson, featureCount: raw.featureCount, hidden: raw.hidden, bounds: raw.bounds, nonSpatial: raw.nonSpatial };
 }
 
 export async function loadFromBuffer(buffer: ArrayBuffer, options: WorkerLoadFileOptions): Promise<LoadPipelineResult> {
 	const raw = await rpc<LoadPipelineRawResult>('loadFromBuffer', { buffer, options }, [buffer]);
-	const geoJson = decodeGeoJsonBuffer(raw.geoJsonBuffer);
-	return { datasetId: raw.datasetId, color: raw.color, style: raw.style, geoJson, featureCount: raw.featureCount, hidden: raw.hidden, bounds: raw.bounds };
+	// Non-spatial datasets return an empty buffer - skip the decode/parse cycle
+	const geoJson = raw.geoJsonBuffer.byteLength > 0
+		? decodeGeoJsonBuffer(raw.geoJsonBuffer)
+		: { type: 'FeatureCollection' as const, features: [] };
+	return { datasetId: raw.datasetId, color: raw.color, style: raw.style, geoJson, featureCount: raw.featureCount, hidden: raw.hidden, bounds: raw.bounds, nonSpatial: raw.nonSpatial };
 }
 
 /**

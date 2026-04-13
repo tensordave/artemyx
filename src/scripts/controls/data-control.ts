@@ -10,6 +10,7 @@ interface DataControlOptions {
 	logger: Logger;
 	layerToggleControl: LayerToggleControl;
 	loadedDatasets: Set<string>;
+	onDatasetChange?: () => void;
 }
 
 export class DataControl implements maplibregl.IControl {
@@ -24,6 +25,7 @@ export class DataControl implements maplibregl.IControl {
 	private logger: Logger;
 	private layerToggleControl: LayerToggleControl;
 	private loadedDatasets: Set<string>;
+	private onDatasetChange?: () => void;
 	private onPanelOpen?: () => void;
 	private onDocPointerDown: (e: PointerEvent) => void;
 	private previousFocus: HTMLElement | null = null;
@@ -37,6 +39,7 @@ export class DataControl implements maplibregl.IControl {
 		this.logger = options.logger;
 		this.layerToggleControl = options.layerToggleControl;
 		this.loadedDatasets = options.loadedDatasets;
+		this.onDatasetChange = options.onDatasetChange;
 		this.onDocPointerDown = (e: PointerEvent) => {
 			if (!this.container?.contains(e.target as Node)) {
 				this.previousFocus = null;
@@ -69,7 +72,7 @@ export class DataControl implements maplibregl.IControl {
 		this.input = document.createElement('input');
 		this.input.type = 'text';
 		this.input.className = 'control-input';
-		this.input.placeholder = 'Paste data URL (GeoJSON, CSV, Parquet)...';
+		this.input.placeholder = 'Paste data URL (GeoJSON, CSV, Parquet, JSON)...';
 		this.panel.appendChild(this.input);
 
 		// Load button
@@ -123,12 +126,14 @@ export class DataControl implements maplibregl.IControl {
 					latColumn: opts.latColumn,
 					lngColumn: opts.lngColumn,
 					geoColumn: opts.geoColumn,
+					tableOnly: opts.tableOnly,
 				});
 
 				if (success) {
 					this.closePanel();
 					this.input.value = '';
 					this.advancedOptions?.reset();
+					this.onDatasetChange?.();
 				}
 			} finally {
 				this.loadButton.textContent = 'Load';

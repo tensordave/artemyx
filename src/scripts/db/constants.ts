@@ -67,6 +67,8 @@ export interface LoadGeoJSONOptions {
 	 * Resolved via resolveSourceCrs() before calling this function.
 	 */
 	sourceCrs?: string | null;
+	/** When true, dataset has no geometry (table-only, not rendered on map) */
+	nonSpatial?: boolean;
 }
 
 // ── Viewport persistence (localStorage, no DB) ─────────────────────────────

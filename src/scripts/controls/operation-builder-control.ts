@@ -11,7 +11,7 @@ import { UNARY_OPERATIONS, BINARY_OPERATIONS } from '../config/parser';
 import { VALID_DISTANCE_UNITS } from '../config/operations/unit-conversion';
 import type { DistanceUnit } from '../config/operations/unit-conversion';
 import yaml from 'js-yaml';
-import { getDatasets, executeOperationInWorker, getDatasetBounds } from '../db';
+import { getDatasets, executeOperationInWorker, getDatasetBounds, getPropertyKeys } from '../db';
 import { addOperationResultToMap } from '../config/operations/render';
 import { attachFeatureClickHandlers, attachFeatureHoverHandlers } from './popup';
 import { gitMergeIcon, eraserIcon } from '../icons';
@@ -338,9 +338,22 @@ export class OperationBuilderControl implements IControl {
 		if (!this.inputsContainer) return;
 		this.inputsContainer.innerHTML = '';
 
+		const type = this.getSelectedType();
+
 		if (this.isUnary()) {
 			this.inputsContainer.appendChild(this.buildField('Input', () => {
 				return this.buildDatasetSelect('input-a');
+			}));
+		} else if (type === 'join') {
+			this.inputsContainer.appendChild(this.buildField('Source (tabular)', () => {
+				const select = this.buildDatasetSelect('input-a');
+				select.addEventListener('change', () => this.populateKeySelect('sourceKey', select.value));
+				return select;
+			}));
+			this.inputsContainer.appendChild(this.buildField('Target (spatial)', () => {
+				const select = this.buildDatasetSelect('input-b');
+				select.addEventListener('change', () => this.populateKeySelect('targetKey', select.value));
+				return select;
 			}));
 		} else {
 			this.inputsContainer.appendChild(this.buildField('Input A', () => {
@@ -427,6 +440,9 @@ export class OperationBuilderControl implements IControl {
 				break;
 			case 'distance':
 				this.renderDistanceParams();
+				break;
+			case 'join':
+				this.renderJoinParams();
 				break;
 		}
 	}
@@ -688,6 +704,116 @@ export class OperationBuilderControl implements IControl {
 		this.paramsContainer.appendChild(hint);
 	}
 
+	private renderJoinParams(): void {
+		if (!this.paramsContainer) return;
+
+		// Source key dropdown
+		this.paramsContainer.appendChild(this.buildField('Source key', () => {
+			const select = document.createElement('select');
+			select.className = 'ob-select';
+			select.dataset.param = 'sourceKey';
+			const placeholder = document.createElement('option');
+			placeholder.value = '';
+			placeholder.textContent = '-- Select dataset first --';
+			placeholder.disabled = true;
+			placeholder.selected = true;
+			select.appendChild(placeholder);
+			return select;
+		}));
+
+		// Target key dropdown
+		this.paramsContainer.appendChild(this.buildField('Target key', () => {
+			const select = document.createElement('select');
+			select.className = 'ob-select';
+			select.dataset.param = 'targetKey';
+			const placeholder = document.createElement('option');
+			placeholder.value = '';
+			placeholder.textContent = '-- Select dataset first --';
+			placeholder.disabled = true;
+			placeholder.selected = true;
+			select.appendChild(placeholder);
+			return select;
+		}));
+
+		// Mode
+		this.paramsContainer.appendChild(this.buildField('Mode', () => {
+			const select = document.createElement('select');
+			select.className = 'ob-select';
+			select.dataset.param = 'mode';
+
+			const leftOpt = document.createElement('option');
+			leftOpt.value = 'left';
+			leftOpt.textContent = 'Left (keep all target features)';
+			select.appendChild(leftOpt);
+
+			const innerOpt = document.createElement('option');
+			innerOpt.value = 'inner';
+			innerOpt.textContent = 'Inner (matches only)';
+			select.appendChild(innerOpt);
+
+			return select;
+		}));
+
+		// Populate key selects if datasets are already selected
+		const inputA = this.getInputSelect('input-a')?.value;
+		const inputB = this.getInputSelect('input-b')?.value;
+		if (inputA) this.populateKeySelect('sourceKey', inputA);
+		if (inputB) this.populateKeySelect('targetKey', inputB);
+	}
+
+	private async populateKeySelect(paramName: string, datasetId: string): Promise<void> {
+		const select = this.paramsContainer?.querySelector<HTMLSelectElement>(`[data-param="${paramName}"]`);
+		if (!select) return;
+
+		// Reset to loading state
+		select.innerHTML = '';
+		const loading = document.createElement('option');
+		loading.value = '';
+		loading.textContent = 'Loading columns...';
+		loading.disabled = true;
+		loading.selected = true;
+		select.appendChild(loading);
+
+		try {
+			const keys = await getPropertyKeys(datasetId);
+			select.innerHTML = '';
+
+			if (keys.length === 0) {
+				const empty = document.createElement('option');
+				empty.value = '';
+				empty.textContent = 'No columns found';
+				empty.disabled = true;
+				empty.selected = true;
+				select.appendChild(empty);
+				return;
+			}
+
+			const placeholder = document.createElement('option');
+			placeholder.value = '';
+			placeholder.textContent = '-- Select column --';
+			placeholder.disabled = true;
+			placeholder.selected = true;
+			select.appendChild(placeholder);
+
+			for (const key of keys) {
+				const opt = document.createElement('option');
+				opt.value = key;
+				opt.textContent = key;
+				select.appendChild(opt);
+			}
+		} catch {
+			select.innerHTML = '';
+			const err = document.createElement('option');
+			err.value = '';
+			err.textContent = 'Failed to load columns';
+			err.disabled = true;
+			err.selected = true;
+			select.appendChild(err);
+		}
+
+		this.schedulePreviewUpdate();
+	}
+
 	private buildUnitsSelect(): HTMLSelectElement {
 		const select = document.createElement('select');
 		select.className = 'ob-select';
@@ -758,6 +884,13 @@ export class OperationBuilderControl implements IControl {
 				const where = this.getTextParam('where');
 				if (!where) return 'WHERE clause is required';
 			}
+		}
+
+		if (type === 'join') {
+			const sourceKey = this.getSelectParam('sourceKey');
+			const targetKey = this.getSelectParam('targetKey');
+			if (!sourceKey) return 'Source key field is required';
+			if (!targetKey) return 'Target key field is required';
 		}
 
 		return null;
@@ -835,6 +968,15 @@ export class OperationBuilderControl implements IControl {
 				};
 				const maxDist = this.getNumberParam('maxDistance');
 				if (maxDist !== null) params.maxDistance = maxDist;
+				return params;
+			}
+			case 'join': {
+				const params: Record<string, unknown> = {
+					sourceKey: this.getSelectParam('sourceKey'),
+					targetKey: this.getSelectParam('targetKey'),
+				};
+				const mode = this.getSelectParam('mode');
+				if (mode && mode !== 'left') params.mode = mode;
 				return params;
 			}
 			default:

@@ -9,6 +9,7 @@ export { LegendControl } from './legend-control';
 export { ProgressControl } from './progress-control';
 export { ScaleBarControl } from './scale-control';
 export { OutputsControl } from './outputs-control';
+export { DatasetControl } from './dataset-control';
 export { StorageControl } from './storage-control';
 export { UploadControl } from './upload-control';
 export {

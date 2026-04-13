@@ -147,6 +147,35 @@ export async function getDistinctGeometryTypes(datasetId: string): Promise<Set<s
 	return types;
 }
 
+// ── Preview query ────────────────────────────────────────────────────────────
+
+/**
+ * Get the first N rows of a dataset's properties as flat objects.
+ * Used by the dataset preview panel for tabular inspection.
+ */
+export async function getPreviewRows(
+	datasetId: string,
+	limit: number = 50
+): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
+	const keys = await getAllPropertyKeys(datasetId);
+	if (keys.length === 0) return { columns: [], rows: [] };
+
+	const connection = await getConnection();
+	const cols = keys.map(k => `json_extract_string(properties, ${jsonPath(k)}) AS ${sqlAlias(k)}`);
+	const stmt = await connection.prepare(
+		`SELECT ${cols.join(', ')} FROM features WHERE dataset_id = ? AND properties IS NOT NULL LIMIT ?`
+	);
+	const result = await stmt.query(datasetId, limit);
+	await stmt.close();
+
+	const rows = result.toArray().map((row: any) => {
+		const obj: Record<string, unknown> = {};
+		for (const key of keys) obj[key] = row[key] ?? null;
+		return obj;
+	});
+	return { columns: keys, rows };
+}
+
 // ── Export functions ─────────────────────────────────────────────────────────
 
 const textEncoder = new TextEncoder();
@@ -156,7 +185,7 @@ const textEncoder = new TextEncoder();
  * Unlike getPropertyKeys() which samples one row, this scans all features
  * so no columns are missed in flattened exports.
  */
-async function getAllPropertyKeys(datasetId: string): Promise<string[]> {
+export async function getAllPropertyKeys(datasetId: string): Promise<string[]> {
 	const connection = await getConnection();
 	const stmt = await connection.prepare(`
 		SELECT DISTINCT unnest(json_keys(properties)) as key

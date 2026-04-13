@@ -570,11 +570,15 @@ export const csvLoader: FormatLoader = {
 			if (data.features.length > 0) return { data };
 		}
 
-		// Nothing worked - throw with helpful message
-		throw new Error(
-			`Could not detect geometry columns. ` +
-			`No geometry column (WKT or GeoJSON), separate lat/lng columns, or combined "lat, lng" columns found. ` +
-			`Headers: ${headers.join(', ')}`
-		);
+		// No geometry detected — load as non-spatial (table-only) dataset
+		const features = rows.map(row => {
+			const properties: Record<string, string | number> = {};
+			for (const [key, value] of Object.entries(row)) {
+				const num = Number(value);
+				properties[key] = value !== '' && !isNaN(num) ? num : value;
+			}
+			return { type: 'Feature' as const, geometry: null as unknown as GeoJSON.Geometry, properties };
+		});
+		return { data: { type: 'FeatureCollection', features }, nonSpatial: true };
 	},
 };

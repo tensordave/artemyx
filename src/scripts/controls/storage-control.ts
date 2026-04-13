@@ -1,5 +1,5 @@
 import maplibregl from 'maplibre-gl';
-import { databaseIcon, crosshairIcon, trashIcon, downloadSimpleIcon, fileArrowUpIcon } from '../icons';
+import { hardDrivesIcon, crosshairIcon, trashIcon, downloadSimpleIcon, fileArrowUpIcon } from '../icons';
 import { getStorageMode, getFallbackReason, clearOPFS, exportOPFS, importOPFS, clearCachedViewport, getCachedViewport } from '../db';
 import type { FallbackReason } from '../db';
 
@@ -96,8 +96,8 @@ export class StorageControl implements maplibregl.IControl {
 		this.button = document.createElement('button');
 		this.button.type = 'button';
 		this.button.className = 'control-btn';
-		this.button.innerHTML = databaseIcon;
-		this.button.title = 'Storage (T)';
+		this.button.innerHTML = hardDrivesIcon;
+		this.button.title = 'Storage (G)';
 		this.button.setAttribute('aria-label', 'Storage');
 		this.button.setAttribute('aria-expanded', 'false');
 		this.container.appendChild(this.button);

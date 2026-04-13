@@ -214,3 +214,11 @@ export function isInitialized(): boolean {
 export function hasLayer(id: string): boolean {
 	return layerRegistry.has(id);
 }
+
+/**
+ * Get a layer entry by ID. Returns undefined if not found.
+ * Pure read — no side effects, no lazy-load trigger.
+ */
+export function getLayerEntry(id: string): DeckLayerEntry | undefined {
+	return layerRegistry.get(id);
+}

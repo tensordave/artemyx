@@ -4,7 +4,7 @@
  */
 
 import type { Map } from 'maplibre-gl';
-import { getDatasets, deleteAllDatasets, deleteDataset } from './db';
+import { getDatasets, deleteAllDatasets, deleteDataset, checkpoint, vacuum } from './db';
 import { getLayersBySource, getSourceId } from './layers';
 import { clearAllFeatureHandlers } from './controls/popup';
 import type { ProgressControl } from './controls/progress-control';
@@ -52,13 +52,16 @@ export async function teardownAll(options: TeardownOptions): Promise<void> {
 
 	// 4. Delete datasets from DuckDB
 	if (preserveFileUploads) {
-		// Selectively delete only non-file datasets; file uploads stay in DB
+		// Selectively delete only non-file datasets; file uploads stay in DB.
+		// skipMaintenance=true defers checkpoint+vacuum to after the loop.
 		for (const dataset of datasets) {
 			const src: string | null = dataset.source_url;
 			if (!src || !src.startsWith('file://')) {
-				await deleteDataset(dataset.id);
+				await deleteDataset(dataset.id, true);
 			}
 		}
+		await checkpoint();
+		await vacuum();
 	} else {
 		await deleteAllDatasets();
 	}

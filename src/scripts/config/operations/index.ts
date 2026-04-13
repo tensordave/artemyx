@@ -110,6 +110,7 @@ export { executeContains } from './contains';
 export { executeDistance } from './distance';
 export { executeCentroid } from './centroid';
 export { executeAttribute } from './attribute';
+export { executeJoin } from './join';
 
 // Re-export compute functions (pure SQL, no MapLibre)
 export { computeBuffer } from './buffer';
@@ -120,3 +121,4 @@ export { computeContains } from './contains';
 export { computeDistance } from './distance';
 export { computeCentroid } from './centroid';
 export { computeAttribute } from './attribute';
+export { computeJoin } from './join';

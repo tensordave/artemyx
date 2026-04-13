@@ -76,7 +76,16 @@ export async function loadDataFromFile(
 			geoColumn: options.geoColumn,
 			crs: options.crs,
 			configOverrides: { name: displayName, ...options.configOverrides },
+			tableOnly: options.tableOnly,
 		});
+
+		// Non-spatial (table-only) datasets: no map rendering, just track and refresh panel
+		if (result.nonSpatial) {
+			loadedDatasets.add(result.datasetId);
+			layerToggleControl.refreshPanel();
+			logger.scheduleIdle(3000);
+			return true;
+		}
 
 		// Hidden datasets: stored in DuckDB but not rendered
 		if (options.hidden) {

@@ -27,6 +27,7 @@ export { fileArrowUpIcon } from './file-arrow-up';         // upload local file 
 // Roadmap: persistence (Phase 8)
 export { arrowClockwiseIcon } from './arrow-clockwise';    // clear session / retry
 export { databaseIcon } from './database'; // OPFS Database Controls
+export { hardDrivesIcon } from './hard-drives'; // Storage control button
 export { crosshairIcon } from './crosshair';               // reset viewport
 
 // Geocoding

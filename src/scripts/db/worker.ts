@@ -8,7 +8,7 @@ import type { MainMessage, WorkerRequest, CrsPromptResponse, InitResult, LoadPip
 import { startInit, ensureInit, getStorageMode, getFallbackReason, hasExistingOPFSData, getInitLog, getConnection, getDB, checkpoint, vacuum, exportOPFSFile, importOPFSFile } from './core';
 import { loadGeoJSON, appendFeatures, updateFeatureCount, getDatasets, getDatasetById, datasetExists, deleteDataset, deleteAllDatasets, deleteSubDatasets, updateDatasetColor, updateDatasetName, renameDatasetId, updateDatasetVisible, swapLayerOrder, setLayerOrders, getNextLayerOrder, getDatasetStyle, updateDatasetStyle, getOperations, clearOperations, saveOperationMetadata, createMetadataOnlyDataset, DEFAULT_COLOR, DEFAULT_STYLE } from './datasets';
 import type { StyleConfig } from './datasets';
-import { getFeaturesAsGeoJSONString, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes, exportAsCSV, exportAsParquet } from './features';
+import { getFeaturesAsGeoJSONString, getDatasetBounds, getPropertyKeys, getDistinctGeometryTypes, exportAsCSV, exportAsParquet, getPreviewRows } from './features';
 import type { OperationConfig } from '../config/types';
 import { isUnaryOperation, isBinaryOperation } from '../config/types';
 import type { ComputeCallbacks, ComputeResult } from '../config/operations';
@@ -20,6 +20,7 @@ import { computeContains } from '../config/operations/contains';
 import { computeDistance } from '../config/operations/distance';
 import { computeCentroid } from '../config/operations/centroid';
 import { computeAttribute } from '../config/operations/attribute';
+import { computeJoin } from '../config/operations/join';
 import { detectFormat, detectFormatFromFilename } from '../loaders/detect';
 import { dispatch as loaderDispatch } from '../loaders';
 import type { LoaderOptions } from '../loaders/types';
@@ -200,6 +201,10 @@ async function workerLoadFromUrl(url: string, options: WorkerLoadUrlOptions): Pr
 
 	// Non-paginated JSON
 	if (!paginationResult.paginated) {
+		if (options.tableOnly) {
+			const data = normalizePage(paginationResult.firstPage, loaderOptions);
+			return await workerLoadNonSpatial(data, url, displayName, options);
+		}
 		const { extractGeoJsonCrs } = await import('../loaders/geojson');
 		const detectedCrs = extractGeoJsonCrs(paginationResult.firstPage);
 		const data = normalizePage(paginationResult.firstPage, loaderOptions);
@@ -308,8 +313,11 @@ async function workerLoadFromResponse(
 	}
 
 	postProgress(displayName, 'processing');
-	const { data, detectedCrs, crsHandled } = await loaderDispatch(rawData, detectedFormat, loaderOptions);
-	return await workerLoadFeatureCollection(data, url, displayName, options, detectedCrs, crsHandled);
+	const loaderResult = await loaderDispatch(rawData, detectedFormat, loaderOptions);
+	if (loaderResult.nonSpatial || options.tableOnly) {
+		return await workerLoadNonSpatial(loaderResult.data, url, displayName, options);
+	}
+	return await workerLoadFeatureCollection(loaderResult.data, url, displayName, options, loaderResult.detectedCrs, loaderResult.crsHandled);
 }
 
 async function workerLoadFeatureCollection(
@@ -391,6 +399,37 @@ async function workerLoadFeatureCollection(
 	};
 }
 
+// ── Non-spatial dataset loading (table-only, no map rendering) ─────────────
+
+async function workerLoadNonSpatial(
+	data: GeoJSON.FeatureCollection,
+	sourceUrl: string,
+	displayName: string,
+	options: { configOverrides?: LoadGeoJSONOptions },
+): Promise<LoadPipelineRawResult> {
+	const dbOptions: LoadGeoJSONOptions = { ...options.configOverrides, nonSpatial: true };
+	const loaded = await loadGeoJSON(data, sourceUrl, dbOptions);
+	if (!loaded) throw new Error('Failed to load non-spatial data into DuckDB');
+
+	const datasetId = dbOptions.id || generateDatasetId(sourceUrl);
+	const dataset = await getDatasetById(datasetId);
+	if (!dataset) throw new Error('No dataset found after loading');
+
+	const featureCount = dataset.feature_count ?? 0;
+	postProgress(displayName, 'success', `Loaded ${featureCount.toLocaleString()} rows (table only)`);
+
+	return {
+		datasetId,
+		color: dataset.color || DEFAULT_COLOR,
+		style: parseDatasetStyleJson(dataset.style),
+		geoJsonBuffer: new Uint8Array(0),
+		featureCount,
+		hidden: false,
+		bounds: null,
+		nonSpatial: true,
+	};
+}
+
 // ── Full pipeline: loadFromBuffer ───────────────────────────────────────────
 
 async function workerLoadFromBuffer(buffer: ArrayBuffer, options: WorkerLoadFileOptions): Promise<LoadPipelineRawResult> {
@@ -416,12 +455,18 @@ async function workerLoadFromBuffer(buffer: ArrayBuffer, options: WorkerLoadFile
 		rawData = JSON.parse(new TextDecoder().decode(buffer));
 	}
 
-	const { data, detectedCrs, crsHandled } = await loaderDispatch(rawData, detectedFormat, loaderOptions);
+	const loaderResult = await loaderDispatch(rawData, detectedFormat, loaderOptions);
 
-	let sourceCrs = crsHandled ? undefined : resolveSourceCrs(options.crs, detectedCrs, undefined);
+	const sourceUrl = `file://${options.fileName}`;
+
+	if (loaderResult.nonSpatial || options.tableOnly) {
+		return await workerLoadNonSpatial(loaderResult.data, sourceUrl, displayName, options);
+	}
+
+	let sourceCrs = loaderResult.crsHandled ? undefined : resolveSourceCrs(options.crs, loaderResult.detectedCrs, undefined);
 
 	// Guard: detect projected coordinates
-	if (!sourceCrs && hasProjectedCoordinates(data)) {
+	if (!sourceCrs && hasProjectedCoordinates(loaderResult.data)) {
 		const userCrs = await requestCrsFromUser();
 		if (!userCrs) {
 			throw new Error('Projected coordinate system detected but no CRS provided.');
@@ -429,9 +474,8 @@ async function workerLoadFromBuffer(buffer: ArrayBuffer, options: WorkerLoadFile
 		sourceCrs = userCrs;
 	}
 
-	const sourceUrl = `file://${options.fileName}`;
 	const dbOptions: LoadGeoJSONOptions = { ...options.configOverrides, sourceCrs };
-	const loaded = await loadGeoJSON(data, sourceUrl, dbOptions);
+	const loaded = await loadGeoJSON(loaderResult.data, sourceUrl, dbOptions);
 	if (!loaded) throw new Error('Failed to load into DuckDB');
 
 	const datasetId = dbOptions.id || generateDatasetId(sourceUrl);
@@ -504,6 +548,10 @@ async function workerExecuteOperation(op: OperationConfig, execOrder: number): P
 			if (!isUnaryOperation(op)) throw new Error(`Attribute operation must have single 'input' field`);
 			result = await computeAttribute(connection, op, callbacks);
 			break;
+		case 'join':
+			if (!isBinaryOperation(op)) throw new Error(`Join operation must have 'inputs' array`);
+			result = await computeJoin(connection, op, callbacks);
+			break;
 		default: {
 			const _exhaustive: never = op;
 			throw new Error(`Unsupported operation type: ${(_exhaustive as OperationConfig).type}`);
@@ -544,16 +592,18 @@ async function workerExecuteOperation(op: OperationConfig, execOrder: number): P
 async function workerClearOPFS(): Promise<void> {
 	postProgress('clear-session', 'processing', 'Clearing session data...');
 
-	// 1. Flush all data from tables so OPFS is empty even if file deletion fails.
+	// 1. Drop all tables (O(1) metadata operation, not O(N) row deletion).
 	//    database.terminate() may not synchronously release the OPFS access handle,
-	//    causing removeEntry() to silently fail. Clearing tables first ensures the
-	//    OPFS file contains an empty DB regardless.
+	//    causing removeEntry() to silently fail. Dropping tables first ensures the
+	//    OPFS file contains no user data regardless.
+	//    Tables are recreated by initSchema() on reload.
 	try {
 		const connection = await getConnection();
-		await connection.query('DELETE FROM features');
-		await connection.query('DELETE FROM datasets');
-		await connection.query('DELETE FROM operations');
-		await connection.query('DELETE FROM meta');
+		await connection.query('DROP INDEX IF EXISTS features_geom_idx');
+		await connection.query('DROP TABLE IF EXISTS features');
+		await connection.query('DROP TABLE IF EXISTS datasets');
+		await connection.query('DROP TABLE IF EXISTS operations');
+		await connection.query('DROP TABLE IF EXISTS meta');
 		await checkpoint();
 	} catch { /* DB might not be initialized */ }
 
@@ -676,7 +726,7 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 			}
 
 			case 'deleteDataset': {
-				const ok = await deleteDataset(req.datasetId);
+				const ok = await deleteDataset(req.datasetId, req.skipMaintenance);
 				respond(requestId, ok);
 				break;
 			}
@@ -862,6 +912,12 @@ self.onmessage = async (e: MessageEvent<MainMessage>) => {
 			case 'getPropertyKeys': {
 				const keys = await getPropertyKeys(req.datasetId);
 				respond(requestId, keys);
+				break;
+			}
+
+			case 'getPreviewRows': {
+				const preview = await getPreviewRows(req.datasetId, req.limit);
+				respond(requestId, preview);
 				break;
 			}
 

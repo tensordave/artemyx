@@ -29,6 +29,8 @@ export interface LoaderResult {
 	detectedCrs?: string;
 	/** When true, the loader already reprojected to WGS84 - skip downstream ST_Transform. */
 	crsHandled?: boolean;
+	/** When true, features have null geometry (table-only dataset, not renderable on map). */
+	nonSpatial?: boolean;
 }
 
 /** Raw data types accepted by loaders (replaces browser Response for portability) */

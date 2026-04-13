@@ -1,0 +1,447 @@
+/* Dataset Control — floating panel listing datasets + table preview sub-panel */
+
+/* ── Dataset Panel ──────────────────────────────────────────── */
+
+.dataset-panel {
+	display: none;
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	width: 380px;
+	max-height: 80vh;
+	background-color: rgba(26, 26, 26, 0.95);
+	border: 1px solid #444;
+	border-radius: 8px;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+	z-index: 20;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.dataset-panel--open {
+	display: flex;
+}
+
+.dataset-panel--positioned {
+	transform: none;
+}
+
+.dataset-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 16px;
+	border-bottom: 1px solid #333;
+	flex-shrink: 0;
+	cursor: grab;
+}
+
+.dataset-panel--dragging .dataset-panel-header {
+	cursor: grabbing;
+}
+
+.dataset-panel-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #e2e8f0;
+}
+
+.dataset-panel-close {
+	background: none;
+	border: none;
+	color: #94a3b8;
+	font-size: 18px;
+	cursor: pointer;
+	padding: 0 4px;
+	line-height: 1;
+}
+
+.dataset-panel-close:hover {
+	color: #fff;
+}
+
+.dataset-panel-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.dataset-panel-body {
+	padding: 8px 0;
+}
+
+.dataset-panel-resize-handle {
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	width: 14px;
+	height: 14px;
+	cursor: nwse-resize;
+	z-index: 2;
+}
+
+.dataset-panel-resize-handle::after {
+	content: '';
+	position: absolute;
+	bottom: 3px;
+	right: 3px;
+	width: 8px;
+	height: 8px;
+	border-right: 2px solid #555;
+	border-bottom: 2px solid #555;
+}
+
+/* ── Dataset Rows ────────────────────────────────────────────── */
+
+.dataset-row {
+	display: flex;
+	flex-direction: column;
+	padding: 8px 16px;
+	border-left: 3px solid #3388ff;
+	margin: 0 8px;
+	border-radius: 2px;
+}
+
+.dataset-row:hover {
+	background-color: rgba(255, 255, 255, 0.04);
+}
+
+.dataset-row-top {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.dataset-row-info {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.dataset-row-id {
+	font-size: 12px;
+	font-weight: 500;
+	font-family: monospace;
+	color: #e2e8f0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dataset-row-name {
+	font-size: 10px;
+	color: #94a3b8;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dataset-row-count {
+	font-size: 10px;
+	color: #64748b;
+}
+
+.dataset-row-actions {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.dataset-row-icon-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	background: none;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	color: #64748b;
+	cursor: pointer;
+	padding: 0;
+}
+
+.dataset-row-icon-btn:hover {
+	background-color: rgba(51, 136, 255, 0.15);
+	border-color: rgba(51, 136, 255, 0.25);
+	color: #94a3b8;
+}
+
+.dataset-row-icon-btn svg {
+	width: 16px;
+	height: 16px;
+	fill: currentColor;
+}
+
+/* ── Layer Sub-list (geo icon expand) ────────────────────────── */
+
+.dataset-layer-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 8px 0 2px 0;
+	width: 100%;
+}
+
+.dataset-layer-entry {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 0;
+}
+
+.dataset-layer-name {
+	font-size: 11px;
+	color: #e2e8f0;
+	flex-shrink: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dataset-layer-name--empty {
+	color: #64748b;
+	font-style: italic;
+}
+
+.dataset-layer-tag {
+	font-size: 9px;
+	color: #94a3b8;
+	background-color: rgba(51, 136, 255, 0.1);
+	border: 1px solid rgba(51, 136, 255, 0.2);
+	border-radius: 3px;
+	padding: 1px 5px;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.dataset-layer-tag--type {
+	color: #64748b;
+	background-color: rgba(255, 255, 255, 0.05);
+	border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dataset-layer-tag--deckgl {
+	background-color: rgba(168, 85, 247, 0.1);
+	border-color: rgba(168, 85, 247, 0.2);
+	color: #a855f7;
+}
+
+/* ── Empty state ─────────────────────────────────────────────── */
+
+.dataset-panel-empty {
+	padding: 16px;
+	font-size: 12px;
+	color: #64748b;
+	text-align: center;
+}
+
+/* ── Table Preview Panel ─────────────────────────────────────── */
+
+.table-preview-panel {
+	display: none;
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	width: 700px;
+	max-height: 70vh;
+	background-color: rgba(26, 26, 26, 0.95);
+	border: 1px solid #444;
+	border-radius: 8px;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+	z-index: 25;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.table-preview-panel--open {
+	display: flex;
+}
+
+.table-preview-panel--positioned {
+	transform: none;
+}
+
+.table-preview-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 16px;
+	border-bottom: 1px solid #333;
+	flex-shrink: 0;
+	cursor: grab;
+}
+
+.table-preview-panel--dragging .table-preview-header {
+	cursor: grabbing;
+}
+
+.table-preview-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #e2e8f0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.table-preview-close {
+	background: none;
+	border: none;
+	color: #94a3b8;
+	font-size: 18px;
+	cursor: pointer;
+	padding: 0 4px;
+	line-height: 1;
+	flex-shrink: 0;
+}
+
+.table-preview-close:hover {
+	color: #fff;
+}
+
+.table-preview-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+.table-preview-footer {
+	padding: 6px 16px;
+	font-size: 10px;
+	color: #64748b;
+	border-top: 1px solid #333;
+	flex-shrink: 0;
+}
+
+.table-preview-resize-handle {
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	width: 14px;
+	height: 14px;
+	cursor: nwse-resize;
+	z-index: 2;
+}
+
+.table-preview-resize-handle::after {
+	content: '';
+	position: absolute;
+	bottom: 3px;
+	right: 3px;
+	width: 8px;
+	height: 8px;
+	border-right: 2px solid #555;
+	border-bottom: 2px solid #555;
+}
+
+/* ── Table ────────────────────────────────────────────────────── */
+
+.table-preview-table {
+	width: max-content;
+	min-width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+	font-family: monospace;
+}
+
+.table-preview-table th {
+	position: sticky;
+	top: 0;
+	background-color: rgba(30, 30, 30, 0.98);
+	padding: 6px 12px;
+	text-align: left;
+	font-weight: 600;
+	color: #94a3b8;
+	white-space: nowrap;
+	border-bottom: 1px solid #444;
+	z-index: 1;
+}
+
+.table-preview-table td {
+	padding: 4px 12px;
+	color: #e2e8f0;
+	white-space: nowrap;
+	max-width: 240px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.table-preview-table tbody tr:hover {
+	background-color: rgba(255, 255, 255, 0.04);
+}
+
+.table-preview-table tbody tr:nth-child(even) {
+	background-color: rgba(255, 255, 255, 0.02);
+}
+
+.table-preview-row-num {
+	color: #4a5568 !important;
+	font-weight: 400 !important;
+	text-align: right !important;
+	padding-right: 8px !important;
+	user-select: none;
+}
+
+.table-preview-null {
+	color: #4a5568 !important;
+	font-style: italic;
+}
+
+/* ── Loading / Empty states ──────────────────────────────────── */
+
+.table-preview-loading,
+.table-preview-empty {
+	padding: 24px 16px;
+	font-size: 12px;
+	color: #64748b;
+	text-align: center;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+	.dataset-panel.dataset-panel--open {
+		position: fixed;
+		top: auto !important;
+		left: 0 !important;
+		right: 0 !important;
+		bottom: 0 !important;
+		width: 100% !important;
+		max-height: 60vh;
+		border-radius: 8px 8px 0 0;
+	}
+
+	.dataset-panel-header {
+		cursor: default;
+	}
+
+	.dataset-panel-resize-handle {
+		display: none;
+	}
+
+	.table-preview-panel.table-preview-panel--open {
+		position: fixed;
+		top: auto !important;
+		left: 0 !important;
+		right: 0 !important;
+		bottom: 0 !important;
+		width: 100% !important;
+		max-height: 70vh;
+		border-radius: 8px 8px 0 0;
+	}
+
+	.table-preview-header {
+		cursor: default;
+	}
+
+	.table-preview-resize-handle {
+		display: none;
+	}
+}

@@ -2,7 +2,7 @@
  * Dataset CRUD operations
  */
 
-import { getConnection, getDB, setFallbackReason, checkpoint, vacuum } from './core';
+import { getConnection, getDB, setFallbackReason, checkpoint, vacuum, initSchema } from './core';
 import { generateDatasetId, extractDatasetName } from './utils';
 
 // Re-export pure constants/types/localStorage helpers so existing imports from
@@ -58,7 +58,8 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 		features.length = 0;
 		await database.registerFileBuffer(virtualFileName, featuresBuffer);
 
-		// Bulk insert JSON into features table with spatial transformation.
+		// Bulk insert JSON into features table.
+		// Non-spatial datasets store NULL geometry; spatial datasets use ST_GeomFromGeoJSON.
 		// maximum_depth=1 prevents DuckDB from inferring deep nested types inside
 		// geometry/coordinates, which breaks on mixed 2D/3D coordinates (e.g. ArcGIS
 		// data with elevation values that fail auto-detected numeric array schemas).
@@ -66,24 +67,39 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 		// CRS string is interpolated (not parameterized) because DuckDB-WASM doesn't
 		// support parameterizing CRS args to spatial functions. Values come from
 		// trusted sources (YAML config or file metadata parsed by this app).
-		const rawGeomExpr = 'ST_GeomFromGeoJSON(json_extract_string(j, \'$.geometry\'))';
-		// ST_FlipCoordinates corrects EPSG:4326 axis order (lat/lng -> lng/lat for GeoJSON)
-		const geomExpr = options?.sourceCrs
-			? `ST_FlipCoordinates(ST_Transform(${rawGeomExpr}, '${options.sourceCrs}', 'EPSG:4326'))`
-			: rawGeomExpr;
+		if (options?.nonSpatial) {
+			const insertFeatures = await connection.prepare(`
+				INSERT INTO features
+				SELECT
+					? as dataset_id,
+					? as source_url,
+					NULL as geometry,
+					json_extract_string(j, '$.properties') as properties
+				FROM read_json_auto('${virtualFileName}', format='array', maximum_depth=1) j
+				WHERE json_extract_string(j, '$.properties') IS NOT NULL
+			`);
+			await insertFeatures.query(datasetId, sourceUrl);
+			await insertFeatures.close();
+		} else {
+			const rawGeomExpr = 'ST_GeomFromGeoJSON(json_extract_string(j, \'$.geometry\'))';
+			// ST_FlipCoordinates corrects EPSG:4326 axis order (lat/lng -> lng/lat for GeoJSON)
+			const geomExpr = options?.sourceCrs
+				? `ST_FlipCoordinates(ST_Transform(${rawGeomExpr}, '${options.sourceCrs}', 'EPSG:4326'))`
+				: rawGeomExpr;
 
-		const insertFeatures = await connection.prepare(`
-			INSERT INTO features
-			SELECT
-				? as dataset_id,
-				? as source_url,
-				${geomExpr} as geometry,
-				json_extract_string(j, '$.properties') as properties
-			FROM read_json_auto('${virtualFileName}', format='array', maximum_depth=1) j
-			WHERE json_extract_string(j, '$.geometry') IS NOT NULL
-		`);
-		await insertFeatures.query(datasetId, sourceUrl);
-		await insertFeatures.close();
+			const insertFeatures = await connection.prepare(`
+				INSERT INTO features
+				SELECT
+					? as dataset_id,
+					? as source_url,
+					${geomExpr} as geometry,
+					json_extract_string(j, '$.properties') as properties
+				FROM read_json_auto('${virtualFileName}', format='array', maximum_depth=1) j
+				WHERE json_extract_string(j, '$.geometry') IS NOT NULL
+			`);
+			await insertFeatures.query(datasetId, sourceUrl);
+			await insertFeatures.close();
+		}
 
 		// Get final count for this dataset
 		const countStmt = await connection.prepare('SELECT COUNT(*) as count FROM features WHERE dataset_id = ?');
@@ -94,11 +110,12 @@ export async function loadGeoJSON(data: any, sourceUrl: string, options?: LoadGe
 		// Insert dataset metadata with configured style and color
 		const datasetHidden = options?.hidden ?? false;
 		const layerOrder = await getNextLayerOrder();
+		const isSpatial = !(options?.nonSpatial);
 		const insertDataset = await connection.prepare(`
-			INSERT INTO datasets (id, source_url, name, color, visible, hidden, feature_count, loaded_at, style, source_crs, layer_order)
-			VALUES (?, ?, ?, ?, true, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
+			INSERT INTO datasets (id, source_url, name, color, visible, hidden, feature_count, loaded_at, style, source_crs, layer_order, is_spatial)
+			VALUES (?, ?, ?, ?, true, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
 		`);
-		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, datasetHidden, count, JSON.stringify(datasetStyle), options?.sourceCrs ?? null, layerOrder);
+		await insertDataset.query(datasetId, sourceUrl, datasetName, datasetColor, datasetHidden, count, JSON.stringify(datasetStyle), options?.sourceCrs ?? null, layerOrder, isSpatial);
 		await insertDataset.close();
 
 		console.log(`[DuckDB] Successfully loaded dataset ${datasetId} with ${count} features`);
@@ -316,6 +333,7 @@ export async function getDatasetById(id: string): Promise<any | null> {
 			layer_order: Number(row.layer_order),
 			format: row.format ?? null,
 			source_layer: row.source_layer ?? null,
+			is_spatial: row.is_spatial ?? true,
 		};
 	} catch (error) {
 		console.error('Failed to query dataset by ID:', error);
@@ -348,6 +366,7 @@ export async function getDatasets(): Promise<any[]> {
 			layer_order: Number(row.layer_order),
 			format: row.format ?? null,
 			source_layer: row.source_layer ?? null,
+			is_spatial: row.is_spatial ?? true,
 		}));
 	} catch (error) {
 		console.error('Failed to query datasets:', error);
@@ -473,21 +492,25 @@ export async function updateDatasetVisible(datasetId: string, visible: boolean):
 
 /**
  * Delete all datasets and features (bulk teardown).
- * Single checkpoint + vacuum at the end instead of per-dataset.
+ * Uses DROP + recreate (O(1)) instead of DELETE (O(N) per row).
+ * initSchema() is idempotent — safe to call on already-existing tables.
  */
 export async function deleteAllDatasets(): Promise<void> {
 	const connection = await getConnection();
-	await connection.query('DELETE FROM features');
-	await connection.query('DELETE FROM datasets');
-	await connection.query('DELETE FROM operations');
+	await connection.query('DROP INDEX IF EXISTS features_geom_idx');
+	await connection.query('DROP TABLE IF EXISTS features');
+	await connection.query('DROP TABLE IF EXISTS datasets');
+	await connection.query('DROP TABLE IF EXISTS operations');
+	await initSchema();
 	await checkpoint();
-	await vacuum();
 }
 
 /**
- * Delete a dataset and all its associated features
+ * Delete a dataset and all its associated features.
+ * Pass skipMaintenance=true when deleting in a loop — caller should do a
+ * single checkpoint() + vacuum() after all deletions complete.
  */
-export async function deleteDataset(datasetId: string): Promise<boolean> {
+export async function deleteDataset(datasetId: string, skipMaintenance = false): Promise<boolean> {
 	try {
 		const connection = await getConnection();
 
@@ -507,10 +530,10 @@ export async function deleteDataset(datasetId: string): Promise<boolean> {
 		await deleteOp.close();
 
 		console.log(`[DuckDB] Successfully deleted dataset ${datasetId} and all associated features`);
-		// Checkpoint (OPFS) then vacuum to reclaim freed pages.
-		// Especially important in-memory mode where the buffer pool only grows.
-		await checkpoint();
-		await vacuum();
+		if (!skipMaintenance) {
+			await checkpoint();
+			await vacuum();
+		}
 		return true;
 	} catch (error) {
 		console.error('Failed to delete dataset:', error);
